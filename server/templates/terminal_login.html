@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terminal Login</title>
+    <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet">
+</head>
+<body class="terminal-body">
+    <main class="terminal-login">
+        <form method="POST" class="terminal-card" autocomplete="off">
+            <h1>Terminal</h1>
+            <p>Local admin access{% if loopback_only %} · loopback only{% endif %}</p>
+            {% if error %}
+            <div class="terminal-error">{{ error }}</div>
+            {% endif %}
+            <label>
+                <span>Username</span>
+                <input name="username" type="text" required autofocus>
+            </label>
+            <label>
+                <span>Password</span>
+                <input name="password" type="password" required>
+            </label>
+            <button type="submit">Sign in</button>
+        </form>
+    </main>
+</body>
+</html>
+

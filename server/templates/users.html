@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}ParkScan - User Management{% endblock %}
+
+{% block content %}
+<div class="admin-page">
+    {% if is_demo is defined and is_demo %}
+    <div class="demo-banner">
+        <strong>Demo Mode</strong> — Showing sample user data. No changes are saved.
+    </div>
+    {% endif %}
+
+    <section class="admin-hero">
+        <div>
+            <span class="admin-eyebrow">Accounts</span>
+            <h1>User Management</h1>
+            <p>All registered drivers and administrators on the platform.</p>
+        </div>
+        <div class="admin-hero-metrics">
+            <div class="admin-metric">
+                <span>{{ users | selectattr('role', 'equalto', 'driver') | list | length }}</span>
+                <small>Drivers</small>
+            </div>
+            <div class="admin-metric">
+                <span>{{ users | selectattr('is_admin') | list | length }}</span>
+                <small>Admins</small>
+            </div>
+            <div class="admin-metric">
+                <span>{{ users | selectattr('verification_status', 'equalto', 'pending') | list | length }}</span>
+                <small>Pending</small>
+            </div>
+        </div>
+    </section>
+
+    <section class="admin-panel">
+        <div class="admin-section-header">
+            <div>
+                <span class="admin-eyebrow">All accounts</span>
+                <h2>Registered Users</h2>
+            </div>
+            <span class="admin-soft-pill">{{ users | length }} total</span>
+        </div>
+
+        {% if users %}
+        <div class="table-responsive">
+            <table class="table pw-table admin-table mb-0">
+                <thead>
+                    <tr>
+                        <th>User</th>
+                        <th>Role</th>
+                        <th>Plate</th>
+                        <th>Status</th>
+                        <th>Joined</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                    <tr>
+                        <td>
+                            <span class="fw-semibold d-block">{{ user.name }}</span>
+                            <small class="text-secondary">{{ user.email }}</small>
+                        </td>
+                        <td>
+                            {% if user.is_admin %}
+                            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle">Admin</span>
+                            {% else %}
+                            <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle">Driver</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if user.license_plate %}
+                            <span class="badge pw-plate-badge">{{ user.license_plate }}</span>
+                            {% else %}
+                            <span class="text-secondary small">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if user.verification_status == 'approved' %}
+                            <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle">Approved</span>
+                            {% elif user.verification_status == 'pending' %}
+                            <span class="badge bg-warning bg-opacity-10 text-warning-emphasis border border-warning-subtle">Pending</span>
+                            {% elif user.verification_status == 'rejected' %}
+                            <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle">Rejected</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="small text-secondary">{{ user.created_at.strftime('%b %d, %Y') if user.created_at else '—' }}</span>
+                        </td>
+                        <td class="text-end">
+                            <div class="admin-actions">
+                                {% if user.verification_status == 'pending' and not user.is_admin %}
+                                <form method="POST" action="{{ url_for('verify_user', user_id=user.id, action='approve') }}">
+                                    <button type="submit" class="btn btn-sm btn-success">Approve</button>
+                                </form>
+                                <form method="POST" action="{{ url_for('verify_user', user_id=user.id, action='reject') }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger">Reject</button>
+                                </form>
+                                {% endif %}
+                                {% if not user.is_admin %}
+                                <form method="POST" action="{{ url_for('delete_user', user_id=user.id) }}"
+                                      data-confirm="Delete {{ user.name }}? This cannot be undone.">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="admin-empty">
+            <h3>No Users</h3>
+            <p>No accounts have been registered yet.</p>
+        </div>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}

@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}ParkScan{% endblock %}</title>
+    <meta name="description" content="ParkScan — Parking Management">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet">
+    
+    <!-- PWA Setup -->
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="theme-color" content="#F5F5F7">
+    <link rel="apple-touch-icon" href="/static/icon-192x192.png">
+    
+    {% block head %}{% endblock %}
+</head>
+<body class="{% block body_class %}{% endblock %}">
+    <!-- Navbar -->
+    {% block navbar %}
+    <nav class="navbar navbar-expand-lg navbar-light pw-navbar sticky-top blur-bg">
+        <div class="container-fluid">
+            <a class="navbar-brand fw-bold text-dark" href="/">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="me-1" style="vertical-align: text-top;">
+                    <rect x="2" y="3" width="20" height="18" rx="4" stroke="#007AFF" stroke-width="2"/>
+                    <path d="M9 8H13.5C14.8807 8 16 9.11929 16 10.5C16 11.8807 14.8807 13 13.5 13H9V16" stroke="#007AFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <line x1="9" y1="13" x2="13.5" y2="13" stroke="#007AFF" stroke-width="2"/>
+                    <rect x="2" y="10" width="20" height="4" fill="#007AFF" opacity="0.1"/>
+                </svg>
+                ParkScan
+            </a>
+            
+            {% if current_user.is_authenticated %}
+            <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <div class="d-flex align-items-center gap-4 ms-auto">
+                    {% if current_user.is_admin %}
+                    <a href="/admin" class="nav-link {% if request.endpoint == 'dashboard' and not show_all_fines %}active text-primary{% endif %}">Dashboard</a>
+                    <a href="/fines" class="nav-link {% if show_all_fines is defined and show_all_fines %}active text-primary{% endif %}">All Fines</a>
+                    <a href="/analytics" class="nav-link {% if request.endpoint == 'analytics' %}active text-primary{% endif %}">Analytics</a>
+                    <a href="/admin/users" class="nav-link {% if request.endpoint == 'users_page' %}active text-primary{% endif %}">Users</a>
+                    {% endif %}
+                    {% if is_demo is defined and is_demo %}
+                    <span class="badge bg-warning text-dark ms-2" style="font-size:0.7rem; letter-spacing:0.05em;">DEMO MODE</span>
+                    {% endif %}
+                    <div class="dropdown">
+                        <a href="#" class="d-flex align-items-center text-dark text-decoration-none dropdown-toggle" data-bs-toggle="dropdown">
+                            <div class="avatar bg-primary text-white d-flex justify-content-center align-items-center rounded-circle me-2" style="width: 32px; height: 32px;">
+                                {% if current_user.name %}
+                                    {{ current_user.name[0].upper() }}
+                                {% else %}
+                                    U
+                                {% endif %}
+                            </div>
+                            <small class="fw-medium">{{ current_user.name or 'Admin' }}</small>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0 mt-2">
+                            <li><a class="dropdown-item text-danger pw-dropdown-item" href="/logout">Sign out</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </nav>
+    {% endblock %}
+
+    <!-- Flash messages -->
+    <div class="container mt-4 {% block flash_class %}{% endblock %}">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert ios-alert ios-alert-{{ category if category != 'error' else 'danger' }} alert-dismissible fade show" role="alert">
+            <span>{{ message }}</span>
+            <button type="button" class="btn-close ios-alert-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+    </div>
+
+    <!-- Content -->
+    <main class="{% block main_class %}container py-4{% endblock %}">
+        {% block content %}{% endblock %}
+    </main>
+
+    <div class="ios-modal-backdrop" id="iosConfirmBackdrop" aria-hidden="true">
+        <div class="ios-modal" role="dialog" aria-modal="true" aria-labelledby="iosConfirmTitle">
+            <div class="ios-modal-icon">!</div>
+            <h2 id="iosConfirmTitle">Confirm action</h2>
+            <p id="iosConfirmMessage">Are you sure?</p>
+            <div class="ios-modal-actions">
+                <button type="button" class="ios-modal-button secondary" id="iosConfirmCancel">Cancel</button>
+                <button type="button" class="ios-modal-button danger" id="iosConfirmProceed">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        (() => {
+            const backdrop = document.getElementById("iosConfirmBackdrop");
+            const message = document.getElementById("iosConfirmMessage");
+            const cancel = document.getElementById("iosConfirmCancel");
+            const proceed = document.getElementById("iosConfirmProceed");
+            let pendingForm = null;
+
+            document.querySelectorAll("form[data-confirm]").forEach((form) => {
+                form.addEventListener("submit", (event) => {
+                    if (form.dataset.confirmed === "true") {
+                        return;
+                    }
+                    event.preventDefault();
+                    pendingForm = form;
+                    message.textContent = form.dataset.confirm;
+                    backdrop.classList.add("is-visible");
+                    backdrop.setAttribute("aria-hidden", "false");
+                });
+            });
+
+            function closeConfirm() {
+                backdrop.classList.remove("is-visible");
+                backdrop.setAttribute("aria-hidden", "true");
+                pendingForm = null;
+            }
+
+            cancel.addEventListener("click", closeConfirm);
+            backdrop.addEventListener("click", (event) => {
+                if (event.target === backdrop) {
+                    closeConfirm();
+                }
+            });
+            document.addEventListener("keydown", (event) => {
+                if (event.key === "Escape" && backdrop.classList.contains("is-visible")) {
+                    closeConfirm();
+                }
+            });
+            proceed.addEventListener("click", () => {
+                if (!pendingForm) {
+                    return;
+                }
+                pendingForm.dataset.confirmed = "true";
+                pendingForm.submit();
+            });
+        })();
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

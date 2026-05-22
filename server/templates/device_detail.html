@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+{% block title %}ParkScan - {{ device.name }}{% endblock %}
+
+{% block content %}
+<div class="admin-page">
+    <a href="{{ url_for('dashboard') }}" class="admin-back-link">
+        <span aria-hidden="true">&lt;</span>
+        Back to Dashboard
+    </a>
+
+    <section class="admin-hero device-hero">
+        <div>
+            <span class="admin-eyebrow">Device detail</span>
+            <h1>{{ device.name }}</h1>
+            <p>{{ device.spot_label }} · {{ device.mac_address }}</p>
+        </div>
+        <div class="admin-hero-metrics">
+            <div class="admin-metric">
+                <span>{% if device.is_online %}On{% else %}Off{% endif %}</span>
+                <small>Status</small>
+            </div>
+            <div class="admin-metric">
+                <span>{{ device.last_wifi if device.last_wifi is not none else '-' }}{% if device.last_wifi is not none %}%{% endif %}</span>
+                <small>Wi-Fi Strength</small>
+            </div>
+            <div class="admin-metric">
+                <span>{{ fines|length }}</span>
+                <small>Events</small>
+            </div>
+        </div>
+    </section>
+
+    <div class="admin-grid">
+        <section class="admin-panel">
+            <div class="admin-section-header">
+                <div>
+                    <span class="admin-eyebrow">Configuration</span>
+                    <h2>Spot Assignment</h2>
+                </div>
+                <span class="admin-soft-pill {% if device.is_online %}success{% else %}muted{% endif %}">
+                    {% if device.is_online %}Online{% else %}Offline{% endif %}
+                </span>
+            </div>
+
+            <form method="POST" action="{{ url_for('device_update', device_id=device.id) }}" class="admin-form">
+                <div>
+                    <label class="form-label">Device Name</label>
+                    <input type="text" name="name" class="form-control" value="{{ device.name }}" id="device-name-input">
+                </div>
+                <div>
+                    <label class="form-label">Parking Spot Label</label>
+                    <input type="text" name="spot_label" class="form-control" value="{{ device.spot_label }}" id="spot-label-input" placeholder="A-12">
+                </div>
+                <div>
+                    <label class="form-label">Assigned License Plate</label>
+                    <input type="text" name="assigned_plate" class="form-control pw-plate-input" value="{{ device.assigned_plate or '' }}" id="plate-input" placeholder="B123ABC">
+                </div>
+                <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold">Save Configuration</button>
+            </form>
+
+            <div class="admin-divider"></div>
+
+            <div class="admin-diagnostics">
+                <div>
+                    <span>Registered</span>
+                    <strong>{{ device.created_at.strftime('%b %d, %Y') if device.created_at else 'N/A' }}</strong>
+                </div>
+                <div>
+                    <span>Last Heartbeat</span>
+                    <strong>{{ device.last_seen.strftime('%I:%M:%S %p') if device.last_seen else 'Never' }}</strong>
+                </div>
+                <div>
+                    <span>Temperature</span>
+                    <strong>
+                        {% if device.last_temp is not none %}
+                            {{ device.last_temp }} C{% if device.last_temp > 75 %} Hot{% endif %}
+                        {% else %}N/A{% endif %}
+                    </strong>
+                </div>
+            </div>
+
+            <div class="admin-divider"></div>
+
+            <div class="admin-action-stack">
+                <form method="POST" action="{{ url_for('device_capture_now', device_id=device.id) }}">
+                    <button type="submit" class="btn btn-outline-primary w-100 py-2 fw-semibold" {% if device.capture_requested %}disabled{% endif %}>
+                        {% if device.capture_requested %}Capture Request Pending{% else %}Capture Now{% endif %}
+                    </button>
+                </form>
+                <form method="POST" action="{{ url_for('device_delete', device_id=device.id) }}" data-confirm="Delete this device and all its fines? This action cannot be undone.">
+                    <button type="submit" class="btn btn-outline-danger w-100 py-2 fw-semibold">Remove Device</button>
+                </form>
+            </div>
+        </section>
+
+        <section class="admin-panel">
+            <div class="admin-section-header">
+                <div>
+                    <span class="admin-eyebrow">Location</span>
+                    <h2>Map Pin</h2>
+                </div>
+            </div>
+
+            {% if device.latitude and device.longitude %}
+            <div id="device-map" style="height:200px; border-radius:12px; overflow:hidden; margin-bottom:1rem;"></div>
+            {% endif %}
+
+            <form method="POST" action="{{ url_for('device_set_location', device_id=device.id) }}" class="admin-form">
+                <div class="row g-2">
+                    <div class="col-6">
+                        <label class="form-label">Latitude</label>
+                        <input type="number" step="any" name="latitude" class="form-control" value="{{ device.latitude or '' }}" placeholder="44.4268">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Longitude</label>
+                        <input type="number" step="any" name="longitude" class="form-control" value="{{ device.longitude or '' }}" placeholder="26.1025">
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-outline-primary w-100 py-2 fw-semibold mt-2">Save Location</button>
+            </form>
+        </section>
+
+        <section class="admin-panel">
+            <div class="admin-section-header">
+                <div>
+                    <span class="admin-eyebrow">Notes</span>
+                    <h2>Admin Notes</h2>
+                </div>
+            </div>
+            <form method="POST" action="{{ url_for('device_update', device_id=device.id) }}" class="admin-form">
+                <input type="hidden" name="name" value="{{ device.name }}">
+                <input type="hidden" name="spot_label" value="{{ device.spot_label }}">
+                <input type="hidden" name="assigned_plate" value="{{ device.assigned_plate or '' }}">
+                <textarea name="notes" class="form-control" rows="3" placeholder="Installation notes, maintenance history, issues…">{{ device.notes or '' }}</textarea>
+                <button type="submit" class="btn btn-outline-secondary w-100 py-2 fw-semibold mt-2">Save Notes</button>
+            </form>
+        </section>
+
+        <section class="admin-panel">
+            <div class="admin-section-header">
+                <div>
+                    <span class="admin-eyebrow">Hardware swap</span>
+                    <h2>Replace Pi</h2>
+                    <p>Transfer all config (and optionally fine history) to a new Pi unit. The old device is removed.</p>
+                </div>
+            </div>
+            <form method="POST" action="{{ url_for('device_replace_pi', device_id=device.id) }}"
+                  class="admin-form" data-confirm="Replace this Pi? The old device entry will be deleted. Make sure the new MAC is correct.">
+                <div>
+                    <label class="form-label">New Pi MAC Address</label>
+                    <input type="text" name="new_mac" class="form-control pw-plate-input" placeholder="AA:BB:CC:DD:EE:FF" required>
+                </div>
+                <div class="form-check mt-2">
+                    <input class="form-check-input" type="checkbox" name="transfer_history" id="transfer_history" checked>
+                    <label class="form-check-label" for="transfer_history">Transfer fine history to new Pi</label>
+                </div>
+                <button type="submit" class="btn btn-warning w-100 py-2 fw-semibold mt-2">Replace Pi</button>
+            </form>
+        </section>
+
+        <section>
+            <div class="admin-section-header outside">
+                <div>
+                    <span class="admin-eyebrow">History</span>
+                    <h2>Record Log</h2>
+                </div>
+                {% if fines|length > 0 %}
+                <span class="admin-soft-pill">{{ fines|length }} events</span>
+                {% endif %}
+            </div>
+
+            {% if fines %}
+            <div class="admin-panel overflow-hidden">
+                <div class="table-responsive">
+                    <table class="table pw-table admin-table mb-0">
+                        <thead>
+                            <tr>
+                                <th>Mismatch</th>
+                                <th>Time</th>
+                                <th>Status</th>
+                                <th class="text-end">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for fine in fines %}
+                            <tr class="{% if fine.resolved %}pw-resolved{% endif %}">
+                                <td>
+                                    <span class="admin-alert-plate">{{ fine.detected_plate }}</span>
+                                    <small class="text-secondary d-block">Expected {{ fine.expected_plate }}</small>
+                                </td>
+                                <td>
+                                    <span class="d-block fw-medium">{{ fine.first_seen.strftime('%b %d %H:%M') if fine.first_seen else 'N/A' }}</span>
+                                    <small class="text-secondary">{{ fine.duration_minutes }} min</small>
+                                </td>
+                                <td>
+                                    {% if fine.resolved %}
+                                    <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle">Resolved</span>
+                                    {% else %}
+                                    <span class="badge bg-warning bg-opacity-10 text-warning-emphasis border border-warning-subtle">Active</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    <div class="admin-actions">
+                                        <form method="POST" action="{{ url_for('resolve_fine', fine_id=fine.id) }}">
+                                            <button type="submit" class="btn btn-sm btn-light border">
+                                                {% if fine.resolved %}Reopen{% else %}Resolve{% endif %}
+                                            </button>
+                                        </form>
+                                        {% if fine.image_filename %}
+                                        <a href="{{ url_for('serve_upload', filename=fine.image_filename) }}" target="_blank" class="btn btn-sm btn-outline-primary">Photo</a>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% else %}
+            <div class="admin-empty">
+                <h3>Clean Record</h3>
+                <p>No parking violations detected yet.</p>
+            </div>
+            {% endif %}
+        </section>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if device.latitude and device.longitude %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    const map = L.map('device-map').setView([{{ device.latitude }}, {{ device.longitude }}], 16);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+    L.marker([{{ device.latitude }}, {{ device.longitude }}])
+        .addTo(map)
+        .bindPopup('<strong>{{ device.name }}</strong><br>{{ device.spot_label }}')
+        .openPopup();
+</script>
+{% endif %}
+{% endblock %}

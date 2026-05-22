@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}ParkScan — Admin Sign In{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center align-items-center" style="min-height: 60vh;">
+    <div class="col-12 col-md-6 col-lg-4">
+        
+        <div class="text-center mb-4">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="mb-3">
+                <rect x="2" y="3" width="20" height="18" rx="4" stroke="#007AFF" stroke-width="2"/>
+                <path d="M9 8H13.5C14.8807 8 16 9.11929 16 10.5C16 11.8807 14.8807 13 13.5 13H9V16" stroke="#007AFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <line x1="9" y1="13" x2="13.5" y2="13" stroke="#007AFF" stroke-width="2"/>
+                <rect x="2" y="10" width="20" height="4" fill="#007AFF" opacity="0.1"/>
+            </svg>
+            <h2 class="fw-bold fs-3">Admin Sign In</h2>
+            <p class="text-secondary small">Sign in to manage devices and fines.</p>
+        </div>
+
+        <div class="card pw-card border-0">
+            <div class="card-body p-4">
+                <form method="POST" action="{{ url_for('admin_login') }}">
+                    <div class="mb-3">
+                        <label class="form-label text-dark">Username</label>
+                        <input type="text" name="username" class="form-control" required autofocus placeholder="admin">
+                    </div>
+                    <div class="mb-4">
+                        <label class="form-label text-dark">Password</label>
+                        <input type="password" name="password" class="form-control" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100 py-2 fw-medium rounded-3">Sign In</button>
+                </form>
+            </div>
+        </div>
+        
+        <div class="text-center mt-4">
+            <a href="{{ url_for('login') }}" class="text-secondary small text-decoration-none hover-primary">Driver sign in →</a>
+        </div>
+        
+    </div>
+</div>
+{% endblock %}

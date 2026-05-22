@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terminal</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css">
+    <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet">
+</head>
+<body class="terminal-body">
+    <main class="terminal-shell">
+        <header class="terminal-topbar">
+            <div>
+                <strong>Terminal</strong>
+                <span>{{ cwd }}</span>
+            </div>
+            <form method="POST" action="{{ url_for('terminal_logout') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button type="submit">Logout</button>
+            </form>
+        </header>
+
+        <section class="terminal-panel">
+            <form id="terminalStartForm" class="terminal-command" autocomplete="off">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <span>$</span>
+                <input id="terminalCommand" name="command" placeholder="nano README.md" autofocus>
+                <button type="submit">Run</button>
+            </form>
+            <div id="terminalOutput" class="terminal-output" aria-label="Terminal output"></div>
+            <p class="terminal-note">Commands run without a shell, inside the server folder, with protected system commands and paths blocked.</p>
+        </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+    <script>
+        const csrfToken = {{ csrf_token|tojson }};
+        const terminalEl = document.getElementById("terminalOutput");
+        const commandInput = document.getElementById("terminalCommand");
+        const startForm = document.getElementById("terminalStartForm");
+        const term = new Terminal({
+            cursorBlink: true,
+            convertEol: true,
+            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
+            fontSize: 13,
+            rows: 30,
+            theme: {
+                background: "#0b1117",
+                foreground: "#d6deeb",
+                cursor: "#78d39f",
+                selectionBackground: "#243142"
+            }
+        });
+
+        term.open(terminalEl);
+        term.write("Signed in. Start a command above.\\r\\n");
+
+        function body(data) {
+            const params = new URLSearchParams();
+            params.set("csrf_token", csrfToken);
+            Object.entries(data).forEach(([key, value]) => params.set(key, value));
+            return params;
+        }
+
+        async function post(url, data) {
+            const response = await fetch(url, {
+                method: "POST",
+                headers: {"Content-Type": "application/x-www-form-urlencoded"},
+                body: body(data)
+            });
+            const payload = await response.json();
+            if (!response.ok) {
+                throw new Error(payload.error || "Request failed");
+            }
+            return payload;
+        }
+
+        async function poll() {
+            const response = await fetch("{{ url_for('terminal_poll') }}");
+            const payload = await response.json();
+            if (payload.output) term.write(payload.output);
+            if (payload.running) window.setTimeout(poll, 180);
+        }
+
+        term.onData((data) => {
+            post("{{ url_for('terminal_input') }}", {data}).catch((error) => {
+                term.write(`\\r\\n${error.message}\\r\\n`);
+            });
+        });
+
+        startForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            const command = commandInput.value.trim();
+            if (!command) return;
+            term.reset();
+            term.write(`$ ${command}\\r\\n`);
+            try {
+                await post("{{ url_for('terminal_run') }}", {
+                    command,
+                    cols: term.cols,
+                    rows: term.rows
+                });
+                poll();
+            } catch (error) {
+                term.write(`${error.message}\\r\\n`);
+            }
+        });
+
+        window.addEventListener("resize", () => {
+            post("{{ url_for('terminal_resize') }}", {
+                cols: term.cols,
+                rows: term.rows
+            }).catch(() => {});
+        });
+    </script>
+</body>
+</html>

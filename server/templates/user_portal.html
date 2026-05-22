@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+{% block title %}ParkScan — My Fines{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center mb-4">
+    <div class="col-12 col-lg-10">
+        {% if is_demo is defined and is_demo %}
+        <div class="demo-banner mb-4">
+            <strong>Demo Mode</strong> — You're viewing sample parking activity. No real data is shown.
+        </div>
+        {% endif %}
+
+        <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between mb-4 mt-2">
+            <div>
+                <h1 class="h3 fw-bold mb-1">My Parking Activity</h1>
+                <p class="text-secondary mb-0">Record for plate: <span class="badge pw-plate-badge ms-2">{{ current_user.license_plate }}</span></p>
+            </div>
+        </div>
+
+        {% set portal_mapped = fines | selectattr('device') | selectattr('device.latitude') | list %}
+        {% if portal_mapped %}
+        <div class="card pw-card border-0 mb-4">
+            <div class="card-body p-3">
+                <p class="fw-semibold mb-2 small text-secondary">YOUR MONITORED SPOTS</p>
+                <div id="portal-map" style="height:200px; border-radius:10px; overflow:hidden;"></div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if current_user.verification_status != 'approved' %}
+        <div class="card pw-card border-0 mb-4">
+            <div class="card-body p-4">
+                <span class="badge {% if current_user.verification_status == 'rejected' %}bg-danger{% else %}bg-warning{% endif %} mb-3">
+                    {{ current_user.verification_status|title }}
+                </span>
+                <h2 class="h5 fw-bold">Plate ownership review</h2>
+                <p class="text-secondary mb-0">
+                    {% if current_user.verification_status == 'rejected' %}
+                    Your proof was not approved. Contact an administrator with updated ownership documentation before parking alerts are shown here.
+                    {% else %}
+                    Your account is waiting for an administrator to confirm that your uploaded proof matches {{ current_user.license_plate }}.
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if fines and current_user.verification_status == 'approved' %}
+        <div class="card pw-card border-0">
+            <div class="table-responsive">
+                <table class="table pw-table mb-0">
+                    <thead>
+                        <tr>
+                            <th class="ps-4">Date</th>
+                            <th>Location / Spot</th>
+                            <th>Detected Vehicle</th>
+                            <th>Duration</th>
+                            <th>Status</th>
+                            <th class="text-end pe-4">Evidence</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for fine in fines %}
+                        <tr class="{% if fine.resolved %}pw-resolved{% endif %}">
+                            <td class="ps-4 py-3">
+                                <span class="d-block fw-medium">{{ fine.first_seen.strftime('%b %d, %Y') if fine.first_seen else 'N/A' }}</span>
+                                <span class="small text-secondary">{{ fine.first_seen.strftime('%I:%M %p') if fine.first_seen else '' }}</span>
+                            </td>
+                            <td class="py-3">
+                                <span class="d-block fw-medium">{{ fine.device.name if fine.device else 'Unknown' }}</span>
+                                <span class="small text-secondary">{{ fine.device.spot_label if fine.device else 'N/A' }}</span>
+                            </td>
+                            <td class="py-3">
+                                {% if fine.detected_plate != current_user.license_plate %}
+                                <span class="badge bg-danger">Mismatch: {{ fine.detected_plate }}</span>
+                                {% else %}
+                                <span class="badge bg-success">Match</span>
+                                <span class="text-muted ms-2">{{ fine.detected_plate }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="py-3">{{ fine.duration_minutes }} min</td>
+                            <td class="py-3">
+                                {% if fine.resolved %}
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="badge bg-success">Resolved</span>
+                                    <a href="{{ url_for('receipt', fine_id=fine.id) }}" target="_blank" class="btn btn-outline-secondary btn-sm rounded-pill"><i class="bi bi-printer"></i> Receipt</a>
+                                </div>
+                                {% else %}
+                                <span class="badge bg-warning">Action Required</span>
+                                {% endif %}
+                            </td>
+                            <td class="py-3 text-end pe-4">
+                                {% if fine.photo_sent_at and fine.image_filename %}
+                                <div class="d-flex flex-column align-items-end gap-1">
+                                    <a href="{{ url_for('serve_upload', filename=fine.image_filename) }}" target="_blank" class="btn btn-sm btn-outline-primary rounded-pill px-3">
+                                        View Photo
+                                    </a>
+                                    
+                                    {% if fine.appeal_status == 'none' and not fine.resolved %}
+                                    <form method="POST" action="{{ url_for('appeal_fine', fine_id=fine.id) }}" class="mt-1 d-flex flex-column gap-1">
+                                        <input type="text" name="reason" class="form-control form-control-sm" placeholder="Any comments?" required>
+                                        <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill px-3">Appeal Ticket</button>
+                                    </form>
+                                    {% elif fine.appeal_status == 'rejected_by_ai' and not fine.resolved %}
+                                    <form method="POST" action="{{ url_for('appeal_fine', fine_id=fine.id) }}" class="mt-1 d-flex flex-column gap-1">
+                                        <input type="text" name="reason" class="form-control form-control-sm" placeholder="Why is this wrong?" required>
+                                        <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill px-3">Human Appeal</button>
+                                    </form>
+                                    {% elif fine.appeal_status == 'pending_human' %}
+                                    <span class="badge bg-warning rounded-pill">Pending Admin</span>
+                                    {% elif fine.appeal_status == 'approved' %}
+                                    <span class="badge bg-success rounded-pill">Appeal Approved</span>
+                                    {% elif fine.appeal_status == 'rejected_human' %}
+                                    <span class="badge bg-danger rounded-pill">Appeal Rejected</span>
+                                    {% endif %}
+                                </div>
+                                {% elif fine.photo_requested %}
+                                <span class="badge bg-secondary rounded-pill px-3 py-2 fw-normal">Processing request...</span>
+                                {% else %}
+                                <form method="POST" action="{{ url_for('request_photo', fine_id=fine.id) }}" class="d-inline">
+                                    <button type="submit" class="btn btn-sm btn-light border shadow-sm rounded-pill px-3">
+                                        Request Photo
+                                    </button>
+                                </form>
+                                {% endif %}
+                                
+                                {% if fine.messages.count() > 0 %}
+                                <div class="mt-3 text-start w-100 p-2 bg-light border rounded d-flex flex-column" style="max-width: 400px;">
+                                    <strong class="d-block mb-2 pb-1 border-bottom">Chat History</strong>
+                                    <div class="overflow-auto mb-2 px-2" style="max-height: 250px;">
+                                        {% for msg in fine.messages %}
+                                            <div class="mb-2 p-2 rounded {% if msg.sender != 'Admin' and msg.sender != 'System' and msg.sender != 'AI Assessor' %}bg-primary text-white ms-4{% else %}bg-white border me-4{% endif %}">
+                                                <span class="fw-bold d-block" style="font-size:0.7rem; opacity:0.8">{{ msg.sender }}</span>
+                                                {{ msg.content }}
+                                                {% if msg.attachment_filename %}
+                                                <div class="mt-1"><a href="{{ url_for('serve_upload', filename=msg.attachment_filename) }}" target="_blank" class="{% if msg.sender != 'Admin' and msg.sender != 'System' and msg.sender != 'AI Assessor' %}text-white{% else %}text-info{% endif %} text-decoration-underline" style="font-size: 0.75rem;">View Attachment</a></div>
+                                                {% endif %}
+                                            </div>
+                                        {% endfor %}
+                                    </div>
+                                    <form method="POST" action="{{ url_for('add_chat_message', fine_id=fine.id) }}" enctype="multipart/form-data" class="mt-auto d-flex flex-column gap-1 border-top pt-2">
+                                        <input type="text" name="message" class="form-control form-control-sm" placeholder="Reply to officer..." autocomplete="off">
+                                        <input type="file" name="attachment" class="form-control form-control-sm" style="font-size: 0.75rem;">
+                                        <button class="btn btn-sm btn-primary py-1 px-2 w-100">Send</button>
+                                    </form>
+                                </div>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% elif current_user.verification_status == 'approved' %}
+        <div class="card pw-card border-0">
+            <div class="card-body p-5 text-center">
+                <div class="d-inline-flex justify-content-center align-items-center rounded-circle bg-light mb-3" style="width: 64px; height: 64px;">
+                    <span class="fs-3">🙌</span>
+                </div>
+                <h4 class="fw-bold h5">No Fines Detected</h4>
+                <p class="text-secondary mb-0">Your parking spot clear history is spotless.</p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% set portal_mapped = fines | selectattr('device') | selectattr('device.latitude') | list %}
+{% if portal_mapped %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    const pMap = L.map('portal-map');
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+    }).addTo(pMap);
+    const pBounds = [];
+    const statusColors = { violation: '#FF3B30', occupied: '#FF9500', empty: '#34C759', correct: '#007AFF' };
+    {% for f in portal_mapped %}
+    {% if f.device and f.device.latitude %}
+    (function() {
+        const lat = {{ f.device.latitude }}, lng = {{ f.device.longitude }};
+        pBounds.push([lat, lng]);
+        const color = statusColors['{{ f.device.current_status }}'] || '#8E8E93';
+        const icon = L.divIcon({
+            className: '',
+            html: `<div style="background:${color};width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.3)"></div>`,
+            iconSize: [14, 14], iconAnchor: [7, 7]
+        });
+        L.marker([lat, lng], { icon }).addTo(pMap)
+            .bindPopup('<strong>{{ f.device.spot_label }}</strong>');
+    })();
+    {% endif %}
+    {% endfor %}
+    if (pBounds.length === 1) { pMap.setView(pBounds[0], 16); }
+    else if (pBounds.length > 1) { pMap.fitBounds(pBounds, { padding: [30, 30] }); }
+</script>
+{% endif %}
+<script>
+    // Web Push Subscription Logic
+    async function subscribeToPush() {
+        if ('serviceWorker' in navigator && 'PushManager' in window) {
+            try {
+                const reg = await navigator.serviceWorker.register('/static/sw.js');
+                const sub = await reg.pushManager.getSubscription();
+                if (!sub) {
+                    const response = await fetch('/api/push/public-key');
+                    const vapidData = await response.json();
+                    
+                    const convertedVapidKey = urlBase64ToUint8Array(vapidData.publicKey);
+                    
+                    const newSub = await reg.pushManager.subscribe({
+                        userVisibleOnly: true,
+                        applicationServerKey: convertedVapidKey
+                    });
+                    
+                    await fetch('/api/push/subscribe', {
+                        method: 'POST',
+                        body: JSON.stringify(newSub),
+                        headers: {
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    console.log("Push registered successfully!");
+                }
+            } catch (err) {
+                console.log("Push reg error", err);
+            }
+        }
+    }
+    
+    function urlBase64ToUint8Array(base64String) {
+        const padding = '='.repeat((4 - base64String.length % 4) % 4);
+        const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+        const rawData = window.atob(base64);
+        const outputArray = new Uint8Array(rawData.length);
+        for (let i = 0; i < rawData.length; ++i) {
+            outputArray[i] = rawData.charCodeAt(i);
+        }
+        return outputArray;
+    }
+
+    // Attempt subscription automatically on load if supported
+    window.addEventListener('load', () => {
+        // We might want to ask permission first, but browser will prompt automatically when subscribe is called
+        // if permission isn't already granted. 
+        setTimeout(subscribeToPush, 2000);
+    });
+
+    const evtSource = new EventSource("/stream");
+    evtSource.onmessage = function(event) {
+        const msg = JSON.parse(event.data);
+        if (msg.type === "new_fine" || msg.type === "fine_updated") {
+            window.location.reload();
+        }
+    };
+</script>
+{% endblock %}

@@ -1,0 +1,321 @@
+{% extends "base.html" %}
+{% block title %}ParkScan - Admin Dashboard{% endblock %}
+
+{% block content %}
+<div class="admin-page">
+    {% if is_demo is defined and is_demo %}
+    <div class="demo-banner">
+        <strong>Demo Mode</strong> — You're viewing sample data. No real devices or fines are shown, and no changes are saved.
+    </div>
+    {% endif %}
+
+    <section class="admin-hero">
+        <div>
+            <span class="admin-eyebrow">Operations</span>
+            <h1>{% if show_all_fines is defined and show_all_fines %}Fine Records{% else %}Parking Command Center{% endif %}</h1>
+            <p>Monitor devices, verify plate ownership, and resolve parking events from one focused workspace.</p>
+        </div>
+        <div class="admin-hero-metrics">
+            <div class="admin-metric">
+                <span>{{ devices|length }}</span>
+                <small>Devices</small>
+            </div>
+            <div class="admin-metric">
+                <span>{{ devices|selectattr('is_online')|list|length }}</span>
+                <small>Online</small>
+            </div>
+            <div class="admin-metric">
+                <span>{{ fines|rejectattr('resolved')|list|length }}</span>
+                <small>Active</small>
+            </div>
+        </div>
+    </section>
+
+    <section class="admin-panel admin-map-panel">
+        <div class="admin-section-header">
+            <div>
+                <span class="admin-eyebrow">Live status</span>
+                <h2>Parking Map</h2>
+            </div>
+            <span class="admin-soft-pill">{{ devices|length }} monitored spots</span>
+        </div>
+
+        {% set mapped_devices = devices | selectattr('latitude') | list %}
+        {% if mapped_devices %}
+        <div id="dashboard-map" style="height:300px; border-radius:12px; overflow:hidden; margin-bottom:1.25rem;"></div>
+        {% endif %}
+
+        <div class="admin-parking-grid" id="parking-map">
+            {% for device in devices %}
+            <button class="spot-indicator admin-spot admin-spot-{{ device.current_status }} {% if device.current_status == 'correct' %}pulse-anim{% endif %}"
+                    id="spot-{{ device.id }}"
+                    data-status="{{ device.current_status }}"
+                    onclick="window.location='{{ url_for('device_detail', device_id=device.id) }}'"
+                    type="button">
+                <span class="admin-spot-label">{{ device.spot_label }}</span>
+                <span class="admin-spot-plate device-plate">{{ device.assigned_plate or 'Unassigned' }}</span>
+            </button>
+            {% else %}
+            <div class="admin-empty-inline">No devices have checked in yet.</div>
+            {% endfor %}
+        </div>
+    </section>
+
+    {% if pending_users is defined and pending_users %}
+    <section class="admin-panel">
+        <div class="admin-section-header">
+            <div>
+                <span class="admin-eyebrow">Identity review</span>
+                <h2>Plate Verification</h2>
+                <p>Approve drivers only when the uploaded proof matches their name and plate.</p>
+            </div>
+            <span class="admin-soft-pill warning">{{ pending_users|length }} pending</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table pw-table admin-table mb-0">
+                <thead>
+                    <tr>
+                        <th>Driver</th>
+                        <th>Plate</th>
+                        <th>Proof</th>
+                        <th class="text-end">Decision</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in pending_users %}
+                    <tr>
+                        <td>
+                            <span class="fw-semibold d-block">{{ user.name }}</span>
+                            <small class="text-secondary">{{ user.email }}</small>
+                        </td>
+                        <td><span class="badge pw-plate-badge">{{ user.license_plate }}</span></td>
+                        <td>
+                            {% if user.verification_document %}
+                            <a href="{{ url_for('serve_upload', filename=user.verification_document) }}" target="_blank" class="btn btn-sm btn-outline-primary">Open proof</a>
+                            {% else %}
+                            <span class="text-secondary small">Missing</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            <div class="d-flex justify-content-end gap-2">
+                                <form method="POST" action="{{ url_for('verify_user', user_id=user.id, action='approve') }}">
+                                    <button type="submit" class="btn btn-sm btn-success">Approve</button>
+                                </form>
+                                <form method="POST" action="{{ url_for('verify_user', user_id=user.id, action='reject') }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger">Reject</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+    {% endif %}
+
+    <div class="admin-grid">
+        <section>
+            <div class="admin-section-header outside">
+                <div>
+                    <span class="admin-eyebrow">Hardware</span>
+                    <h2>Devices</h2>
+                </div>
+                <span class="admin-soft-pill">{{ devices|length }} total</span>
+            </div>
+
+            {% if devices %}
+            <div class="admin-device-list">
+                {% for device in devices %}
+                <button class="admin-device-card" onclick="window.location='{{ url_for('device_detail', device_id=device.id) }}'" type="button">
+                    <span class="pw-status-dot {% if device.is_online %}pw-online{% else %}pw-offline{% endif %}"></span>
+                    <span class="admin-device-main">
+                        <strong>{{ device.name }}</strong>
+                        <small>{{ device.spot_label }} · {{ device.mac_address }}</small>
+                    </span>
+                    {% if device.assigned_plate %}
+                    <span class="badge pw-plate-badge">{{ device.assigned_plate }}</span>
+                    {% else %}
+                    <span class="admin-soft-pill muted">Unassigned</span>
+                    {% endif %}
+                </button>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="admin-empty">
+                <h3>No Devices</h3>
+                <p>Plug in a Pi to automatically register it here.</p>
+            </div>
+            {% endif %}
+        </section>
+
+        <section>
+            <div class="admin-section-header outside">
+                <div>
+                    <span class="admin-eyebrow">Enforcement</span>
+                    <h2>{% if show_all_fines is defined and show_all_fines %}All Records{% else %}Recent Alerts{% endif %}</h2>
+                </div>
+                {% if fines|length > 0 %}
+                <span class="admin-soft-pill danger">{{ fines|length }} logs</span>
+                {% endif %}
+                <a href="{{ url_for('export_fines_csv') }}" class="btn btn-sm btn-outline-secondary">Export CSV</a>
+            </div>
+
+            {% if fines %}
+            <div class="admin-panel overflow-hidden">
+                <div class="table-responsive">
+                    <table class="table pw-table admin-table mb-0">
+                        <thead>
+                            <tr>
+                                <th>Spot</th>
+                                <th>Alert</th>
+                                <th>Time</th>
+                                <th>Status</th>
+                                <th class="text-end">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for fine in fines %}
+                            <tr class="{% if fine.resolved %}pw-resolved{% endif %}">
+                                <td>
+                                    <span class="fw-semibold d-block">{{ fine.device.spot_label if fine.device else 'Unknown' }}</span>
+                                    <small class="text-secondary">{{ fine.device.name if fine.device else '' }}</small>
+                                </td>
+                                <td>
+                                    <span class="admin-alert-plate">Detected {{ fine.detected_plate }}</span>
+                                    <small class="text-secondary d-block">Expected {{ fine.expected_plate }}</small>
+                                </td>
+                                <td>
+                                    <span class="d-block fw-medium">{{ fine.created_at.strftime('%m/%d %H:%M') if fine.created_at else 'N/A' }}</span>
+                                    <small class="text-secondary">{{ fine.duration_minutes }} min</small>
+                                </td>
+                                <td>
+                                    {% if fine.resolved %}
+                                    <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle">Resolved</span>
+                                    {% else %}
+                                    <span class="badge bg-warning bg-opacity-10 text-warning-emphasis border border-warning-subtle">Active</span>
+                                    {% endif %}
+                                    {% if fine.photo_requested and not fine.photo_sent_at %}
+                                    <span class="badge bg-info bg-opacity-10 text-info mt-1 d-block w-fit">Photo Req</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    <div class="admin-actions">
+                                        <form method="POST" action="{{ url_for('resolve_fine', fine_id=fine.id) }}">
+                                            <button type="submit" class="btn btn-sm btn-light border">
+                                                {% if fine.resolved %}Reopen{% else %}Resolve{% endif %}
+                                            </button>
+                                        </form>
+                                        {% if fine.image_filename %}
+                                        <a href="{{ url_for('serve_upload', filename=fine.image_filename) }}" target="_blank" class="btn btn-sm btn-primary">Photo</a>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% if fine.messages.count() > 0 or fine.appeal_status == 'pending_human' %}
+                            <tr class="admin-chat-row">
+                                <td colspan="5">
+                                    <div class="admin-chat-panel">
+                                        <strong>Appeal conversation</strong>
+                                        <div class="admin-chat-messages">
+                                            {% for msg in fine.messages %}
+                                            <div class="admin-message {% if msg.sender == 'Admin' %}from-admin{% endif %}">
+                                                <span>{{ msg.sender }}</span>
+                                                <p>{{ msg.content }}</p>
+                                                {% if msg.attachment_filename %}
+                                                <a href="{{ url_for('serve_upload', filename=msg.attachment_filename) }}" target="_blank">View attachment</a>
+                                                {% endif %}
+                                            </div>
+                                            {% endfor %}
+                                        </div>
+                                        <form method="POST" action="{{ url_for('add_chat_message', fine_id=fine.id) }}" enctype="multipart/form-data" class="admin-chat-form">
+                                            <input type="text" name="message" class="form-control form-control-sm" placeholder="Reply..." autocomplete="off">
+                                            <input type="file" name="attachment" class="form-control form-control-sm">
+                                            <button class="btn btn-sm btn-primary">Send</button>
+                                        </form>
+                                        {% if fine.appeal_status == 'pending_human' %}
+                                        <div class="admin-actions mt-2">
+                                            <form method="POST" action="{{ url_for('admin_handle_appeal', fine_id=fine.id, action='approve') }}">
+                                                <button class="btn btn-sm btn-success">Approve Appeal</button>
+                                            </form>
+                                            <form method="POST" action="{{ url_for('admin_handle_appeal', fine_id=fine.id, action='reject') }}">
+                                                <button class="btn btn-sm btn-danger">Reject Appeal</button>
+                                            </form>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endif %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% else %}
+            <div class="admin-empty">
+                <h3>All Clear</h3>
+                <p>No unauthorized parking detected.</p>
+            </div>
+            {% endif %}
+        </section>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{% set mapped_devices = devices | selectattr('latitude') | list %}
+{% if mapped_devices %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    const dashMap = L.map('dashboard-map');
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+    }).addTo(dashMap);
+
+    const statusColors = { violation: '#FF3B30', occupied: '#FF9500', empty: '#34C759', correct: '#007AFF' };
+    const bounds = [];
+
+    {% for d in mapped_devices %}
+    (function() {
+        const lat = {{ d.latitude }}, lng = {{ d.longitude }};
+        bounds.push([lat, lng]);
+        const color = statusColors['{{ d.current_status }}'] || '#8E8E93';
+        const icon = L.divIcon({
+            className: '',
+            html: `<div style="background:${color};width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.3)"></div>`,
+            iconSize: [14, 14], iconAnchor: [7, 7]
+        });
+        L.marker([lat, lng], { icon })
+            .addTo(dashMap)
+            .bindPopup('<strong>{{ d.name }}</strong><br>{{ d.spot_label }}<br><span style="color:' + color + '">{{ d.current_status }}</span>');
+    })();
+    {% endfor %}
+
+    if (bounds.length === 1) {
+        dashMap.setView(bounds[0], 16);
+    } else {
+        dashMap.fitBounds(bounds, { padding: [30, 30] });
+    }
+</script>
+{% endif %}
+<script>
+    const evtSource = new EventSource("/stream");
+    evtSource.onmessage = function(event) {
+        const msg = JSON.parse(event.data);
+        if (msg.type === "device_update") {
+            const spot = document.getElementById("spot-" + msg.data.id);
+            if (spot) {
+                spot.dataset.status = msg.data.current_status;
+                let status = msg.data.current_status;
+                spot.className = "spot-indicator admin-spot admin-spot-" + status;
+                if (status === "correct") { spot.classList.add("pulse-anim"); }
+            }
+        } else if (msg.type === "new_fine" || msg.type === "fine_updated") {
+            window.location.reload();
+        }
+    };
+</script>
+{% endblock %}

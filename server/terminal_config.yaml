@@ -1,0 +1,58 @@
+# Lightweight local terminal settings.
+# Keep loopback_only enabled unless this server is behind a trusted private tunnel.
+enabled: true
+username: admin
+password: admin123!
+loopback_only: true
+working_directory: .
+command_timeout_seconds: 8
+max_output_chars: 20000
+blocked_commands:
+  - rm
+  - rmdir
+  - mv
+  - dd
+  - mkfs
+  - shutdown
+  - reboot
+  - halt
+  - poweroff
+  - sudo
+  - su
+  - chmod
+  - chown
+  - kill
+  - pkill
+  - killall
+  - systemctl
+  - service
+  - launchctl
+  - diskutil
+  - unlink
+  - trash
+  - sh
+  - bash
+  - zsh
+  - fish
+  - csh
+  - tcsh
+  - ksh
+  - dash
+  - python
+  - python3
+  - perl
+  - ruby
+  - node
+protected_paths:
+  - /System
+  - /Library
+  - /bin
+  - /sbin
+  - /usr
+  - /etc
+  - /var
+  - /private/etc
+  - /private/var
+  - /Applications
+  - /dev
+  - /Volumes
