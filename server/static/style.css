@@ -417,6 +417,97 @@ h1, h2, h3, h4, h5, h6, .fw-bold {
     text-transform: uppercase;
 }
 
+/* Apple-style file dropzone */
+.pw-file-dropzone {
+    position: relative;
+    display: block;
+    width: 100%;
+    min-height: 148px;
+    border-radius: var(--pw-radius);
+    border: 1.5px dashed rgba(255, 255, 255, 0.22);
+    background: rgba(255, 255, 255, 0.04);
+    cursor: pointer;
+    transition:
+        border-color 0.2s ease,
+        background 0.2s ease,
+        box-shadow 0.2s ease,
+        transform 0.15s ease;
+    outline: none;
+}
+
+.pw-file-dropzone:hover {
+    border-color: rgba(10, 132, 255, 0.55);
+    background: rgba(10, 132, 255, 0.06);
+}
+
+.pw-file-dropzone:focus-visible {
+    border-color: var(--pw-accent);
+    box-shadow: 0 0 0 3px var(--pw-accent-glow);
+}
+
+.pw-file-dropzone.is-dragover {
+    border-color: var(--pw-accent);
+    border-style: solid;
+    background: rgba(10, 132, 255, 0.12);
+    box-shadow: 0 0 0 4px var(--pw-accent-glow);
+    transform: scale(1.005);
+}
+
+.pw-file-dropzone.has-file {
+    border-style: solid;
+    border-color: rgba(48, 209, 88, 0.45);
+    background: rgba(48, 209, 88, 0.08);
+}
+
+.pw-file-dropzone-input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+    z-index: 2;
+}
+
+.pw-file-dropzone-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 1.75rem 1.25rem;
+    pointer-events: none;
+}
+
+.pw-file-dropzone-icon {
+    color: var(--pw-accent);
+    margin-bottom: 0.65rem;
+    opacity: 0.9;
+}
+
+.pw-file-dropzone-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--pw-text);
+}
+
+.pw-file-dropzone-subtitle {
+    font-size: 0.8125rem;
+    color: var(--pw-text-secondary);
+}
+
+.pw-file-dropzone-filename {
+    margin-top: 0.65rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--pw-success);
+    word-break: break-all;
+}
+
+.pw-file-dropzone.has-file .pw-file-dropzone-subtitle {
+    display: none;
+}
+
 /* Table */
 .pw-table {
     --bs-table-bg: transparent;
@@ -1819,6 +1910,20 @@ h1, h2, h3, h4, h5, h6, .fw-bold {
     transform: translateY(-62%);
     color: #fff;
     max-width: 560px;
+}
+
+.auth-back-home {
+    display: inline-block;
+    margin-bottom: 1rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.75);
+    text-decoration: none;
+    transition: color 0.2s ease;
+}
+
+.auth-back-home:hover {
+    color: #fff;
 }
 
 .auth-kicker {
@@ -3423,4 +3528,266 @@ body:not(.has-bottom-nav) .pw-update-toast {
 
 .pw-pay-steps li.is-done::before {
     content: "✓ ";
+}
+
+/* ===== Find parking search & map ===== */
+.fp-search-card {
+    position: relative;
+    z-index: 20;
+}
+
+.fp-search-form {
+    position: relative;
+}
+
+.fp-search-combo {
+    display: flex;
+    align-items: stretch;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.06);
+    overflow: hidden;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.fp-search-combo:focus-within {
+    border-color: rgba(10, 132, 255, 0.55);
+    box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.18);
+}
+
+.fp-search-submit {
+    display: grid;
+    place-items: center;
+    width: 48px;
+    flex-shrink: 0;
+    border: 0;
+    background: rgba(10, 132, 255, 0.2);
+    color: #64d2ff;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.fp-search-submit:hover {
+    background: rgba(10, 132, 255, 0.35);
+    color: #fff;
+}
+
+.fp-search-input {
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    padding-left: 0.75rem;
+}
+
+.fp-suggestions {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(100% + 6px);
+    max-height: 280px;
+    overflow-y: auto;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(18, 20, 28, 0.98);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    box-shadow: 0 20px 48px rgba(0, 0, 0, 0.5);
+    z-index: 1060;
+}
+
+.fp-suggestion-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.65rem;
+    width: 100%;
+    padding: 0.65rem 0.85rem;
+    border: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    background: transparent;
+    color: var(--pw-text);
+    font-size: 0.85rem;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.12s ease;
+}
+
+.fp-suggestion-item:last-child {
+    border-bottom: 0;
+}
+
+.fp-suggestion-item:hover,
+.fp-suggestion-item.is-active {
+    background: rgba(10, 132, 255, 0.14);
+}
+
+.fp-suggestion-pin {
+    width: 8px;
+    height: 8px;
+    margin-top: 0.35rem;
+    border-radius: 50%;
+    background: #64d2ff;
+    flex-shrink: 0;
+    box-shadow: 0 0 10px rgba(100, 210, 255, 0.6);
+}
+
+.fp-results-map {
+    min-height: 320px;
+}
+
+.fp-map-card {
+    animation: pw-page-in 0.4s ease both;
+}
+
+.pw-map-pin--destination .pw-map-pin-dest {
+    position: relative;
+    width: 18px;
+    height: 18px;
+    border-radius: 50% 50% 50% 0;
+    transform: rotate(-45deg);
+    background: #64d2ff;
+    border: 2.5px solid #fff;
+    box-shadow: 0 0 20px rgba(100, 210, 255, 0.65);
+}
+
+.pw-map-popup .fp-map-book-btn {
+    margin-top: 8px;
+    width: 100%;
+}
+
+.fp-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    animation: fp-fade-in 0.25s ease;
+}
+
+.fp-modal-backdrop[hidden] {
+    display: none !important;
+}
+
+.fp-modal {
+    position: relative;
+    width: min(100%, 400px);
+    padding: 1.5rem;
+    border-radius: 20px;
+    background: rgba(22, 24, 32, 0.96);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    box-shadow: 0 28px 64px rgba(0, 0, 0, 0.55);
+    animation: fp-slide-up 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.fp-modal--success {
+    text-align: center;
+}
+
+.fp-modal-close {
+    position: absolute;
+    top: 0.65rem;
+    right: 0.75rem;
+    border: 0;
+    background: transparent;
+    color: var(--pw-text-secondary);
+    font-size: 1.5rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.fp-confirm-icon {
+    width: 56px;
+    height: 56px;
+    margin: 0 auto 1rem;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: #fff;
+    background: linear-gradient(135deg, #30d158, #0a84ff);
+    box-shadow: 0 12px 32px rgba(48, 209, 88, 0.35);
+}
+
+.fp-confirm-details li {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.35rem 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+@keyframes fp-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes fp-slide-up {
+    from {
+        opacity: 0;
+        transform: translateY(16px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* ===== Cross-page transitions ===== */
+@view-transition {
+    navigation: auto;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+    animation-duration: 0.32s;
+    animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+html.pw-page-enter #main,
+html.pw-page-enter .auth-main,
+html.pw-page-enter .landing-main {
+    animation: pw-page-in 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+html.pw-page-leaving #main,
+html.pw-page-leaving .auth-main,
+html.pw-page-leaving .landing-main,
+html.pw-page-leaving .pw-navbar,
+html.pw-page-leaving .landing-nav {
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity 0.22s ease, transform 0.22s ease;
+}
+
+@keyframes pw-page-in {
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    @view-transition {
+        navigation: none;
+    }
+    html.pw-page-enter #main,
+    html.pw-page-enter .auth-main,
+    html.pw-page-enter .landing-main {
+        animation: none;
+    }
+    html.pw-page-leaving #main,
+    html.pw-page-leaving .auth-main,
+    html.pw-page-leaving .landing-main {
+        opacity: 1;
+        transform: none;
+        transition: none;
+    }
 }

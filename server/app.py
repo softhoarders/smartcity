@@ -1033,6 +1033,45 @@ def _demo_apply_promo_bonus(base_spots: int, code: str) -> int:
     return demo_promos[norm]
 
 
+def _find_parking_search_redirect_args(item, *, booking_confirmation: dict):
+    """Preserve search context and pass booking confirmation query params."""
+    args = {}
+
+    def _param(name, type_fn=str):
+        raw = request.values.get(name)
+        if raw is None or raw == "":
+            return None
+        try:
+            return type_fn(raw)
+        except (TypeError, ValueError):
+            return None
+
+    lat = _param("lat", float)
+    lng = _param("lng", float)
+    if lat is not None and lng is not None:
+        args["lat"] = lat
+        args["lng"] = lng
+        args["q"] = _param("q") or _param("label") or ""
+    max_dist = _param("max_distance", float)
+    args["max_distance"] = max_dist if max_dist is not None else config.FIND_PARKING_RADIUS_KM
+    for key in ("sort", "min_price", "max_price", "status", "booking_mode"):
+        val = _param(key)
+        if val is not None and val != "":
+            args[key] = val
+    args["booking_ok"] = "1"
+    args["booking_spot"] = booking_confirmation.get("spot", "")
+    args["booking_plate"] = booking_confirmation.get("plate", "")
+    args["booking_total"] = str(booking_confirmation.get("total", ""))
+    args["booking_hours"] = str(booking_confirmation.get("hours", ""))
+    args["booking_status"] = booking_confirmation.get("status", "")
+    args["booking_type"] = booking_confirmation.get("type", "instant")
+    if booking_confirmation.get("starts"):
+        args["booking_starts"] = booking_confirmation["starts"]
+    if booking_confirmation.get("ends"):
+        args["booking_ends"] = booking_confirmation["ends"]
+    return args
+
+
 def _render_find_parking_page(listings, user_plates, balance, renter_bookings, *, is_demo: bool, search: dict | None = None):
     center_lat = float((search or {}).get("lat") or config.BUCHAREST_CENTER_LAT)
     center_lng = float((search or {}).get("lng") or config.BUCHAREST_CENTER_LNG)
@@ -1042,8 +1081,23 @@ def _render_find_parking_page(listings, user_plates, balance, renter_bookings, *
     min_price = request.args.get("min_price", type=float)
     max_price = request.args.get("max_price", type=float)
     max_distance = request.args.get("max_distance", type=float)
+    if max_distance is None and (search or {}).get("lat"):
+        max_distance = config.FIND_PARKING_RADIUS_KM
     status_filter = request.args.get("status") or None
     booking_mode = request.args.get("booking_mode") or None
+
+    booking_confirmation = None
+    if request.args.get("booking_ok"):
+        booking_confirmation = {
+            "spot": request.args.get("booking_spot", ""),
+            "plate": request.args.get("booking_plate", ""),
+            "total": request.args.get("booking_total", ""),
+            "hours": request.args.get("booking_hours", ""),
+            "status": request.args.get("booking_status", ""),
+            "type": request.args.get("booking_type", "instant"),
+            "starts": request.args.get("booking_starts", ""),
+            "ends": request.args.get("booking_ends", ""),
+        }
 
     filtered = find_parking_service.filter_and_sort_listings(
         listings,
@@ -1081,6 +1135,8 @@ def _render_find_parking_page(listings, user_plates, balance, renter_bookings, *
             "status": status_filter,
             "booking_mode": booking_mode,
         },
+        search_radius_km=config.FIND_PARKING_RADIUS_KM,
+        booking_confirmation=booking_confirmation,
     )
 
 
@@ -1194,10 +1250,17 @@ def _demo_process_find_parking_post(user_plates: list[str]):
                     "status": status,
                 },
             )
-            if status == "active":
-                flash("Paid and confirmed. You can park now.", "success")
-            else:
-                flash("Payment reserved. Waiting for owner approval.", "info")
+            confirm = {
+                "spot": item["device"].spot_label,
+                "plate": renter_plate,
+                "total": total,
+                "hours": hours,
+                "status": status,
+                "type": "instant",
+            }
+            return redirect(
+                url_for("find_parking", **_find_parking_search_redirect_args(item, booking_confirmation=confirm))
+            )
         elif action == "schedule_book":
             starts_raw = request.form.get("starts_at", "")
             ends_raw = request.form.get("ends_at", "")
@@ -1228,7 +1291,19 @@ def _demo_process_find_parking_post(user_plates: list[str]):
                     "status": status,
                 },
             )
-            flash("Reservation deposit paid.", "success")
+            confirm = {
+                "spot": item["device"].spot_label,
+                "plate": renter_plate,
+                "total": deposit,
+                "hours": hours,
+                "status": status,
+                "type": "scheduled",
+                "starts": starts_at.strftime("%d %b %H:%M"),
+                "ends": ends_at.strftime("%d %b %H:%M"),
+            }
+            return redirect(
+                url_for("find_parking", **_find_parking_search_redirect_args(item, booking_confirmation=confirm))
+            )
         else:
             flash("Unknown action.", "danger")
     except ValueError as exc:
@@ -1599,7 +1674,7 @@ def index():
         if current_user.is_admin:
             return redirect(url_for('dashboard'))
         return redirect(url_for('portal'))
-    return redirect(url_for('login'))
+    return render_template("landing.html")
 
 @app.route("/admin")
 @require_admin
@@ -3309,7 +3384,8 @@ def api_geocode():
     if denied:
         return jsonify({"results": []})
     q = request.args.get("q", "")
-    return jsonify({"results": geocode_search(q, limit=6)})
+    limit = min(10, max(1, request.args.get("limit", type=int) or 8))
+    return jsonify({"results": geocode_search(q, limit=limit)})
 
 
 @app.route("/portal/receipt/<token>")
@@ -3411,12 +3487,23 @@ def find_parking():
                 n8n_events.on_booking_event(booking, "requested")
                 if booking.status != "pending_approval":
                     n8n_events.on_booking_event(booking, booking.status)
-                if booking.status == "active":
-                    flash("Paid and confirmed. You can park now — your plate is authorized for this spot.", "success")
-                elif booking.status == "pending_approval":
-                    flash("Payment reserved. Waiting for the owner to approve your booking.", "info")
-                else:
-                    flash("Booking confirmed.", "success")
+                confirm = {
+                    "spot": listing.device.spot_label,
+                    "plate": renter_plate,
+                    "total": booking.total_spots,
+                    "hours": hours,
+                    "status": booking.status,
+                    "type": "instant",
+                }
+                return redirect(
+                    url_for(
+                        "find_parking",
+                        **_find_parking_search_redirect_args(
+                            {"device": listing.device},
+                            booking_confirmation=confirm,
+                        ),
+                    )
+                )
             elif action == "schedule_book":
                 starts_raw = request.form.get("starts_at", "")
                 ends_raw = request.form.get("ends_at", "")
@@ -3452,12 +3539,25 @@ def find_parking():
                 n8n_events.on_booking_event(booking, "requested")
                 if booking.status != "pending_approval":
                     n8n_events.on_booking_event(booking, booking.status)
-                if booking.status == "active":
-                    flash("Reservation confirmed. You can park during your scheduled window.", "success")
-                elif booking.status == "approved":
-                    flash("Reservation confirmed for your selected time.", "success")
-                else:
-                    flash("Deposit paid. Waiting for owner approval.", "info")
+                confirm = {
+                    "spot": listing.device.spot_label,
+                    "plate": renter_plate,
+                    "total": booking.deposit_spots or booking.total_spots,
+                    "hours": max(1, int((ends_at - starts_at).total_seconds() // 3600) or 1),
+                    "status": booking.status,
+                    "type": "scheduled",
+                    "starts": starts_at.strftime("%d %b %H:%M"),
+                    "ends": ends_at.strftime("%d %b %H:%M"),
+                }
+                return redirect(
+                    url_for(
+                        "find_parking",
+                        **_find_parking_search_redirect_args(
+                            {"device": listing.device},
+                            booking_confirmation=confirm,
+                        ),
+                    )
+                )
             else:
                 flash("Unknown action.", "danger")
         except ValueError as exc:

@@ -134,14 +134,32 @@
 
                 <form method="POST" action="{{ url_for('account_settings') }}" enctype="multipart/form-data" class="row g-3" id="plate-upload-form">
                     <input type="hidden" name="action" value="add_plate">
-                    <div class="col-md-6">
-                        <label class="form-label">License plate</label>
-                        <input type="text" name="license_plate" class="form-control pw-plate-input" placeholder="B123ABC" required autocomplete="off" maxlength="12">
+                    <div class="col-12 col-md-6">
+                        <label class="form-label" for="license-plate-input">License plate</label>
+                        <input type="text" name="license_plate" id="license-plate-input" class="form-control pw-plate-input" placeholder="B123ABC" required autocomplete="off" maxlength="12">
                     </div>
-                    <div class="col-md-6">
-                        <label class="form-label">Registration document</label>
-                        <input type="file" name="registration_document" class="form-control" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required>
-                        <p class="form-text mb-0">PDF, DOC, or DOCX · max 8 MB</p>
+                    <div class="col-12">
+                        <label class="form-label" id="plate-doc-label">Registration document</label>
+                        <div class="pw-file-dropzone" id="plate-doc-dropzone" role="button" tabindex="0" aria-labelledby="plate-doc-label" aria-describedby="plate-doc-hint">
+                            <input type="file"
+                                   name="registration_document"
+                                   id="plate-doc-input"
+                                   class="pw-file-dropzone-input"
+                                   accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                                   required>
+                            <div class="pw-file-dropzone-inner">
+                                <div class="pw-file-dropzone-icon" aria-hidden="true">
+                                    <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <rect x="6" y="10" width="28" height="22" rx="4" stroke="currentColor" stroke-width="1.5"/>
+                                        <path d="M14 22L18 18L22 22L26 18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                        <circle cx="24" cy="16" r="2" fill="currentColor"/>
+                                    </svg>
+                                </div>
+                                <p class="pw-file-dropzone-title mb-1">Drop your document here</p>
+                                <p class="pw-file-dropzone-subtitle mb-0" id="plate-doc-hint">or click to choose · PDF, DOC, DOCX · max 8 MB</p>
+                                <p class="pw-file-dropzone-filename mb-0" id="plate-doc-filename" hidden></p>
+                            </div>
+                        </div>
                     </div>
                     <div class="col-12">
                         <p class="small text-secondary mb-2" id="plate-upload-status" aria-live="polite"></p>

@@ -12,6 +12,7 @@
 <section class="auth-shell">
     <div class="auth-photo-panel">
         <div class="auth-photo-copy">
+            <a href="{{ url_for('index') }}" class="auth-back-home" data-no-transition="false">← Back to Spotflow</a>
             <span class="auth-kicker">Spotflow access</span>
             <h1>Parking alerts tied to the plates you register.</h1>
             <p>Create an account with your username and email, then add license plates anytime in account settings.</p>
@@ -83,12 +84,12 @@
 
                 <div>
                     <label class="form-label" for="login-identifier">Username or email</label>
-                    <input type="text" name="email" id="login-identifier" class="form-control" required autofocus autocomplete="username">
+                    <input type="text" name="email" id="login-identifier" class="form-control" required autofocus autocomplete="username" value="{% if request.args.get('demo') %}demo{% endif %}">
                 </div>
                 <div>
                     <label class="form-label" for="login-password">Password</label>
                     <div class="pw-password-field">
-                        <input type="password" name="password" id="login-password" class="form-control" required autocomplete="current-password">
+                        <input type="password" name="password" id="login-password" class="form-control" required autocomplete="current-password" value="{% if request.args.get('demo') %}demo123!{% endif %}">
                         <button type="button" class="pw-password-toggle" data-target="login-password" aria-label="Show password" aria-pressed="false">
                             <svg class="pw-icon-eye" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                 <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/>

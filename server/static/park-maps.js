@@ -42,6 +42,9 @@
     }
 
     function pinHtml(marker, color) {
+        if (marker.kind === "destination") {
+            return `<div class="pw-map-pin pw-map-pin--destination" style="--pin-color:${color}"><span class="pw-map-pin-dest"></span></div>`;
+        }
         const count =
             marker.count > 1
                 ? `<span class="pw-map-pin-count" aria-label="${marker.count} alerts">${marker.count}</span>`
@@ -97,6 +100,42 @@
             const safeMarkers = (markers || []).filter((m) => m.lat != null && m.lng != null);
             const bounds = [];
             const markerRefs = [];
+            let radiusLayer = null;
+
+            if (options?.destination?.lat != null && options?.destination?.lng != null) {
+                const dest = options.destination;
+                bounds.push([dest.lat, dest.lng]);
+                const destColor = dest.color || "#64D2FF";
+                const destIcon = L.divIcon({
+                    className: "pw-map-marker-wrap",
+                    html: pinHtml({ kind: "destination" }, destColor),
+                    iconSize: [36, 36],
+                    iconAnchor: [18, 18],
+                });
+                const destMarker = L.marker([dest.lat, dest.lng], { icon: destIcon, zIndexOffset: 1000 })
+                    .addTo(map)
+                    .bindPopup(
+                        popupHtml({
+                            title: dest.label || "Your destination",
+                            subtitle: "Search center",
+                            statusLabel: options.radiusKm ? `Within ${options.radiusKm} km` : "",
+                            color: destColor,
+                        }),
+                        { className: "pw-map-popup", maxWidth: 280 }
+                    );
+                markerRefs.push({ data: dest, leaflet: destMarker });
+
+                if (options.radiusKm) {
+                    radiusLayer = L.circle([dest.lat, dest.lng], {
+                        radius: options.radiusKm * 1000,
+                        color: "rgba(100, 210, 255, 0.55)",
+                        fillColor: "rgba(10, 132, 255, 0.12)",
+                        fillOpacity: 0.35,
+                        weight: 2,
+                        dashArray: "6 8",
+                    }).addTo(map);
+                }
+            }
 
             safeMarkers.forEach((marker) => {
                 const lat = marker.lat;
@@ -144,9 +183,9 @@
                 container._spotflowMapResize = ro;
             }
             if (typeof options?.onReady === "function") {
-                options.onReady({ map, markers: markerRefs });
+                options.onReady({ map, markers: markerRefs, radiusLayer });
             }
-            return { map, markers: markerRefs };
+            return { map, markers: markerRefs, radiusLayer };
         } catch (error) {
             console.error("[SpotflowMaps]", error);
             container.innerHTML =

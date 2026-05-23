@@ -19,36 +19,53 @@
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start mb-3 mt-2 gap-3">
             <div>
                 <h1 class="h3 fw-bold mb-1">Find parking</h1>
-                <p class="text-secondary mb-0">Search a place, compare spots, book instantly or schedule.</p>
+                <p class="text-secondary mb-0">Search a destination, pick a spot on the map or below, and pay in {{ currency_name }}.</p>
             </div>
             <span class="badge pw-plate-badge align-self-start">{{ balance }} {{ currency_name }}</span>
         </div>
 
-        <div class="card pw-card border-0 mb-3">
+        <div class="card pw-card border-0 mb-3 fp-search-card">
             <div class="card-body p-3">
-                <form method="GET" action="{{ url_for('find_parking') }}" class="row g-2 align-items-end" id="fp-search-form">
-                    <div class="col-md-8">
-                        <label class="form-label small mb-1" for="fp-search-input">Where do you need parking?</label>
-                        <input type="search" class="form-control" id="fp-search-input" name="q"
+                <label class="form-label small mb-2" for="fp-search-input">Where do you need parking?</label>
+                <form method="GET" action="{{ url_for('find_parking') }}" id="fp-search-form" class="fp-search-form">
+                    <div class="fp-search-combo">
+                        <button type="submit" class="fp-search-submit" aria-label="Search this place">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/>
+                            </svg>
+                        </button>
+                        <input type="search" class="form-control fp-search-input" id="fp-search-input" name="q"
                                value="{{ search_center.label if search_center else '' }}"
-                               placeholder="Address, landmark, or city" autocomplete="off" required>
+                               placeholder="Street, landmark, or city…" autocomplete="off" required
+                               aria-autocomplete="list" aria-controls="fp-suggestions" aria-expanded="false">
                         <input type="hidden" name="lat" id="fp-lat" value="{{ search_center.lat if search_center else '' }}">
                         <input type="hidden" name="lng" id="fp-lng" value="{{ search_center.lng if search_center else '' }}">
-                        <div id="fp-suggestions" class="list-group position-absolute shadow-sm d-none" style="z-index:1050;max-width:32rem;"></div>
+                        <input type="hidden" name="max_distance" id="fp-radius" value="{{ filters.max_distance or search_radius_km }}">
                     </div>
-                    <div class="col-md-4">
-                        <button type="submit" class="btn btn-primary w-100">Search</button>
-                    </div>
+                    <div id="fp-suggestions" class="fp-suggestions" role="listbox" hidden></div>
                 </form>
                 {% if search_center %}
-                <p class="small text-secondary mb-0 mt-2">Showing spots near <strong>{{ search_center.label }}</strong></p>
+                <p class="small text-secondary mb-0 mt-2 fp-search-meta">
+                    Spots within <strong>{{ filters.max_distance or search_radius_km }} km</strong> of
+                    <strong>{{ search_center.label }}</strong>
+                </p>
+                {% else %}
+                <p class="small text-secondary mb-0 mt-2">Start typing for suggestions — pick one to load the map.</p>
                 {% endif %}
             </div>
         </div>
 
-        <div class="card pw-card border-0 mb-3">
+        <div class="card pw-card border-0 mb-3 fp-map-card {% if not search_center %}d-none{% endif %}" id="fp-map-section">
             <div class="card-body p-3">
-                <form method="GET" action="{{ url_for('find_parking') }}" class="row g-2 align-items-end">
+                <div id="rental-map" class="pw-map-frame pw-map-frame--md fp-results-map">
+                    <div class="pw-map-loading" id="rental-map-loading">{% if search_center %}Loading map…{% else %}Search a place to see the map{% endif %}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card pw-card border-0 mb-3 {% if not search_center %}d-none{% endif %}" id="fp-filters-section">
+            <div class="card-body p-3">
+                <form method="GET" action="{{ url_for('find_parking') }}" class="row g-2 align-items-end" id="fp-filters-form">
                     <input type="hidden" name="q" value="{{ search_center.label if search_center else '' }}">
                     <input type="hidden" name="lat" value="{{ search_center.lat if search_center else '' }}">
                     <input type="hidden" name="lng" value="{{ search_center.lng if search_center else '' }}">
@@ -61,8 +78,8 @@
                         <input type="number" step="0.01" name="max_price" class="form-control form-control-sm" value="{{ filters.max_price or '' }}">
                     </div>
                     <div class="col-6 col-md-2">
-                        <label class="form-label small">Max km</label>
-                        <input type="number" step="0.1" name="max_distance" class="form-control form-control-sm" value="{{ filters.max_distance or '' }}">
+                        <label class="form-label small">Radius (km)</label>
+                        <input type="number" step="0.1" name="max_distance" class="form-control form-control-sm" value="{{ filters.max_distance or search_radius_km }}">
                     </div>
                     <div class="col-6 col-md-2">
                         <label class="form-label small">Status</label>
@@ -89,46 +106,38 @@
             </div>
         </div>
 
-        {% if mapped %}
-        <div class="card pw-card border-0 mb-4">
-            <div class="card-body p-3">
-                <div id="rental-map" class="pw-map-frame pw-map-frame--md">
-                    <div class="pw-map-loading" id="rental-map-loading">Loading map…</div>
+        <div id="fp-results-section" class="{% if not search_center %}d-none{% endif %}">
+            {% if recommended %}
+            <h2 class="h5 fw-bold mb-3">Top picks for you</h2>
+            <div class="row g-3 mb-4">
+                {% for item in recommended %}
+                {% include "partials/find_parking_card.html" %}
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <h2 class="h5 fw-bold mb-3">All nearby spots ({{ all_listings|length }})</h2>
+            {% if listings %}
+            <div class="row g-3" id="fp-listings">
+                {% for item in listings %}
+                {% include "partials/find_parking_card.html" %}
+                {% endfor %}
+            </div>
+            {% elif not recommended %}
+            <div class="card pw-card border-0">
+                <div class="card-body">
+                    {{ empty_state(
+                        'No spots in this area',
+                        'Try a larger radius or search another neighborhood.',
+                        url_for('find_parking'),
+                        'New search'
+                    ) }}
                 </div>
             </div>
+            {% else %}
+            <p class="text-secondary small">No additional spots beyond the recommendations.</p>
+            {% endif %}
         </div>
-        {% endif %}
-
-        {% if recommended %}
-        <h2 class="h5 fw-bold mb-3">Top picks for you</h2>
-        <div class="row g-3 mb-4">
-            {% for item in recommended %}
-            {% include "partials/find_parking_card.html" %}
-            {% endfor %}
-        </div>
-        {% endif %}
-
-        <h2 class="h5 fw-bold mb-3">All nearby spots ({{ all_listings|length }})</h2>
-        {% if listings %}
-        <div class="row g-3">
-            {% for item in listings %}
-            {% include "partials/find_parking_card.html" %}
-            {% endfor %}
-        </div>
-        {% elif not recommended %}
-        <div class="card pw-card border-0">
-            <div class="card-body">
-                {{ empty_state(
-                    'No spots match your filters',
-                    'Try widening distance or price range, or search another area.',
-                    url_for('find_parking'),
-                    'Reset search'
-                ) }}
-            </div>
-        </div>
-        {% else %}
-        <p class="text-secondary small">No additional spots beyond the recommendations.</p>
-        {% endif %}
 
         {% if renter_bookings %}
         <div class="card pw-card border-0 mt-4">
@@ -157,26 +166,69 @@
         {% endif %}
     </div>
 </div>
+
+<div class="fp-modal-backdrop" id="fp-book-modal" hidden aria-hidden="true">
+    <div class="fp-modal" role="dialog" aria-modal="true" aria-labelledby="fp-book-title">
+        <button type="button" class="fp-modal-close" id="fp-book-close" aria-label="Close">×</button>
+        <h2 class="h5 fw-bold mb-1" id="fp-book-title">Book this spot</h2>
+        <p class="text-secondary small mb-3" id="fp-book-subtitle"></p>
+        <form method="POST" action="{{ url_for('find_parking') }}{% if request.query_string %}?{{ request.query_string.decode() }}{% endif %}" id="fp-book-form">
+            <input type="hidden" name="action" value="instant_book">
+            <input type="hidden" name="listing_id" id="fp-book-listing-id" value="">
+            <div class="mb-2">
+                <label class="form-label small">Hours</label>
+                <input type="number" name="hours" class="form-control" min="1" max="72" value="2" required id="fp-book-hours">
+            </div>
+            <div class="mb-3">
+                <label class="form-label small">Your plate</label>
+                <select name="renter_plate" class="form-select" required id="fp-book-plate">
+                    {% for p in user_plates %}
+                    <option value="{{ p }}">{{ p }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <p class="small mb-3" id="fp-book-total-line">Total: —</p>
+            <button type="submit" class="btn btn-primary w-100">Pay &amp; confirm booking</button>
+        </form>
+    </div>
+</div>
+
+<div class="fp-modal-backdrop fp-modal-backdrop--success" id="fp-confirm-modal" hidden aria-hidden="true">
+    <div class="fp-modal fp-modal--success" role="dialog" aria-modal="true" aria-labelledby="fp-confirm-title">
+        <div class="fp-confirm-icon" aria-hidden="true">✓</div>
+        <h2 class="h5 fw-bold mb-2" id="fp-confirm-title">Booking confirmed</h2>
+        <p class="text-secondary small mb-3" id="fp-confirm-body"></p>
+        <ul class="fp-confirm-details list-unstyled small mb-3" id="fp-confirm-details"></ul>
+        <button type="button" class="btn btn-primary w-100" id="fp-confirm-done">Done</button>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 {% from "macros/park_map.html" import park_map_assets %}
-{% if mapped %}
 {{ park_map_assets() }}
 <script src="{{ url_for('static', filename='find-parking.js') }}"></script>
 <script>
 window.SPOTFLOW_FIND_PARKING = {
-    center: {{ search_center | tojson }},
-    markers: [
+    currencyName: {{ currency_name | tojson }},
+    radiusKm: {{ (filters.max_distance or search_radius_km) | tojson }},
+    balance: {{ balance }},
+    searchCenter: {{ search_center | tojson if search_center else 'null' }},
+    bookingConfirmation: {{ booking_confirmation | tojson if booking_confirmation else 'null' }},
+    userPlates: {{ user_plates | tojson }},
+    listings: [
         {% for item in all_listings %}
         {% if item.device.latitude and item.device.longitude %}
         {
+            listingId: {{ item.listing.id }},
             lat: {{ item.device.latitude }},
             lng: {{ item.device.longitude }},
             title: {{ item.device.spot_label | tojson }},
-            subtitle: {{ (item.instant_display ~ ' ' ~ currency_name ~ '/h · ' ~ item.distance_km ~ ' km') | tojson }},
+            subtitle: {{ item.device.name | tojson }},
             status: {{ item.status | tojson }},
-            listingId: {{ item.listing.id }}
+            instantDisplay: {{ item.instant_display | tojson }},
+            instantHundredths: {{ item.instant_hundredths }},
+            distanceKm: {{ item.distance_km }}
         },
         {% endif %}
         {% endfor %}
@@ -186,7 +238,4 @@ document.addEventListener("DOMContentLoaded", () => {
     if (window.SpotflowFindParking) SpotflowFindParking.init(window.SPOTFLOW_FIND_PARKING);
 });
 </script>
-{% else %}
-<script src="{{ url_for('static', filename='find-parking.js') }}"></script>
-{% endif %}
 {% endblock %}

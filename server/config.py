@@ -68,6 +68,9 @@ NEW_USER_WELCOME_SPOTS = int(os.environ.get("SPOTS_WELCOME_BONUS", "0"))
 # Low balance warning (Credits)
 LOW_BALANCE_THRESHOLD = int(os.environ.get("LOW_BALANCE_THRESHOLD", "10"))
 
+# Find parking: default search radius (~2 miles)
+FIND_PARKING_RADIUS_KM = float(os.environ.get("FIND_PARKING_RADIUS_KM", "3.2"))
+
 # Bank withdrawal: fixed bundle
 WITHDRAWAL_CREDITS = int(os.environ.get("WITHDRAWAL_CREDITS", "100"))
 WITHDRAWAL_LEI = int(os.environ.get("WITHDRAWAL_LEI", "100"))

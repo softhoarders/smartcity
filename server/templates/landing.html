@@ -1,0 +1,300 @@
+{% extends "base.html" %}
+{% block title %}Spotflow — Smart parking for your city{% endblock %}
+{% block body_class %}landing-page{% endblock %}
+{% block flash_class %}landing-flashes{% endblock %}
+{% block main_class %}landing-main{% endblock %}
+
+{% block head %}
+<link href="{{ url_for('static', filename='landing.css') }}" rel="stylesheet">
+{% endblock %}
+
+{% block navbar %}
+<header class="landing-nav blur-bg" id="landing-nav">
+    <div class="landing-nav-inner">
+        <a class="landing-logo" href="{{ url_for('index') }}">
+            <span class="landing-logo-mark" aria-hidden="true">S</span>
+            <span>Spotflow</span>
+        </a>
+        <nav class="landing-nav-links" aria-label="Primary">
+            <a href="#features">Features</a>
+            <a href="#how-it-works">How it works</a>
+            <a href="#for-you">Who it's for</a>
+            <a href="#credits">Credits</a>
+        </nav>
+        <div class="landing-nav-actions">
+            <a href="{{ url_for('login') }}" class="landing-btn landing-btn--ghost">Sign in</a>
+            <a href="{{ url_for('login', mode='signup') }}" class="landing-btn landing-btn--primary">Get started</a>
+        </div>
+        <button type="button" class="landing-nav-toggle" id="landing-nav-toggle" aria-expanded="false" aria-controls="landing-mobile-menu" aria-label="Open menu">
+            <span></span><span></span>
+        </button>
+    </div>
+    <div class="landing-mobile-menu" id="landing-mobile-menu" hidden>
+        <a href="#features">Features</a>
+        <a href="#how-it-works">How it works</a>
+        <a href="#for-you">Who it's for</a>
+        <a href="#credits">Credits</a>
+        <a href="{{ url_for('login') }}">Sign in</a>
+        <a href="{{ url_for('login', mode='signup') }}" class="landing-btn landing-btn--primary">Get started</a>
+    </div>
+</header>
+{% endblock %}
+
+{% block content %}
+<section class="landing-hero" id="top">
+    <div class="landing-hero-glow" aria-hidden="true"></div>
+    <div class="landing-container landing-hero-grid">
+        <div class="landing-hero-copy landing-reveal">
+            <p class="landing-eyebrow">Community-scale parking</p>
+            <h1>Your spot. Your rules. <span class="landing-gradient-text">One flow.</span></h1>
+            <p class="landing-lead">
+                Monitor bays with smart cameras, rent empty time to neighbors, and settle disputes with photo evidence —
+                built for Bucharest, Cluj, Craiova, and every dense city in between.
+            </p>
+            <div class="landing-hero-cta">
+                <a href="{{ url_for('login', mode='signup') }}" class="landing-btn landing-btn--primary landing-btn--lg">Create free account</a>
+                <a href="{{ url_for('login') }}?demo=1" class="landing-btn landing-btn--glass landing-btn--lg">Try demo</a>
+            </div>
+            <p class="landing-demo-hint">Demo: sign in as <code>demo</code> / <code>demo123!</code></p>
+        </div>
+        <div class="landing-hero-visual landing-reveal landing-reveal--delay" aria-hidden="true">
+            <div class="landing-phone">
+                <div class="landing-phone-notch"></div>
+                <div class="landing-phone-screen">
+                    <div class="landing-phone-header">
+                        <span>Live map</span>
+                        <span class="landing-phone-pill">3 alerts</span>
+                    </div>
+                    <div class="landing-phone-map">
+                        <span class="landing-map-pin landing-map-pin--danger"></span>
+                        <span class="landing-map-pin landing-map-pin--ok"></span>
+                        <span class="landing-map-pin landing-map-pin--warn"></span>
+                        <span class="landing-map-pin landing-map-pin--open"></span>
+                    </div>
+                    <ul class="landing-phone-list">
+                        <li><strong>P1-12</strong> Mismatch · 12 min</li>
+                        <li><strong>Garage B</strong> Booking · 2h</li>
+                        <li><strong>Curbside</strong> Resolved</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="landing-float-card landing-float-card--wallet">
+                <span class="landing-float-label">Wallet</span>
+                <strong>120 Credits</strong>
+                <small>1 Credit = 1 lei</small>
+            </div>
+            <div class="landing-float-card landing-float-card--spot">
+                <span class="landing-float-label">Instant book</span>
+                <strong>10.50</strong>
+                <small>Credits / hour</small>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="landing-stats landing-reveal" aria-label="Platform highlights">
+    <div class="landing-container landing-stats-grid">
+        <div class="landing-stat">
+            <span class="landing-stat-value">24/7</span>
+            <span class="landing-stat-label">Bay monitoring</span>
+        </div>
+        <div class="landing-stat">
+            <span class="landing-stat-value">1:1</span>
+            <span class="landing-stat-label">Credits to lei</span>
+        </div>
+        <div class="landing-stat">
+            <span class="landing-stat-value">AI</span>
+            <span class="landing-stat-label">Appeal review</span>
+        </div>
+        <div class="landing-stat">
+            <span class="landing-stat-value">Map</span>
+            <span class="landing-stat-label">Search & book nearby</span>
+        </div>
+    </div>
+</section>
+
+<section class="landing-section" id="features">
+    <div class="landing-container">
+        <div class="landing-section-head landing-reveal">
+            <p class="landing-eyebrow">Features</p>
+            <h2>Everything parking should have been</h2>
+            <p class="landing-section-lead">Monitoring, marketplace, wallet, and fairness — not four different apps.</p>
+        </div>
+        <div class="landing-features">
+            <article class="landing-feature landing-reveal">
+                <div class="landing-feature-icon" aria-hidden="true">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                </div>
+                <h3>Spot protection</h3>
+                <p>Cameras watch your assigned plate. Get push alerts when someone else parks in your bay, with timestamps and evidence on demand.</p>
+            </article>
+            <article class="landing-feature landing-reveal">
+                <div class="landing-feature-icon" aria-hidden="true">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="10" r="3"/><path d="M12 21s7-6.5 7-11a7 7 0 10-14 0c0 4.5 7 11 7 11z"/></svg>
+                </div>
+                <h3>Find parking</h3>
+                <p>Search any place on the map, filter by price and distance, and book instantly or on a schedule — with top picks recommended for you.</p>
+            </article>
+            <article class="landing-feature landing-reveal">
+                <div class="landing-feature-icon" aria-hidden="true">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+                </div>
+                <h3>Credits wallet</h3>
+                <p>Top up in lei, pay for bookings and subscriptions, withdraw to your bank when you're ready. Promo and referral codes included.</p>
+            </article>
+            <article class="landing-feature landing-reveal">
+                <div class="landing-feature-icon" aria-hidden="true">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+                </div>
+                <h3>Fair appeals</h3>
+                <p>Request camera photos, appeal with context, and get AI-assisted review before human admins step in when needed.</p>
+            </article>
+            <article class="landing-feature landing-reveal">
+                <div class="landing-feature-icon" aria-hidden="true">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                </div>
+                <h3>Smart pricing</h3>
+                <p>Owners set floors and ceilings; Spotflow suggests or auto-adjusts hourly rates from demand, weather, and occupancy signals.</p>
+            </article>
+            <article class="landing-feature landing-reveal">
+                <div class="landing-feature-icon" aria-hidden="true">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                </div>
+                <h3>Operator dashboard</h3>
+                <p>Live maps, device health, verification queues, CSV exports, and analytics for buildings and small parking operators.</p>
+            </article>
+        </div>
+    </div>
+</section>
+
+<section class="landing-section landing-section--alt" id="how-it-works">
+    <div class="landing-container">
+        <div class="landing-section-head landing-reveal">
+            <p class="landing-eyebrow">How it works</p>
+            <h2>From camera to checkout in three steps</h2>
+        </div>
+        <ol class="landing-steps">
+            <li class="landing-step landing-reveal">
+                <span class="landing-step-num">1</span>
+                <div>
+                    <h3>Claim & verify</h3>
+                    <p>Register your plates with official documents. Admins or AI verify ownership before you get full trust.</p>
+                </div>
+            </li>
+            <li class="landing-step landing-reveal">
+                <span class="landing-step-num">2</span>
+                <div>
+                    <h3>Monitor or list</h3>
+                    <p>Link a bay to your plate, or list empty hours for rent with manual or automatic booking approval.</p>
+                </div>
+            </li>
+            <li class="landing-step landing-reveal">
+                <span class="landing-step-num">3</span>
+                <div>
+                    <h3>Book & settle</h3>
+                    <p>Drivers search the map, pay in Credits, and park with their plate authorized on the camera for the booking window.</p>
+                </div>
+            </li>
+        </ol>
+    </div>
+</section>
+
+<section class="landing-section" id="for-you">
+    <div class="landing-container">
+        <div class="landing-section-head landing-reveal">
+            <p class="landing-eyebrow">Who it's for</p>
+            <h2>Built for everyone in the lot</h2>
+        </div>
+        <div class="landing-personas">
+            <article class="landing-persona landing-reveal">
+                <h3>Drivers</h3>
+                <ul>
+                    <li>Alerts when your spot is misused</li>
+                    <li>Map search across major cities</li>
+                    <li>Appeals with photo evidence</li>
+                </ul>
+                <a href="{{ url_for('login', mode='signup') }}" class="landing-link">Start as driver →</a>
+            </article>
+            <article class="landing-persona landing-reveal">
+                <h3>Spot owners</h3>
+                <ul>
+                    <li>List bays and set smart prices</li>
+                    <li>Approve or auto-accept bookings</li>
+                    <li>Earn Credits when others park</li>
+                </ul>
+                <a href="{{ url_for('login', mode='signup') }}" class="landing-link">List your spot →</a>
+            </article>
+            <article class="landing-persona landing-reveal">
+                <h3>Operators</h3>
+                <ul>
+                    <li>Fleet map with live status</li>
+                    <li>Device provisioning & appeals queue</li>
+                    <li>Exports and demand analytics</li>
+                </ul>
+                <a href="{{ url_for('login') }}?account_type=admin" class="landing-link">Admin access →</a>
+            </article>
+        </div>
+    </div>
+</section>
+
+<section class="landing-section landing-section--alt" id="credits">
+    <div class="landing-container landing-credits-grid landing-reveal">
+        <div>
+            <p class="landing-eyebrow">Credits</p>
+            <h2>Simple money, no mental math</h2>
+            <p class="landing-section-lead">One Credit equals one Romanian leu. Top up, book parking, subscribe monthly, or withdraw 100 Credits to your bank account when your balance allows.</p>
+            <ul class="landing-checklist">
+                <li>Fractional hourly rates (e.g. 10.50 Credits)</li>
+                <li>PDF receipts for top-ups and withdrawals</li>
+                <li>Promo codes and referral bonuses</li>
+                <li>Low-balance warnings before you book</li>
+            </ul>
+        </div>
+        <div class="landing-credits-card">
+            <div class="landing-credits-row">
+                <span>Instant booking</span>
+                <strong>from 8.00 Credits/h</strong>
+            </div>
+            <div class="landing-credits-row">
+                <span>Monthly plan</span>
+                <strong>50 Credits / month</strong>
+            </div>
+            <div class="landing-credits-row">
+                <span>Bank withdrawal</span>
+                <strong>100 Credits → 100 lei</strong>
+            </div>
+            <a href="{{ url_for('login') }}" class="landing-btn landing-btn--primary w-100 mt-3">Open wallet</a>
+        </div>
+    </div>
+</section>
+
+<section class="landing-cta landing-reveal">
+    <div class="landing-container landing-cta-inner">
+        <h2>Ready to flow?</h2>
+        <p>Join Spotflow in minutes — or explore the full demo with sample cities and live maps.</p>
+        <div class="landing-hero-cta">
+            <a href="{{ url_for('login', mode='signup') }}" class="landing-btn landing-btn--primary landing-btn--lg">Get started free</a>
+            <a href="{{ url_for('login') }}?demo=1" class="landing-btn landing-btn--glass landing-btn--lg">Launch demo</a>
+        </div>
+    </div>
+</section>
+
+<footer class="landing-footer">
+    <div class="landing-container landing-footer-inner">
+        <a class="landing-logo" href="{{ url_for('index') }}">
+            <span class="landing-logo-mark" aria-hidden="true">S</span>
+            <span>Spotflow</span>
+        </a>
+        <p class="landing-footer-copy">Smart parking for communities. Not a government enforcement tool.</p>
+        <div class="landing-footer-links">
+            <a href="{{ url_for('login') }}">Sign in</a>
+            <a href="{{ url_for('login', mode='signup') }}">Sign up</a>
+            <a href="#features">Features</a>
+        </div>
+    </div>
+</footer>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='landing.js') }}"></script>
+{% endblock %}
