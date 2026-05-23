@@ -116,6 +116,10 @@ For the booked period, the system treats the renter as the legitimate user of th
 
 Every driver account has a **wallet balance** in Spots. You spend Spots on parking bookings and subscriptions; you receive Spots when someone rents your space (after approvals and payments complete).
 
+### Hardware kits (operators)
+
+B2B pricing for Raspberry Pi + camera edge kits per bay is documented in [HARDWARE_PRICING.md](HARDWARE_PRICING.md) (recommended list price roughly **1,650–1,950 RON** per bay installed in Romania, depending on volume).
+
 ### Topping up
 
 You add Spots through a **buy Spots** flow (currently a **demo card form** — no real payment processor connected yet). The amount you enter in lei is the number of Spots credited.

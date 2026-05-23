@@ -55,6 +55,10 @@
                     <label class="form-label">Password</label>
                     <input type="password" name="password" class="form-control" required minlength="8" autocomplete="new-password" placeholder="At least 8 characters">
                 </div>
+                <div class="driver-only">
+                    <label class="form-label">Referral code (optional)</label>
+                    <input type="text" name="referral_code" class="form-control" placeholder="Friend's code" autocomplete="off">
+                </div>
 
                 <button type="submit" class="btn btn-primary w-100 py-3 fw-semibold">Create account</button>
                 <p class="auth-switch-link mb-0 text-center">
@@ -120,6 +124,9 @@
         form.classList.toggle("is-admin", selected === "admin");
         form.querySelectorAll(".admin-only input").forEach((input) => {
             input.required = selected === "admin";
+        });
+        form.querySelectorAll(".driver-only").forEach((el) => {
+            el.style.display = selected === "admin" ? "none" : "";
         });
     }
 

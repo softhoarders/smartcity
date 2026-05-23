@@ -17,6 +17,13 @@
             </div>
         </div>
 
+        {% if low_balance %}
+        <div class="alert alert-warning border-0 mb-3 py-2 small">
+            Your balance is below {{ low_balance_threshold }} {{ currency_name }}.
+            <a href="{{ url_for('wallet_topup') }}" class="alert-link">Top up</a> before parking or subscriptions.
+        </div>
+        {% endif %}
+
         <div class="alert alert-secondary border-0 mb-4 py-3">
             <p class="mb-1 fw-semibold">How {{ currency_name }} work</p>
             <ul class="mb-0 small text-secondary ps-3">
@@ -66,6 +73,49 @@
             </div>
         </div>
 
+        <div class="card pw-card border-0 mb-4">
+            <div class="card-body p-4">
+                <h2 class="h5 fw-bold mb-3">Withdraw to bank</h2>
+                <p class="small text-secondary">
+                    Convert {{ withdrawal_credits }} {{ currency_name }} to {{ withdrawal_lei }} lei (1:1) sent to your IBAN.
+                </p>
+                <form method="POST" action="{{ url_for('wallet') }}" class="row g-3">
+                    <input type="hidden" name="action" value="withdraw">
+                    <div class="col-md-6">
+                        <label class="form-label small">Account holder</label>
+                        <input type="text" name="account_holder" class="form-control form-control-sm" required
+                               value="{{ current_user.name if not is_demo else 'Demo User' }}">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small">Bank name (optional)</label>
+                        <input type="text" name="bank_name" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label small">IBAN</label>
+                        <input type="text" name="iban" class="form-control form-control-sm" required
+                               placeholder="RO49AAAA1B31007593840000"
+                               value="{{ payout_iban or '' }}">
+                    </div>
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-outline-primary btn-sm"
+                                {% if balance < withdrawal_credits %}disabled{% endif %}>
+                            Withdraw {{ withdrawal_lei }} lei
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        {% if referral_code %}
+        <div class="card pw-card border-0 mb-4">
+            <div class="card-body p-4">
+                <h2 class="h5 fw-bold mb-2">Refer friends</h2>
+                <p class="small text-secondary mb-2">Share your code at signup — you both earn bonus {{ currency_name }}.</p>
+                <code class="user-select-all">{{ referral_code }}</code>
+            </div>
+        </div>
+        {% endif %}
+
         <div class="card pw-card border-0">
             <div class="card-body p-4">
                 <h2 class="h5 fw-bold mb-3">Recent activity</h2>
@@ -83,7 +133,12 @@
                             {% for tx in transactions %}
                             <tr>
                                 <td class="text-secondary small" data-label="Date">{{ tx.created_at.strftime('%d %b %Y %H:%M') if tx.created_at else '—' }}</td>
-                                <td data-label="Description">{{ tx.description }}</td>
+                                <td data-label="Description">
+                                    {{ tx.description }}
+                                    {% if tx.receipt_token %}
+                                    <a href="{{ url_for('wallet_receipt', token=tx.receipt_token) }}" class="small ms-1" target="_blank" rel="noopener">PDF</a>
+                                    {% endif %}
+                                </td>
                                 <td class="text-end fw-medium {% if tx.amount > 0 %}text-success{% else %}text-danger{% endif %}" data-label="Amount">
                                     {% if tx.amount > 0 %}+{% endif %}{{ tx.amount }}
                                 </td>

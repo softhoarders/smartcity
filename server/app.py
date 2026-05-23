@@ -28,11 +28,17 @@ import config
 from models import (
     db, Device, Fine, User, UserPlate, PushSubscription, FineMessage,
     SpotListing, SpotBooking, SpotTransaction, SpotActivityLog,
+    WalletWithdrawal,
 )
 import spots_service
 import activity_log
 import pricing_engine
 import spot_prices
+import promo_service
+import receipt_pdf
+import find_parking_service
+import demo_parking_data
+from geo_context import geocode_search
 from mailer import mail, PhotoMailerWorker
 from plate_document_verifier import verify_plate_registration_document, normalize_plate_for_claim
 import json
@@ -96,13 +102,20 @@ def inject_globals():
     if current_user.is_authenticated:
         ctx["is_demo"] = _is_demo()
         if not getattr(current_user, "is_admin", False) and current_user.id != 0:
+            bal = 0
             if _is_demo():
-                ctx["nav_spots_balance"] = _demo_wallet_balance()
+                bal = _demo_wallet_balance()
+                ctx["nav_spots_balance"] = bal
             elif current_user.id > 0:
                 try:
-                    ctx["nav_spots_balance"] = spots_service.user_balance(current_user)
+                    bal = spots_service.user_balance(current_user)
+                    ctx["nav_spots_balance"] = bal
                 except Exception:
+                    bal = 0
                     ctx["nav_spots_balance"] = 0
+            if bal < config.LOW_BALANCE_THRESHOLD:
+                ctx["low_balance_warning"] = True
+                ctx["low_balance_threshold"] = config.LOW_BALANCE_THRESHOLD
     return ctx
 
 login_manager = LoginManager()
@@ -163,6 +176,16 @@ with app.app_context():
         if column_name not in user_columns:
             db.session.execute(text(f"ALTER TABLE users ADD COLUMN {column_name} {column_sql}"))
 
+    payout_columns = {
+        "payout_account_holder": "VARCHAR(120)",
+        "payout_iban": "VARCHAR(34)",
+        "payout_bank_name": "VARCHAR(120)",
+        "referred_by_code": "VARCHAR(32)",
+    }
+    for column_name, column_sql in payout_columns.items():
+        if column_name not in user_columns:
+            db.session.execute(text(f"ALTER TABLE users ADD COLUMN {column_name} {column_sql}"))
+
     if "owner_user_id" not in device_columns:
         db.session.execute(text("ALTER TABLE devices ADD COLUMN owner_user_id INTEGER"))
 
@@ -196,16 +219,47 @@ with app.app_context():
 
     for listing in SpotListing.query.all():
         if not listing.instant_price_tenths:
-            listing.instant_price_tenths = (listing.instant_price_per_hour or 10) * 10
+            listing.instant_price_tenths = (listing.instant_price_per_hour or 10) * 100
+        elif listing.instant_price_tenths < 1000:
+            listing.instant_price_tenths *= 10
         if not listing.schedule_price_tenths:
-            listing.schedule_price_tenths = (listing.schedule_price_per_hour or 8) * 10
+            listing.schedule_price_tenths = (listing.schedule_price_per_hour or 8) * 100
+        elif listing.schedule_price_tenths < 1000:
+            listing.schedule_price_tenths *= 10
         if not listing.schedule_deposit_tenths:
-            listing.schedule_deposit_tenths = (listing.schedule_deposit_spots or 5) * 10
+            listing.schedule_deposit_tenths = (listing.schedule_deposit_spots or 5) * 100
+        elif listing.schedule_deposit_tenths < 1000:
+            listing.schedule_deposit_tenths *= 10
         if not listing.owner_min_tenths:
-            listing.owner_min_tenths = config.PRICING_DEFAULT_MIN_TENTHS
+            listing.owner_min_tenths = config.PRICING_DEFAULT_MIN_TENTHS * 10
+        elif listing.owner_min_tenths < 1000:
+            listing.owner_min_tenths *= 10
         if not listing.owner_max_tenths:
-            listing.owner_max_tenths = config.PRICING_DEFAULT_MAX_TENTHS
+            listing.owner_max_tenths = config.PRICING_DEFAULT_MAX_TENTHS * 10
+        elif listing.owner_max_tenths < 1000:
+            listing.owner_max_tenths *= 10
     db.session.commit()
+
+    tx_columns = set()
+    if inspector.has_table("spot_transactions"):
+        tx_columns = {c["name"] for c in inspector.get_columns("spot_transactions")}
+    if "receipt_token" not in tx_columns:
+        db.session.execute(text("ALTER TABLE spot_transactions ADD COLUMN receipt_token VARCHAR(64)"))
+    user_columns = {column["name"] for column in inspector.get_columns("users")}
+    for col, sql in {
+        "payout_account_holder": "VARCHAR(120)",
+        "payout_iban": "VARCHAR(34)",
+        "payout_bank_name": "VARCHAR(120)",
+        "referred_by_code": "VARCHAR(32)",
+    }.items():
+        if col not in user_columns:
+            db.session.execute(text(f"ALTER TABLE users ADD COLUMN {col} {sql}"))
+    db.session.commit()
+    db.create_all()
+    try:
+        promo_service.ensure_default_promos()
+    except Exception:
+        pass
 
 # Start background mailer worker
 mailer_worker = PhotoMailerWorker(app)
@@ -574,39 +628,7 @@ def _sort_demo_fines(fines):
 
 
 def _demo_devices():
-    from types import SimpleNamespace
-    base = _now()
-    fine_counts = {101: 2, 102: 2, 103: 1, 104: 0, 105: 0, 106: 1, 107: 2, 108: 0, 109: 1, 110: 1, 111: 0, 112: 0, 113: 1, 114: 0}
-
-    def make_device(id_, name, spot, plate, status, lat, lng, zone, online=True, wifi=78, temp=52.3, capture=False, notes=None):
-        d = SimpleNamespace()
-        d.id = id_; d.name = name; d.spot_label = spot; d.assigned_plate = plate
-        d.current_status = status; d.is_online = online
-        d.mac_address = f"AA:BB:CC:DD:EE:{id_:02X}"
-        d.last_seen = base - timedelta(seconds=30 if online else 7200)
-        d.last_wifi = wifi; d.last_temp = temp; d.created_at = base - timedelta(days=30)
-        d.capture_requested = capture; d.latitude = lat; d.longitude = lng
-        d.location_zone = zone; d.notes = notes
-        n = fine_counts.get(id_, 0)
-        d.fines = SimpleNamespace(count=lambda n=n: n)
-        return d
-
-    return [
-        make_device(101, "Calea Victoriei — Level 1", "P1-12", "B-123-MAB", "occupied", 44.4383, 26.1034, "Calea Victoriei", wifi=82, temp=51.2, notes="Reserved tenant spot — high traffic"),
-        make_device(102, "Calea Victoriei — Level 1", "P1-08", "CJ-45-PQR", "violation", 44.4385, 26.1036, "Calea Victoriei", wifi=61, temp=49.1),
-        make_device(103, "Bulevardul Unirii — Surface", "C-03", "B-789-TUV", "empty", 44.4270, 26.1055, "Bulevardul Unirii", wifi=74, temp=48.6),
-        make_device(104, "Bulevardul Unirii — Accessible", "H-01", None, "empty", 44.4268, 26.1050, "Bulevardul Unirii", online=False, wifi=None, temp=None, notes="Awaiting plate assignment"),
-        make_device(105, "Piata Universitatii — Garage", "P2-04", "B-441-PKR", "correct", 44.4358, 26.1025, "Piata Universitatii", wifi=88, temp=47.9),
-        make_device(106, "Strada Franceza — Curbside", "F-12", "AB-12-CDE", "occupied", 44.4312, 26.0988, "Strada Franceza", wifi=70, temp=53.4),
-        make_device(107, "Calea Dorobantilor — North", "D-07", "TM-88-XYZ", "violation", 44.4560, 26.0975, "Calea Dorobantilor", wifi=58, temp=55.1, capture=True),
-        make_device(108, "Gara de Nord — Drop-off", "GN-01", None, "empty", 44.4465, 26.0745, "Gara de Nord", online=False, wifi=None, temp=None),
-        make_device(109, "Herastrau — Lakeside", "H-22", "B-555-LUX", "occupied", 44.4792, 26.0820, "Herastrau", wifi=76, temp=46.8),
-        make_device(110, "Pipera — Office Park", "PI-09", "IF-99-KLM", "violation", 44.4935, 26.1188, "Pipera", wifi=64, temp=50.2),
-        make_device(111, "Titan — Retail Lot", "T-15", "CL-10-ZZZ", "empty", 44.4168, 26.1520, "Titan", wifi=81, temp=49.5),
-        make_device(112, "Drumul Taberei — Block B", "DT-03", "BV-77-ABC", "correct", 44.4120, 26.0340, "Drumul Taberei", wifi=79, temp=48.1),
-        make_device(113, "Calea Victoriei — Rooftop", "P3-02", "B-212-GLS", "occupied", 44.4380, 26.1040, "Calea Victoriei", wifi=80, temp=50.0),
-        make_device(114, "Old Town — Strada Lipscani", "L-05", None, "empty", 44.4318, 26.1015, "Old Town", wifi=72, temp=47.2, notes="Pi arriving Thursday"),
-    ]
+    return demo_parking_data.build_demo_devices(_now)
 
 
 def _demo_fines():
@@ -918,25 +940,55 @@ def _demo_wallet_transactions_merged():
                 amount=raw["amount"],
                 description=raw["description"],
                 created_at=datetime.fromisoformat(raw["created_at"]),
+                receipt_token=raw.get("receipt_token"),
+                id=raw.get("id"),
             )
         )
     txs.sort(key=lambda t: t.created_at, reverse=True)
     return txs[:25]
 
 
-def _demo_wallet_credit(amount: int, description: str) -> None:
+def _demo_wallet_credit(amount: int, description: str, *, receipt_token: str | None = None) -> None:
     state = _demo_wallet_state()
     state["balance"] = int(state.get("balance", 120)) + amount
-    state.setdefault("extra_txs", []).insert(
-        0,
-        {
-            "amount": amount,
-            "description": description,
-            "created_at": _now().isoformat(),
-        },
-    )
+    tx = {
+        "amount": amount,
+        "description": description,
+        "created_at": _now().isoformat(),
+    }
+    if receipt_token:
+        tx["receipt_token"] = receipt_token
+    state.setdefault("extra_txs", []).insert(0, tx)
     session["demo_wallet"] = state
     session.modified = True
+
+
+def _demo_wallet_debit(amount: int, description: str, *, receipt_token: str | None = None) -> None:
+    state = _demo_wallet_state()
+    bal = int(state.get("balance", 120))
+    if bal < amount:
+        raise ValueError(f"Insufficient {config.WALLET_CURRENCY_NAME.lower()} balance")
+    state["balance"] = bal - amount
+    tx = {
+        "amount": -amount,
+        "description": description,
+        "created_at": _now().isoformat(),
+    }
+    if receipt_token:
+        tx["receipt_token"] = receipt_token
+    state.setdefault("extra_txs", []).insert(0, tx)
+    session["demo_wallet"] = state
+    session.modified = True
+
+
+def _demo_bookings_state() -> list:
+    state = _demo_wallet_state()
+    bookings = state.get("bookings")
+    if bookings is None:
+        bookings = []
+        state["bookings"] = bookings
+        session["demo_wallet"] = state
+    return bookings
 
 
 def _validate_mock_card(card_number: str, card_expiry: str, card_cvc: str) -> str | None:
@@ -961,38 +1013,75 @@ def _card_last4(card_number: str) -> str:
 
 
 def _demo_rental_listings():
-    from types import SimpleNamespace
-    devices = {d.id: d for d in _demo_devices()}
-    specs = [
-        (105, 1, "Covered garage steps from campus.", 12, 10, 5),
-        (109, 2, "Lakeside spot near Herastrau park.", 15, 12, 8),
-        (113, 3, "Rooftop parking with charger nearby.", 18, 14, 6),
-    ]
-    items = []
-    for dev_id, listing_id, description, instant, schedule, deposit in specs:
-        device = devices[dev_id]
-        listing = SimpleNamespace(
-            id=listing_id,
-            is_active=True,
-            approval_mode="auto",
-            pricing_mode="auto",
-            description=description,
-            owner_min_tenths=50,
-            owner_max_tenths=300,
-            instant_price_tenths=instant * 10,
-            schedule_price_tenths=schedule * 10,
-            instant_price_per_hour=instant,
-            schedule_price_per_hour=schedule,
-            schedule_deposit_spots=deposit,
-        )
-        items.append({
-            "listing": listing,
-            "device": device,
-            "instant_display": str(instant),
-            "schedule_display": str(schedule),
-            "deposit_display": str(deposit),
-        })
-    return items
+    devices = _demo_devices()
+    return demo_parking_data.build_demo_rental_listings(devices, _now)
+
+
+def _is_low_balance(balance: int) -> bool:
+    return int(balance) < config.LOW_BALANCE_THRESHOLD
+
+
+def _demo_apply_promo_bonus(base_spots: int, code: str) -> int:
+    norm = promo_service.normalize_code(code)
+    demo_promos = {
+        "WELCOME10": max(1, base_spots // 10),
+        "SPOTFLOW15": max(1, (base_spots * 15) // 100),
+        "PARK20": 20,
+    }
+    if norm not in demo_promos:
+        raise ValueError("Promo code not found or inactive.")
+    return demo_promos[norm]
+
+
+def _render_find_parking_page(listings, user_plates, balance, renter_bookings, *, is_demo: bool, search: dict | None = None):
+    center_lat = float((search or {}).get("lat") or config.BUCHAREST_CENTER_LAT)
+    center_lng = float((search or {}).get("lng") or config.BUCHAREST_CENTER_LNG)
+    search_label = (search or {}).get("label") or "Bucharest city center"
+
+    sort = request.args.get("sort", "relevance")
+    min_price = request.args.get("min_price", type=float)
+    max_price = request.args.get("max_price", type=float)
+    max_distance = request.args.get("max_distance", type=float)
+    status_filter = request.args.get("status") or None
+    booking_mode = request.args.get("booking_mode") or None
+
+    filtered = find_parking_service.filter_and_sort_listings(
+        listings,
+        center_lat,
+        center_lng,
+        min_price=min_price,
+        max_price=max_price,
+        max_distance_km=max_distance,
+        booking_mode=booking_mode,
+        status_filter=status_filter,
+        sort=sort,
+    )
+    recommended = find_parking_service.top_recommendations(filtered, 3)
+    rec_ids = {item["listing"].id for item in recommended}
+    rest = [item for item in filtered if item["listing"].id not in rec_ids]
+
+    return render_template(
+        "find_parking.html",
+        listings=rest,
+        recommended=recommended,
+        all_listings=filtered,
+        user_plates=user_plates,
+        balance=balance,
+        renter_bookings=renter_bookings,
+        mapped=any(item["device"].latitude for item in filtered),
+        is_demo=is_demo,
+        search_center={"lat": center_lat, "lng": center_lng, "label": search_label},
+        low_balance=_is_low_balance(balance),
+        low_balance_threshold=config.LOW_BALANCE_THRESHOLD,
+        filters={
+            "sort": sort,
+            "min_price": min_price,
+            "max_price": max_price,
+            "max_distance": max_distance,
+            "status": status_filter,
+            "booking_mode": booking_mode,
+        },
+    )
 
 
 def _demo_owned_spots():
@@ -1033,27 +1122,118 @@ def _demo_owned_spots():
 
 def _demo_renter_bookings():
     from types import SimpleNamespace
-    devices = {d.id: d for d in _demo_devices()}
-    listing = SimpleNamespace(device=devices[105])
+
     base = _now()
-    return [
+    devices = {d.id: d for d in _demo_devices()}
+    rows = [
         SimpleNamespace(
-            listing=listing,
+            listing=SimpleNamespace(device=devices.get(105) or _demo_devices()[0]),
             renter_plate="B123MAB",
             starts_at=base - timedelta(hours=1),
             ends_at=base + timedelta(hours=1),
             booking_type="instant",
             status="active",
         ),
-        SimpleNamespace(
-            listing=SimpleNamespace(device=devices[109]),
-            renter_plate="B123MAB",
-            starts_at=base + timedelta(days=2, hours=10),
-            ends_at=base + timedelta(days=2, hours=14),
-            booking_type="scheduled",
-            status="approved",
-        ),
     ]
+    for raw in _demo_bookings_state():
+        dev = devices.get(raw.get("device_id"))
+        if not dev:
+            continue
+        rows.insert(
+            0,
+            SimpleNamespace(
+                listing=SimpleNamespace(device=dev, id=raw.get("listing_id")),
+                renter_plate=raw.get("plate", "B123MAB"),
+                starts_at=datetime.fromisoformat(raw["starts_at"]),
+                ends_at=datetime.fromisoformat(raw["ends_at"]),
+                booking_type=raw.get("booking_type", "instant"),
+                status=raw.get("status", "active"),
+            ),
+        )
+    return rows[:20]
+
+
+def _demo_process_find_parking_post(user_plates: list[str]):
+    from types import SimpleNamespace
+
+    listing_id = request.form.get("listing_id", type=int)
+    items = _demo_rental_listings()
+    item = next((x for x in items if x["listing"].id == listing_id), None)
+    if not item:
+        flash("Listing not found.", "danger")
+        return redirect(url_for("find_parking"))
+
+    listing = item["listing"]
+    renter_plate = normalize_plate(request.form.get("renter_plate", ""))
+    if renter_plate not in user_plates:
+        flash("Select one of your verified plates.", "danger")
+        return redirect(url_for("find_parking"))
+
+    action = request.form.get("action")
+    try:
+        if action == "instant_book":
+            hours = request.form.get("hours", type=int) or config.MIN_INSTANT_HOURS
+            hours = max(config.MIN_INSTANT_HOURS, min(hours, config.MAX_BOOKING_HOURS))
+            total = spot_prices.hundredths_to_billable_spots(item["instant_hundredths"] * hours)
+            _demo_wallet_debit(
+                total,
+                f"Instant book · {item['device'].spot_label} · {hours}h",
+            )
+            starts = _now()
+            ends = starts + timedelta(hours=hours)
+            status = "pending_approval" if listing.approval_mode == "manual" else "active"
+            _demo_bookings_state().insert(
+                0,
+                {
+                    "listing_id": listing.id,
+                    "device_id": item["device"].id,
+                    "plate": renter_plate,
+                    "starts_at": starts.isoformat(),
+                    "ends_at": ends.isoformat(),
+                    "booking_type": "instant",
+                    "status": status,
+                },
+            )
+            if status == "active":
+                flash("Paid and confirmed. You can park now.", "success")
+            else:
+                flash("Payment reserved. Waiting for owner approval.", "info")
+        elif action == "schedule_book":
+            starts_raw = request.form.get("starts_at", "")
+            ends_raw = request.form.get("ends_at", "")
+            starts_at = datetime.fromisoformat(starts_raw)
+            ends_at = datetime.fromisoformat(ends_raw)
+            if starts_at.tzinfo is None:
+                starts_at = starts_at.replace(tzinfo=timezone.utc)
+            if ends_at.tzinfo is None:
+                ends_at = ends_at.replace(tzinfo=timezone.utc)
+            hours = max(1, int((ends_at - starts_at).total_seconds() // 3600) or 1)
+            total_h = item["schedule_hundredths"] * hours
+            deposit_h = min(item["deposit_hundredths"], total_h)
+            deposit = spot_prices.hundredths_to_billable_spots(deposit_h)
+            _demo_wallet_debit(
+                deposit,
+                f"Schedule deposit · {item['device'].spot_label}",
+            )
+            status = "pending_approval" if listing.approval_mode == "manual" else "approved"
+            _demo_bookings_state().insert(
+                0,
+                {
+                    "listing_id": listing.id,
+                    "device_id": item["device"].id,
+                    "plate": renter_plate,
+                    "starts_at": starts_at.isoformat(),
+                    "ends_at": ends_at.isoformat(),
+                    "booking_type": "scheduled",
+                    "status": status,
+                },
+            )
+            flash("Reservation deposit paid.", "success")
+        else:
+            flash("Unknown action.", "danger")
+    except ValueError as exc:
+        flash(str(exc), "danger")
+    return redirect(url_for("find_parking", **request.args.to_dict()))
 
 
 def _get_device_by_mac(mac):
@@ -1846,6 +2026,10 @@ def login():
             )
             db.session.add(user)
             db.session.commit()
+            if role == "driver":
+                referral = request.form.get("referral_code", "")
+                if referral:
+                    promo_service.redeem_referral_on_signup(user, referral)
 
             session.pop("is_demo", None)
             if user.is_admin:
@@ -1939,7 +2123,7 @@ def login_2fa():
                 session["is_demo"] = True
             login_user(user, remember=remember)
             flash("Signed in successfully.", "success")
-            return redirect(url_for("dashboard") if user.is_admin else "portal")
+            return redirect(url_for("dashboard") if user.is_admin else url_for("portal"))
         flash("Invalid verification code.", "danger")
 
     return render_template("login_2fa.html", masked_email=masked_email)
@@ -2603,23 +2787,78 @@ def wallet():
         return denied
     if _is_demo():
         state = _demo_wallet_state()
-        if request.method == "POST" and request.form.get("action") == "subscribe_balance":
-            cost = config.SUBSCRIPTION_MONTHLY_LEI
-            if _demo_wallet_balance() < cost:
-                flash(f"Need at least {cost} {config.WALLET_CURRENCY_NAME.lower()} on balance.", "danger")
-            else:
-                state["balance"] = _demo_wallet_balance() - cost
-                state["subscription_active"] = True
-                _demo_wallet_credit(
-                    config.SUBSCRIPTION_MONTHLY_SPOTS,
-                    "Monthly subscription (balance)",
-                )
-                flash(
-                    f"Subscription activated. {config.SUBSCRIPTION_MONTHLY_SPOTS} "
-                    f"{config.WALLET_CURRENCY_NAME.lower()} added to your wallet.",
-                    "success",
-                )
-            return redirect(url_for("wallet"))
+        if request.method == "POST":
+            action = request.form.get("action")
+            if action == "subscribe_balance":
+                cost = config.SUBSCRIPTION_MONTHLY_LEI
+                if _demo_wallet_balance() < cost:
+                    flash(f"Need at least {cost} {config.WALLET_CURRENCY_NAME.lower()} on balance.", "danger")
+                else:
+                    state["balance"] = _demo_wallet_balance() - cost
+                    state["subscription_active"] = True
+                    _demo_wallet_credit(
+                        config.SUBSCRIPTION_MONTHLY_SPOTS,
+                        "Monthly subscription (balance)",
+                    )
+                    flash(
+                        f"Subscription activated. {config.SUBSCRIPTION_MONTHLY_SPOTS} "
+                        f"{config.WALLET_CURRENCY_NAME.lower()} added to your wallet.",
+                        "success",
+                    )
+                return redirect(url_for("wallet"))
+            if action == "withdraw":
+                try:
+                    holder = request.form.get("account_holder", "").strip()
+                    iban = request.form.get("iban", "")
+                    bank = request.form.get("bank_name", "")
+                    if _demo_wallet_balance() < config.WITHDRAWAL_CREDITS:
+                        raise ValueError(
+                            f"You need at least {config.WITHDRAWAL_CREDITS} "
+                            f"{config.WALLET_CURRENCY_NAME.lower()} to withdraw."
+                        )
+                    token = receipt_pdf.new_receipt_token()
+                    _demo_wallet_debit(
+                        config.WITHDRAWAL_CREDITS,
+                        f"Bank withdrawal — {config.WITHDRAWAL_LEI} lei (pending)",
+                        receipt_token=token,
+                    )
+                    state.setdefault("withdrawals", []).insert(
+                        0,
+                        {
+                            "status": "pending",
+                            "lei": config.WITHDRAWAL_LEI,
+                            "holder": holder,
+                            "iban": "".join(ch for ch in iban.upper() if ch.isalnum()),
+                            "bank": bank,
+                            "created_at": _now().isoformat(),
+                            "receipt_token": token,
+                        },
+                    )
+                    receipt_pdf.save_receipt(
+                        token,
+                        "Withdrawal request",
+                        [
+                            ("Amount", f"{config.WITHDRAWAL_CREDITS} {config.WALLET_CURRENCY_NAME}"),
+                            ("Payout", f"{config.WITHDRAWAL_LEI} lei"),
+                            ("Status", "Pending (demo)"),
+                            ("Account holder", holder),
+                            ("IBAN", iban),
+                        ],
+                    )
+                    session["demo_wallet"] = state
+                    flash(
+                        f"Withdrawal requested. {config.WITHDRAWAL_LEI} lei will be sent to your bank (demo).",
+                        "success",
+                    )
+                except ValueError as exc:
+                    flash(str(exc), "danger")
+                return redirect(url_for("wallet"))
+
+        txs = _demo_wallet_transactions_merged()
+        for tx in txs:
+            if not hasattr(tx, "receipt_token"):
+                raw = getattr(tx, "__dict__", {})
+                tx.receipt_token = raw.get("receipt_token")
         return render_template(
             "wallet.html",
             balance=_demo_wallet_balance(),
@@ -2627,8 +2866,14 @@ def wallet():
             subscription_next_billing=_now() + timedelta(days=18),
             subscription_monthly_lei=config.SUBSCRIPTION_MONTHLY_LEI,
             subscription_monthly_spots=config.SUBSCRIPTION_MONTHLY_SPOTS,
-            transactions=_demo_wallet_transactions_merged(),
+            transactions=txs,
             is_demo=True,
+            withdrawal_credits=config.WITHDRAWAL_CREDITS,
+            withdrawal_lei=config.WITHDRAWAL_LEI,
+            low_balance=_is_low_balance(_demo_wallet_balance()),
+            low_balance_threshold=config.LOW_BALANCE_THRESHOLD,
+            payout_iban=state.get("payout_iban"),
+            referral_code="DEMO-REF",
         )
 
     spots_service.ensure_user_wallet(current_user)
@@ -2652,15 +2897,38 @@ def wallet():
         .limit(25)
         .all()
     )
+    if request.method == "POST" and request.form.get("action") == "withdraw":
+        try:
+            spots_service.request_bank_withdrawal(
+                current_user,
+                account_holder=request.form.get("account_holder", ""),
+                iban=request.form.get("iban", ""),
+                bank_name=request.form.get("bank_name"),
+            )
+            flash(
+                f"Withdrawal requested. {config.WITHDRAWAL_LEI} lei will be sent to your bank account.",
+                "success",
+            )
+        except ValueError as exc:
+            flash(str(exc), "danger")
+        return redirect(url_for("wallet"))
+
+    bal = spots_service.user_balance(current_user)
     return render_template(
         "wallet.html",
-        balance=spots_service.user_balance(current_user),
+        balance=bal,
         subscription_active=current_user.subscription_active,
         subscription_next_billing=current_user.subscription_next_billing_at,
         subscription_monthly_lei=config.SUBSCRIPTION_MONTHLY_LEI,
         subscription_monthly_spots=config.SUBSCRIPTION_MONTHLY_SPOTS,
         transactions=txs,
         is_demo=False,
+        withdrawal_credits=config.WITHDRAWAL_CREDITS,
+        withdrawal_lei=config.WITHDRAWAL_LEI,
+        low_balance=_is_low_balance(bal),
+        low_balance_threshold=config.LOW_BALANCE_THRESHOLD,
+        payout_iban=current_user.payout_iban,
+        referral_code=promo_service.get_or_create_referral_code(current_user),
     )
 
 
@@ -2701,7 +2969,25 @@ def wallet_topup():
             if lei_amount < 1 or lei_amount > 5000:
                 flash("Enter an amount between 1 and 5000 lei.", "danger")
                 return redirect(url_for("wallet_topup", plan=plan))
-            _demo_wallet_credit(lei_amount, f"Top-up · card ending {last4}")
+            token = receipt_pdf.new_receipt_token()
+            _demo_wallet_credit(lei_amount, f"Top-up · card ending {last4}", receipt_token=token)
+            receipt_pdf.save_receipt(
+                token,
+                "Wallet top-up",
+                [
+                    ("Amount", f"{lei_amount} lei → {lei_amount} {config.WALLET_CURRENCY_NAME}"),
+                    ("Card", f"···· {last4}"),
+                    ("Mode", "Demo checkout"),
+                ],
+            )
+            promo_code = request.form.get("promo_code", "").strip()
+            if promo_code:
+                try:
+                    bonus = _demo_apply_promo_bonus(lei_amount, promo_code)
+                    _demo_wallet_credit(bonus, f"Promo {promo_service.normalize_code(promo_code)} bonus")
+                    flash(f"Promo applied: +{bonus} {config.WALLET_CURRENCY_NAME.lower()}.", "success")
+                except ValueError as exc:
+                    flash(str(exc), "warning")
             flash(
                 f"Added {lei_amount} {config.WALLET_CURRENCY_NAME.lower()} to your wallet.",
                 "success",
@@ -2753,12 +3039,28 @@ def wallet_topup():
         lei_amount = request.form.get("lei_amount", type=int) or 0
         try:
             added = spots_service.mock_topup(current_user, lei_amount)
+            token = spots_service.attach_receipt_to_last_transaction(
+                current_user,
+                "topup",
+                "Wallet top-up",
+                [
+                    ("Amount", f"{lei_amount} lei → {added} {config.WALLET_CURRENCY_NAME}"),
+                    ("Payment", "Mock card"),
+                ],
+            )
             activity_log.log_activity(
                 "wallet.topup",
                 user_id=current_user.id,
-                metadata={"lei": lei_amount, "spots": added},
+                metadata={"lei": lei_amount, "spots": added, "receipt": token},
                 commit=True,
             )
+            promo_code = request.form.get("promo_code", "").strip()
+            if promo_code:
+                try:
+                    bonus, pcode = promo_service.apply_topup_promo(current_user, added, promo_code)
+                    flash(f"Promo {pcode}: +{bonus} bonus {config.WALLET_CURRENCY_NAME.lower()}.", "success")
+                except ValueError as exc:
+                    flash(str(exc), "warning")
             n8n_events.on_wallet_event(current_user, "topup", added, f"Top-up {lei_amount} lei")
             flash(f"Added {added} {config.WALLET_CURRENCY_NAME.lower()} to your wallet (mock payment).", "success")
         except ValueError as exc:
@@ -2857,9 +3159,9 @@ def my_spots():
                 listing.instant_price_tenths = max(listing.owner_min_tenths, min(listing.owner_max_tenths, instant_tenths))
                 listing.schedule_price_tenths = max(listing.owner_min_tenths, min(listing.owner_max_tenths, schedule_tenths))
                 listing.schedule_deposit_tenths = deposit_tenths
-                listing.instant_price_per_hour = (listing.instant_price_tenths + 9) // 10
-                listing.schedule_price_per_hour = (listing.schedule_price_tenths + 9) // 10
-                listing.schedule_deposit_spots = (deposit_tenths + 9) // 10
+                listing.instant_price_per_hour = (listing.instant_price_tenths + 99) // 100
+                listing.schedule_price_per_hour = (listing.schedule_price_tenths + 99) // 100
+                listing.schedule_deposit_spots = (deposit_tenths + 99) // 100
                 listing.description = (request.form.get("description") or "").strip() or None
                 listing.updated_at = _now()
                 db.session.commit()
@@ -3000,6 +3302,32 @@ def my_spots():
     )
 
 
+@app.route("/portal/api/geocode")
+@login_required
+def api_geocode():
+    denied = _require_driver_portal()
+    if denied:
+        return jsonify({"results": []})
+    q = request.args.get("q", "")
+    return jsonify({"results": geocode_search(q, limit=6)})
+
+
+@app.route("/portal/receipt/<token>")
+@login_required
+def wallet_receipt(token):
+    denied = _require_driver_portal()
+    if denied:
+        return denied
+    data = receipt_pdf.load_receipt_bytes(token)
+    if not data:
+        abort(404)
+    return Response(
+        data,
+        mimetype="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="spotflow-receipt-{token[:8]}.pdf"'},
+    )
+
+
 @app.route("/portal/find-parking", methods=["GET", "POST"])
 @login_required
 def find_parking():
@@ -3009,16 +3337,34 @@ def find_parking():
 
     user_plates = user_plate_values(current_user)
 
+    search = None
+    if request.args.get("lat") and request.args.get("lng"):
+        search = {
+            "lat": request.args.get("lat", type=float),
+            "lng": request.args.get("lng", type=float),
+            "label": request.args.get("q") or request.args.get("label") or "Search location",
+        }
+    elif request.args.get("q"):
+        results = geocode_search(request.args.get("q", ""), limit=1)
+        if results:
+            search = {
+                "lat": results[0]["lat"],
+                "lng": results[0]["lng"],
+                "label": results[0]["label"],
+            }
+
     if _is_demo():
+        if request.method == "POST":
+            return _demo_process_find_parking_post(user_plates or ["B123MAB"])
         listings = _demo_rental_listings()
-        return render_template(
-            "find_parking.html",
-            listings=listings,
-            user_plates=user_plates or ["B123MAB"],
-            balance=120,
-            renter_bookings=_demo_renter_bookings(),
-            mapped=True,
+        balance = _demo_wallet_balance()
+        return _render_find_parking_page(
+            listings,
+            user_plates or ["B123MAB"],
+            balance,
+            _demo_renter_bookings(),
             is_demo=True,
+            search=search,
         )
 
     spots_service.ensure_user_wallet(current_user)
@@ -3130,12 +3476,20 @@ def find_parking():
             continue
         if lst.pricing_mode in ("auto", "suggest"):
             pricing_engine.refresh_listing_prices(lst, commit=False)
+        inst = spot_prices.effective_instant_hundredths(lst)
+        sched = spot_prices.effective_schedule_hundredths(lst)
+        dep = spot_prices.effective_deposit_hundredths(lst)
         listings.append({
             "listing": lst,
             "device": lst.device,
-            "instant_display": spot_prices.format_tenths(spot_prices.effective_instant_tenths(lst)),
-            "schedule_display": spot_prices.format_tenths(spot_prices.effective_schedule_tenths(lst)),
-            "deposit_display": spot_prices.format_tenths(spot_prices.effective_deposit_tenths(lst)),
+            "instant_display": spot_prices.format_hundredths(inst),
+            "schedule_display": spot_prices.format_hundredths(sched),
+            "deposit_display": spot_prices.format_hundredths(dep),
+            "instant_hundredths": inst,
+            "schedule_hundredths": sched,
+            "deposit_hundredths": dep,
+            "approval_mode": lst.approval_mode,
+            "pricing_mode": lst.pricing_mode,
         })
         activity_log.log_activity(
             "listing.card_view",
@@ -3154,13 +3508,14 @@ def find_parking():
         .all()
     )
 
-    return render_template(
-        "find_parking.html",
-        listings=listings,
-        user_plates=user_plates,
-        balance=spots_service.user_balance(current_user),
-        renter_bookings=renter_bookings,
-        mapped=mapped,
+    balance = spots_service.user_balance(current_user)
+    return _render_find_parking_page(
+        listings,
+        user_plates,
+        balance,
+        renter_bookings,
+        is_demo=False,
+        search=search,
     )
 
 

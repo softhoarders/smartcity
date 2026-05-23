@@ -65,6 +65,18 @@ MIN_INSTANT_HOURS = 1
 MAX_BOOKING_HOURS = 72
 NEW_USER_WELCOME_SPOTS = int(os.environ.get("SPOTS_WELCOME_BONUS", "0"))
 
+# Low balance warning (Credits)
+LOW_BALANCE_THRESHOLD = int(os.environ.get("LOW_BALANCE_THRESHOLD", "10"))
+
+# Bank withdrawal: fixed bundle
+WITHDRAWAL_CREDITS = int(os.environ.get("WITHDRAWAL_CREDITS", "100"))
+WITHDRAWAL_LEI = int(os.environ.get("WITHDRAWAL_LEI", "100"))
+
+# Promo / referral defaults
+REFERRAL_BONUS_REFERRER = int(os.environ.get("REFERRAL_BONUS_REFERRER", "25"))
+REFERRAL_BONUS_REFEREE = int(os.environ.get("REFERRAL_BONUS_REFEREE", "10"))
+DEFAULT_PROMO_TOPUP_PERCENT = int(os.environ.get("DEFAULT_PROMO_TOPUP_PERCENT", "10"))
+
 # Smart pricing
 BUCHAREST_CENTER_LAT = float(os.environ.get("BUCHAREST_CENTER_LAT", "44.4268"))
 BUCHAREST_CENTER_LNG = float(os.environ.get("BUCHAREST_CENTER_LNG", "26.1025"))

@@ -265,8 +265,8 @@ def refresh_listing_prices(listing: SpotListing, *, commit: bool = True) -> dict
         listing.dynamic_schedule_tenths = schedule
         listing.instant_price_tenths = instant
         listing.schedule_price_tenths = schedule
-        listing.instant_price_per_hour = (instant + 9) // 10
-        listing.schedule_price_per_hour = (schedule + 9) // 10
+        listing.instant_price_per_hour = (instant + 99) // 100
+        listing.schedule_price_per_hour = (schedule + 99) // 100
 
     if commit:
         db.session.commit()
@@ -295,8 +295,8 @@ def accept_suggestion(listing: SpotListing) -> None:
         raise ValueError("No price suggestion available")
     listing.instant_price_tenths = listing.suggested_instant_tenths
     listing.schedule_price_tenths = listing.suggested_schedule_tenths or listing.instant_price_tenths
-    listing.instant_price_per_hour = (listing.instant_price_tenths + 9) // 10
-    listing.schedule_price_per_hour = (listing.schedule_price_tenths + 9) // 10
+    listing.instant_price_per_hour = (listing.instant_price_tenths + 99) // 100
+    listing.schedule_price_per_hour = (listing.schedule_price_tenths + 99) // 100
     listing.dynamic_instant_tenths = listing.suggested_instant_tenths
     listing.dynamic_schedule_tenths = listing.suggested_schedule_tenths
     db.session.commit()

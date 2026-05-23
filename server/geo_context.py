@@ -19,6 +19,34 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def geocode_search(query: str, limit: int = 5) -> list[dict]:
+    """Forward geocode a place name via Nominatim."""
+    q = (query or "").strip()
+    if len(q) < 2:
+        return []
+    try:
+        resp = requests.get(
+            "https://nominatim.openstreetmap.org/search",
+            params={"q": q, "format": "json", "limit": limit, "countrycodes": "ro"},
+            headers={"User-Agent": config.NOMINATIM_USER_AGENT},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        results = []
+        for row in resp.json():
+            results.append(
+                {
+                    "label": row.get("display_name", q),
+                    "lat": float(row["lat"]),
+                    "lng": float(row["lon"]),
+                }
+            )
+        return results
+    except Exception as exc:
+        logger.debug("Nominatim search failed: %s", exc)
+        return []
+
+
 def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     r = 6371.0
     p1, p2 = math.radians(lat1), math.radians(lat2)

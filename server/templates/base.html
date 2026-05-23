@@ -19,6 +19,15 @@
 <body class="{% block body_class %}{% endblock %}{% if current_user.is_authenticated and not current_user.is_admin and current_user.id != 0 %} has-bottom-nav{% endif %}">
     <a href="#main" class="pw-skip-link">Skip to main content</a>
 
+    {% if low_balance_warning is defined and low_balance_warning %}
+    <div class="container-fluid px-3 pt-2">
+        <div class="alert alert-warning border-0 py-2 mb-0 small text-center" role="status">
+            Low {{ currency_name }} balance (under {{ low_balance_threshold }}).
+            <a href="{{ url_for('wallet_topup') }}" class="alert-link">Top up</a>
+        </div>
+    </div>
+    {% endif %}
+
     {% block navbar %}
     <nav class="navbar navbar-expand-lg navbar-light pw-navbar sticky-top blur-bg">
         <div class="container-fluid">

@@ -147,6 +147,10 @@ class User(UserMixin, db.Model):
     subscription_next_billing_at = db.Column(db.DateTime, nullable=True)
     twofa_enabled = db.Column(db.Boolean, default=False, nullable=False)
     twofa_secret = db.Column(db.String(64), nullable=True)
+    payout_account_holder = db.Column(db.String(120), nullable=True)
+    payout_iban = db.Column(db.String(34), nullable=True)
+    payout_bank_name = db.Column(db.String(120), nullable=True)
+    referred_by_code = db.Column(db.String(32), nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     
     # We use UserMixin which provides is_authenticated, is_active, is_anonymous, get_id()
@@ -289,6 +293,65 @@ class SpotTransaction(db.Model):
     kind = db.Column(db.String(40), nullable=False)
     description = db.Column(db.String(255), nullable=False)
     reference_id = db.Column(db.Integer, nullable=True)
+    receipt_token = db.Column(db.String(64), nullable=True, index=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     user = db.relationship("User", backref=db.backref("spot_transactions", lazy="dynamic"))
+
+
+class PromoCode(db.Model):
+    """Promotional codes for top-up bonuses or booking discounts."""
+    __tablename__ = "promo_codes"
+
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(32), unique=True, nullable=False, index=True)
+    kind = db.Column(db.String(20), nullable=False, default="topup_bonus")  # topup_bonus | booking_discount
+    bonus_percent = db.Column(db.Integer, default=0, nullable=False)
+    bonus_spots = db.Column(db.Integer, default=0, nullable=False)
+    max_uses = db.Column(db.Integer, nullable=True)
+    uses_count = db.Column(db.Integer, default=0, nullable=False)
+    active = db.Column(db.Boolean, default=True, nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class ReferralCode(db.Model):
+    """Referral code owned by a user; new signups can attach to it."""
+    __tablename__ = "referral_codes"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    code = db.Column(db.String(32), unique=True, nullable=False, index=True)
+    uses_count = db.Column(db.Integer, default=0, nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    user = db.relationship("User", backref=db.backref("referral_code", uselist=False))
+
+
+class ReferralRedemption(db.Model):
+    """Tracks referral bonus paid when a new user signs up."""
+    __tablename__ = "referral_redemptions"
+
+    id = db.Column(db.Integer, primary_key=True)
+    referral_code_id = db.Column(db.Integer, db.ForeignKey("referral_codes.id"), nullable=False)
+    referee_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, unique=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class WalletWithdrawal(db.Model):
+    """Bank withdrawal request (Credits → lei payout)."""
+    __tablename__ = "wallet_withdrawals"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    credits_amount = db.Column(db.Integer, nullable=False)
+    lei_amount = db.Column(db.Integer, nullable=False)
+    account_holder = db.Column(db.String(120), nullable=False)
+    iban = db.Column(db.String(34), nullable=False)
+    bank_name = db.Column(db.String(120), nullable=True)
+    status = db.Column(db.String(20), default="pending", nullable=False)  # pending | completed | failed
+    receipt_token = db.Column(db.String(64), nullable=True, index=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    completed_at = db.Column(db.DateTime, nullable=True)
+
+    user = db.relationship("User", backref=db.backref("withdrawals", lazy="dynamic"))

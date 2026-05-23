@@ -427,3 +427,88 @@ def ensure_user_wallet(user: User):
     """Run subscription renewal check when user opens wallet pages."""
     if user.id and user.id > 0:
         process_subscription_renewals()
+
+
+def request_bank_withdrawal(
+    user: User,
+    *,
+    account_holder: str,
+    iban: str,
+    bank_name: str | None = None,
+) -> "WalletWithdrawal":
+    from models import WalletWithdrawal
+    import receipt_pdf
+
+    amount = config.WITHDRAWAL_CREDITS
+    if user_balance(user) < amount:
+        raise ValueError(
+            f"You need at least {amount} {config.WALLET_CURRENCY_NAME.lower()} to withdraw "
+            f"({config.WITHDRAWAL_LEI} lei)."
+        )
+    iban_clean = "".join(ch for ch in (iban or "").upper() if ch.isalnum())
+    if len(iban_clean) < 15:
+        raise ValueError("Enter a valid IBAN.")
+    holder = (account_holder or "").strip()
+    if len(holder) < 2:
+        raise ValueError("Enter the account holder name.")
+
+    user.payout_account_holder = holder
+    user.payout_iban = iban_clean
+    user.payout_bank_name = (bank_name or "").strip() or None
+
+    token = receipt_pdf.new_receipt_token()
+    debit_spots(
+        user,
+        amount,
+        "withdrawal",
+        f"Bank withdrawal — {config.WITHDRAWAL_LEI} lei (pending)",
+    )
+    tx = (
+        SpotTransaction.query.filter_by(user_id=user.id, kind="withdrawal")
+        .order_by(SpotTransaction.created_at.desc())
+        .first()
+    )
+    if tx:
+        tx.receipt_token = token
+
+    withdrawal = WalletWithdrawal(
+        user_id=user.id,
+        credits_amount=amount,
+        lei_amount=config.WITHDRAWAL_LEI,
+        account_holder=holder,
+        iban=iban_clean,
+        bank_name=user.payout_bank_name,
+        status="pending",
+        receipt_token=token,
+    )
+    db.session.add(withdrawal)
+    db.session.commit()
+
+    receipt_pdf.save_receipt(
+        token,
+        "Withdrawal request",
+        [
+            ("Amount", f"{amount} {config.WALLET_CURRENCY_NAME} → {config.WITHDRAWAL_LEI} lei"),
+            ("Status", "Pending bank transfer"),
+            ("Account holder", holder),
+            ("IBAN", iban_clean),
+            ("Bank", user.payout_bank_name or "—"),
+        ],
+    )
+    return withdrawal
+
+
+def attach_receipt_to_last_transaction(user: User, kind: str, title: str, lines: list[tuple[str, str]]) -> str:
+    import receipt_pdf
+
+    token = receipt_pdf.new_receipt_token()
+    tx = (
+        SpotTransaction.query.filter_by(user_id=user.id, kind=kind)
+        .order_by(SpotTransaction.created_at.desc())
+        .first()
+    )
+    if tx:
+        tx.receipt_token = token
+        db.session.commit()
+    receipt_pdf.save_receipt(token, title, lines)
+    return token

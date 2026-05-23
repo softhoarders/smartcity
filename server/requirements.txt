@@ -13,3 +13,4 @@ opencv-python-headless==4.13.0.92
 numpy==2.2.6
 ecdsa==0.19.2
 holidays>=0.60
+fpdf2>=2.8.0
