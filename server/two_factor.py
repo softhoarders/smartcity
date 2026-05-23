@@ -46,3 +46,11 @@ def verify_code(secret: str, code: str, *, period: int = 30, window: int = 1) ->
 
 def seconds_remaining(period: int = 30) -> int:
     return period - (int(time.time()) % period)
+
+
+def verify_mock_login_pin(code: str) -> bool:
+    """Check the fixed mock email code used at sign-in."""
+    import config
+
+    entered = (code or "").strip().replace(" ", "")
+    return entered == config.MOCK_LOGIN_2FA_PIN

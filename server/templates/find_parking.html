@@ -1,8 +1,7 @@
 {% extends "base.html" %}
+{% from "macros/ui.html" import breadcrumb, empty_state %}
 {% block title %}Spotflow — Find Parking{% endblock %}
-{% block head %}
-{% include "macros/park_map.html" %}
-{% endblock %}
+{% block head %}{% endblock %}
 {% block content %}
 <div class="row justify-content-center mb-4">
     <div class="col-12 col-lg-10">
@@ -10,20 +9,31 @@
         <div class="demo-banner mb-4"><strong>Demo Mode</strong> — Bookings are simulated.</div>
         {% endif %}
 
+        {{ breadcrumb([{'url': url_for('account_settings'), 'label': 'Account'}, {'url': url_for('find_parking'), 'label': 'Find parking'}]) }}
+
+        {% if balance is defined %}
+        <div class="pw-sticky-balance d-md-none">
+            <span>Balance</span>
+            <strong>{{ balance }} {{ currency_name }}</strong>
+        </div>
+        {% endif %}
+
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start mb-4 mt-2 gap-3">
             <div>
                 <h1 class="h3 fw-bold mb-1">Find parking</h1>
-                <p class="text-secondary mb-0">Book instantly or schedule. Prices are in Spots (1 Spot = 1 lei).</p>
+                <p class="text-secondary mb-0">Book instantly or schedule. Prices are in {{ currency_name }} (1 {{ currency_singular }} = 1 lei).</p>
             </div>
             {% if balance is defined %}
-            <span class="badge pw-plate-badge align-self-start">{{ balance }} Spots available</span>
+            <span class="badge pw-plate-badge align-self-start">{{ balance }} {{ currency_name }} available</span>
             {% endif %}
         </div>
 
         {% if mapped %}
         <div class="card pw-card border-0 mb-4">
             <div class="card-body p-3">
-                <div id="rental-map" class="pw-map-frame pw-map-frame--md"></div>
+                <div id="rental-map" class="pw-map-frame pw-map-frame--md">
+                    <div class="pw-map-loading" id="rental-map-loading">Loading map…</div>
+                </div>
             </div>
         </div>
         {% endif %}
@@ -44,8 +54,8 @@
                             </div>
                             <div class="text-md-end">
                                 <p class="mb-0 small text-secondary">Instant</p>
-                                <p class="fw-bold mb-1">{{ item.instant_display }} Spots/h</p>
-                                <p class="mb-0 small text-secondary">Schedule {{ item.schedule_display }} Spots/h · deposit {{ item.deposit_display }}</p>
+                                <p class="fw-bold mb-1">{{ item.instant_display }} {{ currency_name }}/h</p>
+                                <p class="mb-0 small text-secondary">Schedule {{ item.schedule_display }} {{ currency_name }}/h · deposit {{ item.deposit_display }}</p>
                                 {% if item.listing.pricing_mode == 'auto' %}
                                 <span class="badge bg-primary bg-opacity-10 text-primary mt-1">Smart price</span>
                                 {% endif %}
@@ -53,16 +63,16 @@
                         </div>
 
                         <ul class="nav nav-tabs border-0 mb-3" role="tablist">
-                            <li class="nav-item">
-                                <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#instant-{{ item.listing.id }}" type="button">Instant book</button>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="instant-tab-{{ item.listing.id }}" data-bs-toggle="tab" data-bs-target="#instant-{{ item.listing.id }}" type="button" role="tab" aria-controls="instant-{{ item.listing.id }}" aria-selected="true">Instant book</button>
                             </li>
-                            <li class="nav-item">
-                                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#schedule-{{ item.listing.id }}" type="button">Schedule</button>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="schedule-tab-{{ item.listing.id }}" data-bs-toggle="tab" data-bs-target="#schedule-{{ item.listing.id }}" type="button" role="tab" aria-controls="schedule-{{ item.listing.id }}" aria-selected="false">Schedule</button>
                             </li>
                         </ul>
 
                         <div class="tab-content">
-                            <div class="tab-pane fade show active" id="instant-{{ item.listing.id }}">
+                            <div class="tab-pane fade show active" id="instant-{{ item.listing.id }}" role="tabpanel" aria-labelledby="instant-tab-{{ item.listing.id }}">
                                 <form method="POST" action="{{ url_for('find_parking') }}" class="row g-3 align-items-end">
                                     <input type="hidden" name="action" value="instant_book">
                                     <input type="hidden" name="listing_id" value="{{ item.listing.id }}">
@@ -86,7 +96,7 @@
                                     </div>
                                 </form>
                             </div>
-                            <div class="tab-pane fade" id="schedule-{{ item.listing.id }}">
+                            <div class="tab-pane fade" id="schedule-{{ item.listing.id }}" role="tabpanel" aria-labelledby="schedule-tab-{{ item.listing.id }}">
                                 <form method="POST" action="{{ url_for('find_parking') }}" class="row g-3 align-items-end">
                                     <input type="hidden" name="action" value="schedule_book">
                                     <input type="hidden" name="listing_id" value="{{ item.listing.id }}">
@@ -108,7 +118,7 @@
                                     </div>
                                     <div class="col-md-3">
                                         <button type="submit" class="btn btn-primary w-100" {% if is_demo is defined and is_demo %}disabled{% endif %}>
-                                            Reserve ({{ item.listing.schedule_deposit_spots }} Spots deposit)
+                                            Reserve ({{ item.listing.schedule_deposit_spots }} {{ currency_name }} deposit)
                                         </button>
                                     </div>
                                 </form>
@@ -121,8 +131,15 @@
         </div>
         {% else %}
         <div class="card pw-card border-0">
-            <div class="card-body p-4 text-center">
-                <p class="text-secondary mb-0">No spots are listed for rent right now. Check back later or list your own spot.</p>
+            <div class="card-body">
+                {{ empty_state(
+                    'No spots listed yet',
+                    'When spot owners list their spaces, they will appear here for instant or scheduled booking.',
+                    url_for('my_spots'),
+                    'List your spot',
+                    url_for('account_settings'),
+                    'Account'
+                ) }}
             </div>
         </div>
         {% endif %}
@@ -163,7 +180,9 @@
 {% endblock %}
 
 {% block scripts %}
+{% from "macros/park_map.html" import park_map_assets %}
 {% if mapped %}
+{{ park_map_assets() }}
 <script>
 document.addEventListener("DOMContentLoaded", () => {
     const markers = [
@@ -173,14 +192,19 @@ document.addEventListener("DOMContentLoaded", () => {
             lat: {{ item.device.latitude }},
             lng: {{ item.device.longitude }},
             title: {{ item.device.spot_label | tojson }},
-            subtitle: {{ (item.instant_display ~ ' Spots/h') | tojson }},
+            subtitle: {{ (item.instant_display ~ ' ' ~ currency_name ~ '/h') | tojson }},
             status: "occupied"
         },
         {% endif %}
         {% endfor %}
     ];
     if (window.SpotflowMaps && markers.length) {
-        SpotflowMaps.render("rental-map", markers, { fitBounds: true });
+        SpotflowMaps.render("rental-map", markers, { fitBounds: true }).then(() => {
+            document.getElementById("rental-map-loading")?.remove();
+        }).catch(() => {
+            const el = document.getElementById("rental-map-loading");
+            if (el) el.textContent = "Map unavailable";
+        });
     }
 });
 </script>

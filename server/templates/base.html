@@ -16,12 +16,14 @@
     
     {% block head %}{% endblock %}
 </head>
-<body class="{% block body_class %}{% endblock %}">
+<body class="{% block body_class %}{% endblock %}{% if current_user.is_authenticated and not current_user.is_admin and current_user.id != 0 %} has-bottom-nav{% endif %}">
+    <a href="#main" class="pw-skip-link">Skip to main content</a>
+
     {% block navbar %}
     <nav class="navbar navbar-expand-lg navbar-light pw-navbar sticky-top blur-bg">
         <div class="container-fluid">
             <a class="navbar-brand fw-bold text-dark" href="/">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="me-1" style="vertical-align: text-top;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="me-1" style="vertical-align: text-top;" aria-hidden="true">
                     <rect x="2" y="3" width="20" height="18" rx="4" stroke="#007AFF" stroke-width="2"/>
                     <path d="M9 8H13.5C14.8807 8 16 9.11929 16 10.5C16 11.8807 14.8807 13 13.5 13H9V16" stroke="#007AFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                     <line x1="9" y1="13" x2="13.5" y2="13" stroke="#007AFF" stroke-width="2"/>
@@ -31,7 +33,8 @@
             </a>
             
             {% if current_user.is_authenticated %}
-            <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
+                    aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
@@ -40,10 +43,10 @@
                     <a href="{{ url_for('dashboard') }}" class="nav-link {% if request.endpoint == 'dashboard' %}active text-primary{% endif %}">Overview</a>
                     <a href="{{ url_for('users_page') }}" class="nav-link {% if request.endpoint == 'users_page' %}active text-primary{% endif %}">Users</a>
                     {% else %}
-                    <a href="{{ url_for('portal') }}" class="nav-link {% if request.endpoint == 'portal' %}active text-primary{% endif %}">Home</a>
-                    <a href="{{ url_for('find_parking') }}" class="nav-link {% if request.endpoint == 'find_parking' %}active text-primary{% endif %}">Find parking</a>
-                    <a href="{{ url_for('account_settings') }}" class="nav-link {% if request.endpoint in ('account_settings', 'wallet', 'wallet_topup', 'my_spots') %}active text-primary{% endif %}">
-                        Account{% if nav_spots_balance is defined %} <span class="badge bg-primary bg-opacity-10 text-primary ms-1" style="font-size:0.65rem;">{{ nav_spots_balance }} Spots</span>{% endif %}
+                    <a href="{{ url_for('portal') }}" class="nav-link d-none d-lg-inline {% if request.endpoint == 'portal' %}active text-primary{% endif %}">Home</a>
+                    <a href="{{ url_for('find_parking') }}" class="nav-link d-none d-lg-inline {% if request.endpoint == 'find_parking' %}active text-primary{% endif %}">Find parking</a>
+                    <a href="{{ url_for('account_settings') }}" class="nav-link d-none d-lg-inline {% if request.endpoint in ('account_settings', 'wallet', 'wallet_topup', 'my_spots') %}active text-primary{% endif %}">
+                        Account{% if nav_spots_balance is defined %} <span class="badge bg-primary bg-opacity-10 text-primary ms-1" style="font-size:0.65rem;">{{ nav_spots_balance }} {{ currency_name }}</span>{% endif %}
                     </a>
                     {% endif %}
                     {% if is_demo is defined and is_demo %}
@@ -57,7 +60,7 @@
     </nav>
     {% endblock %}
 
-    <div class="container mt-4 {% block flash_class %}{% endblock %}">
+    <div class="container mt-4 {% block flash_class %}{% endblock %}" id="flash-container" aria-live="polite" aria-atomic="true">
         {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
         {% for category, message in messages %}
@@ -70,9 +73,33 @@
         {% endwith %}
     </div>
 
-    <main class="{% block main_class %}container py-4{% endblock %}">
+    <main id="main" class="{% block main_class %}container py-4{% endblock %}">
         {% block content %}{% endblock %}
     </main>
+
+    {% if current_user.is_authenticated and not current_user.is_admin and current_user.id != 0 %}
+    <nav class="pw-bottom-nav d-lg-none" aria-label="Mobile navigation">
+        <a href="{{ url_for('portal') }}" class="pw-bottom-nav-item {% if request.endpoint == 'portal' %}active{% endif %}">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z"/><path d="M9 21V12h6v9"/></svg>
+            <span>Home</span>
+        </a>
+        <a href="{{ url_for('find_parking') }}" class="pw-bottom-nav-item {% if request.endpoint == 'find_parking' %}active{% endif %}">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="10" r="3"/><path d="M12 21s7-6.5 7-11a7 7 0 10-14 0c0 4.5 7 11 7 11z"/></svg>
+            <span>Parking</span>
+        </a>
+        <a href="{{ url_for('account_settings') }}" class="pw-bottom-nav-item {% if request.endpoint in ('account_settings', 'wallet', 'wallet_topup', 'my_spots') %}active{% endif %}">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+            <span>Account</span>
+            {% if nav_spots_balance is defined %}<span class="pw-bottom-nav-badge">{{ nav_spots_balance }}</span>{% endif %}
+        </a>
+    </nav>
+    {% endif %}
+
+    <div id="pw-update-toast" class="pw-update-toast" role="status" aria-live="polite" hidden>
+        <span>New activity available</span>
+        <button type="button" class="btn btn-sm btn-light" id="pw-update-refresh">Refresh</button>
+        <button type="button" class="btn btn-sm btn-link text-white" id="pw-update-dismiss" aria-label="Dismiss">×</button>
+    </div>
 
     <div class="ios-modal-backdrop" id="iosConfirmBackdrop" aria-hidden="true">
         <div class="ios-modal" role="dialog" aria-modal="true" aria-labelledby="iosConfirmTitle">
@@ -81,7 +108,7 @@
             <p id="iosConfirmMessage">Are you sure?</p>
             <div class="ios-modal-actions">
                 <button type="button" class="ios-modal-button secondary" id="iosConfirmCancel">Cancel</button>
-                <button type="button" class="ios-modal-button danger" id="iosConfirmProceed">Delete</button>
+                <button type="button" class="ios-modal-button danger" id="iosConfirmProceed">Confirm</button>
             </div>
         </div>
     </div>
@@ -90,10 +117,12 @@
     <script>
         (() => {
             const backdrop = document.getElementById("iosConfirmBackdrop");
+            const modal = backdrop.querySelector(".ios-modal");
             const message = document.getElementById("iosConfirmMessage");
             const cancel = document.getElementById("iosConfirmCancel");
             const proceed = document.getElementById("iosConfirmProceed");
             let pendingForm = null;
+            let lastFocused = null;
 
             document.querySelectorAll("form[data-confirm]").forEach((form) => {
                 form.addEventListener("submit", (event) => {
@@ -103,8 +132,12 @@
                     event.preventDefault();
                     pendingForm = form;
                     message.textContent = form.dataset.confirm;
+                    proceed.textContent = form.dataset.confirmAction || "Confirm";
+                    proceed.className = "ios-modal-button " + (form.dataset.confirmDanger === "false" ? "primary" : "danger");
+                    lastFocused = document.activeElement;
                     backdrop.classList.add("is-visible");
                     backdrop.setAttribute("aria-hidden", "false");
+                    cancel.focus();
                 });
             });
 
@@ -112,25 +145,63 @@
                 backdrop.classList.remove("is-visible");
                 backdrop.setAttribute("aria-hidden", "true");
                 pendingForm = null;
+                if (lastFocused) lastFocused.focus();
             }
 
             cancel.addEventListener("click", closeConfirm);
             backdrop.addEventListener("click", (event) => {
-                if (event.target === backdrop) {
-                    closeConfirm();
-                }
+                if (event.target === backdrop) closeConfirm();
             });
             document.addEventListener("keydown", (event) => {
-                if (event.key === "Escape" && backdrop.classList.contains("is-visible")) {
-                    closeConfirm();
+                if (event.key === "Escape" && backdrop.classList.contains("is-visible")) closeConfirm();
+                if (event.key === "Tab" && backdrop.classList.contains("is-visible")) {
+                    const focusable = modal.querySelectorAll("button");
+                    if (focusable.length < 2) return;
+                    const first = focusable[0], last = focusable[focusable.length - 1];
+                    if (event.shiftKey && document.activeElement === first) {
+                        event.preventDefault();
+                        last.focus();
+                    } else if (!event.shiftKey && document.activeElement === last) {
+                        event.preventDefault();
+                        first.focus();
+                    }
                 }
             });
             proceed.addEventListener("click", () => {
-                if (!pendingForm) {
-                    return;
-                }
+                if (!pendingForm) return;
                 pendingForm.dataset.confirmed = "true";
                 pendingForm.submit();
+            });
+
+            document.querySelectorAll("form:not([data-no-loading])").forEach((form) => {
+                form.addEventListener("submit", () => {
+                    if (form.dataset.confirm && form.dataset.confirmed !== "true") return;
+                    const btn = form.querySelector('[type="submit"]');
+                    if (btn && !btn.disabled) {
+                        btn.disabled = true;
+                        btn.dataset.originalHtml = btn.innerHTML;
+                        btn.innerHTML = '<span class="pw-spinner" aria-hidden="true"></span><span>Working…</span>';
+                        form.setAttribute("aria-busy", "true");
+                    }
+                });
+            });
+
+            const toggler = document.querySelector(".navbar-toggler");
+            const navCollapse = document.getElementById("navbarNav");
+            if (toggler && navCollapse) {
+                navCollapse.addEventListener("shown.bs.collapse", () => toggler.setAttribute("aria-expanded", "true"));
+                navCollapse.addEventListener("hidden.bs.collapse", () => toggler.setAttribute("aria-expanded", "false"));
+            }
+
+            window.SpotflowUI = window.SpotflowUI || {};
+            window.SpotflowUI.showUpdateToast = function () {
+                const toast = document.getElementById("pw-update-toast");
+                if (toast) toast.hidden = false;
+            };
+            document.getElementById("pw-update-refresh")?.addEventListener("click", () => window.location.reload());
+            document.getElementById("pw-update-dismiss")?.addEventListener("click", () => {
+                const toast = document.getElementById("pw-update-toast");
+                if (toast) toast.hidden = true;
             });
         })();
     </script>

@@ -195,7 +195,7 @@ def _gemini_adjust(
     if not config.GEMINI_API_KEY or not config.PRICING_GEMINI_ENABLED:
         return None
 
-    prompt = f"""You adjust hourly parking prices in Spots (Romanian lei, 10 tenths = 1.0 Spot).
+    prompt = f"""You adjust hourly parking prices in {config.WALLET_CURRENCY_NAME} (Romanian lei, 10 tenths = 1.0 {config.WALLET_CURRENCY_SINGULAR}).
 
 RULES:
 - Respond with JSON only, no markdown.

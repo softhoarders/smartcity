@@ -8,40 +8,17 @@
         unknown: "#8E8E93",
     };
 
-    const LEAFLET_CSS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-    const LEAFLET_JS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
-    const TILE_URL = "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
+    const TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
     const TILE_ATTR =
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>';
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
 
-    let leafletReady = null;
-
-    function loadLeaflet() {
+    function ensureLeaflet() {
         if (window.L) {
             return Promise.resolve(window.L);
         }
-        if (leafletReady) {
-            return leafletReady;
-        }
-
-        leafletReady = new Promise((resolve, reject) => {
-            if (!document.querySelector("link[data-spotflow-leaflet]")) {
-                const link = document.createElement("link");
-                link.rel = "stylesheet";
-                link.href = LEAFLET_CSS;
-                link.dataset.spotflowLeaflet = "1";
-                document.head.appendChild(link);
-            }
-
-            const script = document.createElement("script");
-            script.src = LEAFLET_JS;
-            script.async = true;
-            script.onload = () => resolve(window.L);
-            script.onerror = () => reject(new Error("Leaflet failed to load"));
-            document.head.appendChild(script);
-        });
-
-        return leafletReady;
+        return Promise.reject(
+            new Error("Leaflet is not loaded. Include park_map_assets() before park-maps.js.")
+        );
     }
 
     function popupHtml(marker) {
@@ -61,8 +38,9 @@
         }
 
         try {
-            const L = await loadLeaflet();
+            const L = await ensureLeaflet();
             container.classList.add("pw-map-host", "pw-map-surface");
+            container.innerHTML = "";
 
             if (container._spotflowMap) {
                 container._spotflowMap.remove();
@@ -76,8 +54,7 @@
 
             L.tileLayer(TILE_URL, {
                 attribution: TILE_ATTR,
-                maxZoom: 20,
-                subdomains: "abcd",
+                maxZoom: 19,
             }).addTo(map);
 
             container._spotflowMap = map;
@@ -110,7 +87,15 @@
                 map.setView([44.4268, 26.1025], 12);
             }
 
-            setTimeout(() => map.invalidateSize(), 120);
+            const refresh = () => map.invalidateSize();
+            setTimeout(refresh, 0);
+            setTimeout(refresh, 150);
+            setTimeout(refresh, 400);
+            if (typeof ResizeObserver !== "undefined") {
+                const ro = new ResizeObserver(refresh);
+                ro.observe(container);
+                container._spotflowMapResize = ro;
+            }
             return map;
         } catch (error) {
             console.error("[SpotflowMaps]", error);

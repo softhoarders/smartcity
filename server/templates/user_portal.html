@@ -1,171 +1,193 @@
 {% extends "base.html" %}
 {% block title %}Spotflow — Home{% endblock %}
+{% block main_class %}container py-3 portal-page{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center mb-4">
-    <div class="col-12 col-lg-10">
-        {% if is_demo is defined and is_demo %}
-        <div class="demo-banner mb-4">
-            <strong>Demo mode</strong> — Sample parking alerts for plate B123MAB.
-        </div>
-        {% endif %}
+{% from "macros/ui.html" import empty_state %}
 
-        <div class="mb-4 mt-2">
-            <h1 class="h3 fw-bold mb-1">Home</h1>
-            <p class="text-secondary mb-2">Your plates:</p>
-            <div class="d-flex flex-wrap gap-2">
-                {% if user_plates %}
-                    {% for plate in user_plates %}
-                    <span class="badge pw-plate-badge">{{ plate }}</span>
-                    {% endfor %}
-                {% else %}
-                    <span class="text-secondary small">None yet — add one in Account.</span>
-                {% endif %}
-            </div>
-        </div>
+<header class="portal-header">
+    <div class="portal-header-main">
+        <h1 class="portal-greeting">Hi, {{ current_user.name }}</h1>
+        <p class="portal-subline">
+            {% if user_plates %}
+            {% for plate in user_plates %}<span class="pw-plate-badge portal-plate">{{ plate }}</span>{% endfor %}
+            {% else %}
+            <a href="{{ url_for('account_settings') }}" class="portal-link">Add a plate</a> to receive alerts
+            {% endif %}
+        </p>
+    </div>
+    <div class="portal-header-actions">
+        <a href="{{ url_for('wallet') }}" class="portal-wallet-pill" title="Open wallet">
+            <span class="portal-wallet-value">{% if nav_spots_balance is defined %}{{ nav_spots_balance }}{% else %}0{% endif %}</span>
+            <span class="portal-wallet-label">{{ currency_name }}</span>
+        </a>
+        <a href="{{ url_for('find_parking') }}" class="btn btn-sm btn-outline-primary portal-quick-btn">Find parking</a>
+    </div>
+</header>
 
-        {% if not user_plates %}
-        <div class="card pw-card border-0 mb-4">
-            <div class="card-body p-4">
-                <h2 class="h5 fw-bold">Add a license plate</h2>
-                <p class="text-secondary mb-3">Add a plate under Account with your registration document to receive parking alerts.</p>
-                <a href="{{ url_for('account_settings') }}" class="btn btn-primary">Go to Account</a>
-            </div>
-        </div>
-        {% endif %}
-
-        {% set portal_mapped = fines | selectattr('device') | selectattr('device.latitude') | list %}
-        {% if portal_mapped %}
-        <div class="card pw-card border-0 mb-4">
-            <div class="card-body p-3">
-                <p class="fw-semibold mb-2 small text-secondary">Your monitored spots</p>
-                <div id="portal-map" class="pw-map-frame pw-map-frame--md"></div>
-            </div>
-        </div>
-        {% endif %}
-
-        {% if fines and user_plates %}
-        <div class="card pw-card border-0">
-            <div class="table-responsive">
-                <table class="table pw-table mb-0">
-                    <thead>
-                        <tr>
-                            <th class="ps-4">Date</th>
-                            <th>Location / Spot</th>
-                            <th>Detected Vehicle</th>
-                            <th>Duration</th>
-                            <th>Status</th>
-                            <th class="text-end pe-4">Evidence</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for fine in fines %}
-                        <tr class="{% if fine.resolved %}pw-resolved{% endif %}">
-                            <td class="ps-4 py-3">
-                                <span class="d-block fw-medium">{{ fine.first_seen.strftime('%b %d, %Y') if fine.first_seen else 'N/A' }}</span>
-                                <span class="small text-secondary">{{ fine.first_seen.strftime('%I:%M %p') if fine.first_seen else '' }}</span>
-                            </td>
-                            <td class="py-3">
-                                <span class="d-block fw-medium">{{ fine.device.name if fine.device else 'Unknown' }}</span>
-                                <span class="small text-secondary">{{ fine.device.spot_label if fine.device else 'N/A' }}</span>
-                            </td>
-                            <td class="py-3">
-                                {% if fine.detected_plate not in user_plates %}
-                                <span class="badge bg-danger">Mismatch: {{ fine.detected_plate }}</span>
-                                {% else %}
-                                <span class="badge bg-success">Match</span>
-                                <span class="text-muted ms-2">{{ fine.detected_plate }}</span>
-                                {% endif %}
-                            </td>
-                            <td class="py-3">{{ fine.duration_minutes }} min</td>
-                            <td class="py-3">
-                                {% if fine.resolved %}
-                                <div class="d-flex align-items-center gap-2">
-                                    <span class="badge bg-success">Resolved</span>
-                                    <a href="{{ url_for('receipt', fine_id=fine.id) }}" target="_blank" class="btn btn-outline-secondary btn-sm rounded-pill">Receipt</a>
-                                </div>
-                                {% else %}
-                                <span class="badge bg-warning">Action Required</span>
-                                {% endif %}
-                            </td>
-                            <td class="py-3 text-end pe-4">
-                                {% if fine.photo_sent_at and fine.image_filename %}
-                                <div class="d-flex flex-column align-items-end gap-1">
-                                    <a href="{{ url_for('serve_upload', filename=fine.image_filename) }}" target="_blank" class="btn btn-sm btn-outline-primary rounded-pill px-3">
-                                        View Photo
-                                    </a>
-                                    
-                                    {% if fine.appeal_status == 'none' and not fine.resolved %}
-                                    <form method="POST" action="{{ url_for('appeal_fine', fine_id=fine.id) }}" class="mt-1 d-flex flex-column gap-1">
-                                        <input type="text" name="reason" class="form-control form-control-sm" placeholder="Any comments?" required>
-                                        <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill px-3">Appeal Ticket</button>
-                                    </form>
-                                    {% elif fine.appeal_status == 'rejected_by_ai' and not fine.resolved %}
-                                    <form method="POST" action="{{ url_for('appeal_fine', fine_id=fine.id) }}" class="mt-1 d-flex flex-column gap-1">
-                                        <input type="text" name="reason" class="form-control form-control-sm" placeholder="Why is this wrong?" required>
-                                        <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill px-3">Human Appeal</button>
-                                    </form>
-                                    {% elif fine.appeal_status == 'pending_human' %}
-                                    <span class="badge bg-warning rounded-pill">Pending Admin</span>
-                                    {% elif fine.appeal_status == 'approved' %}
-                                    <span class="badge bg-success rounded-pill">Appeal Approved</span>
-                                    {% elif fine.appeal_status == 'rejected_human' %}
-                                    <span class="badge bg-danger rounded-pill">Appeal Rejected</span>
-                                    {% endif %}
-                                </div>
-                                {% elif fine.photo_requested %}
-                                <span class="badge bg-secondary rounded-pill px-3 py-2 fw-normal">Processing request...</span>
-                                {% else %}
-                                <form method="POST" action="{{ url_for('request_photo', fine_id=fine.id) }}" class="d-inline">
-                                    <button type="submit" class="btn btn-sm btn-light border shadow-sm rounded-pill px-3">
-                                        Request Photo
-                                    </button>
-                                </form>
-                                {% endif %}
-                                
-                                {% if fine.messages.count() > 0 %}
-                                <div class="mt-3 text-start w-100 p-2 bg-light border rounded d-flex flex-column" style="max-width: 400px;">
-                                    <strong class="d-block mb-2 pb-1 border-bottom">Chat History</strong>
-                                    <div class="overflow-auto mb-2 px-2" style="max-height: 250px;">
-                                        {% for msg in fine.messages %}
-                                            <div class="mb-2 p-2 rounded {% if msg.sender != 'Admin' and msg.sender != 'System' and msg.sender != 'AI Assessor' %}bg-primary text-white ms-4{% else %}bg-white border me-4{% endif %}">
-                                                <span class="fw-bold d-block" style="font-size:0.7rem; opacity:0.8">{{ msg.sender }}</span>
-                                                {{ msg.content }}
-                                                {% if msg.attachment_filename %}
-                                                <div class="mt-1"><a href="{{ url_for('serve_upload', filename=msg.attachment_filename) }}" target="_blank" class="{% if msg.sender != 'Admin' and msg.sender != 'System' and msg.sender != 'AI Assessor' %}text-white{% else %}text-info{% endif %} text-decoration-underline" style="font-size: 0.75rem;">View Attachment</a></div>
-                                                {% endif %}
-                                            </div>
-                                        {% endfor %}
-                                    </div>
-                                    <form method="POST" action="{{ url_for('add_chat_message', fine_id=fine.id) }}" enctype="multipart/form-data" class="mt-auto d-flex flex-column gap-1 border-top pt-2">
-                                        <input type="text" name="message" class="form-control form-control-sm" placeholder="Reply to officer..." autocomplete="off">
-                                        <input type="file" name="attachment" class="form-control form-control-sm" style="font-size: 0.75rem;">
-                                        <button class="btn btn-sm btn-primary py-1 px-2 w-100">Send</button>
-                                    </form>
-                                </div>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-        {% elif user_plates %}
-        <div class="card pw-card border-0">
-            <div class="card-body p-5 text-center">
-                <h4 class="fw-bold h5 mb-2">No alerts</h4>
-                <p class="text-secondary mb-0">No parking violations for your plates right now.</p>
-            </div>
-        </div>
-        {% endif %}
+<div id="push-consent" class="pw-push-consent portal-push" hidden>
+    <p class="mb-0 small"><strong>Browser alerts</strong> — notify me when a violation is detected.</p>
+    <div class="d-flex gap-2 flex-shrink-0">
+        <button type="button" class="btn btn-primary btn-sm" id="push-enable-btn">Enable</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="push-dismiss-btn">Later</button>
     </div>
 </div>
+
+{% if user_plates %}
+<div class="portal-stats" aria-label="Alert summary">
+    <div class="portal-stat {% if stats.action %}portal-stat--warn{% endif %}">
+        <span class="portal-stat-num">{{ stats.action }}</span>
+        <span class="portal-stat-label">Need action</span>
+    </div>
+    <div class="portal-stat {% if stats.pending %}portal-stat--pending{% endif %}">
+        <span class="portal-stat-num">{{ stats.pending }}</span>
+        <span class="portal-stat-label">In review</span>
+    </div>
+    <div class="portal-stat">
+        <span class="portal-stat-num">{{ stats.open }}</span>
+        <span class="portal-stat-label">Open</span>
+    </div>
+    <div class="portal-stat portal-stat--muted">
+        <span class="portal-stat-num">{{ stats.resolved }}</span>
+        <span class="portal-stat-label">Resolved</span>
+    </div>
+</div>
+{% endif %}
+
+{% if not user_plates %}
+<div class="portal-onboard pw-card border-0">
+    <h2 class="h6 fw-bold mb-1">Get started</h2>
+    <p class="small text-secondary mb-2 mb-md-0">Register a plate with your vehicle document under Account.</p>
+    <a href="{{ url_for('account_settings') }}" class="btn btn-primary btn-sm">Account settings</a>
+</div>
+{% else %}
+
+<div class="portal-layout {% if portal_mapped %}portal-layout--map{% endif %}">
+    {% if portal_mapped %}
+    <section class="portal-map-card pw-card border-0" aria-label="Alert locations">
+        <div class="portal-map-head">
+            <span class="fw-semibold small">Map</span>
+            <span class="text-secondary small">{{ portal_mapped | length }} location{{ 's' if portal_mapped | length != 1 else '' }}</span>
+        </div>
+        <div id="portal-map" class="pw-map-frame portal-map-frame"></div>
+    </section>
+    {% endif %}
+
+    <section class="portal-alerts" aria-label="Parking alerts">
+        <div class="portal-alerts-head">
+            <h2 class="h6 fw-bold mb-0">Alerts</h2>
+            {% if fines %}<span class="text-secondary small">{{ fines | length }} total</span>{% endif %}
+        </div>
+
+        {% if fines %}
+        <ul class="portal-alert-list list-unstyled mb-0">
+            {% for fine in fines %}
+            {% set is_mismatch = fine.detected_plate and user_plates and fine.detected_plate not in user_plates %}
+            <li class="portal-alert pw-card border-0 {% if fine.resolved %}portal-alert--resolved{% endif %}">
+                <div class="portal-alert-accent {% if fine.resolved %}is-resolved{% elif fine.appeal_status in ['pending_human', 'pending_ai'] %}is-pending{% elif is_mismatch %}is-alert{% else %}is-watch{% endif %}" aria-hidden="true"></div>
+                <div class="portal-alert-body">
+                    <div class="portal-alert-top">
+                        <div class="portal-alert-when">
+                            <time datetime="{{ fine.first_seen.isoformat() if fine.first_seen else '' }}">
+                                {{ fine.first_seen.strftime('%b %d') if fine.first_seen else '—' }}
+                                <span class="text-secondary">{{ fine.first_seen.strftime('%H:%M') if fine.first_seen else '' }}</span>
+                            </time>
+                        </div>
+                        <div class="portal-alert-badges">
+                            {% if fine.resolved %}
+                            <span class="portal-badge portal-badge--ok">Resolved</span>
+                            {% elif fine.appeal_status == 'pending_human' %}
+                            <span class="portal-badge portal-badge--pending">Admin review</span>
+                            {% elif fine.appeal_status == 'pending_ai' %}
+                            <span class="portal-badge portal-badge--pending">AI review</span>
+                            {% elif fine.appeal_status == 'approved' %}
+                            <span class="portal-badge portal-badge--ok">Appeal approved</span>
+                            {% elif fine.appeal_status == 'rejected_human' %}
+                            <span class="portal-badge portal-badge--danger">Appeal denied</span>
+                            {% elif is_mismatch %}
+                            <span class="portal-badge portal-badge--danger">Mismatch</span>
+                            {% else %}
+                            <span class="portal-badge portal-badge--warn">Open</span>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="portal-alert-meta">
+                        <span class="portal-alert-spot">{{ fine.device.spot_label if fine.device else 'Unknown spot' }}</span>
+                        <span class="portal-alert-sep" aria-hidden="true">·</span>
+                        <span class="portal-alert-place">{{ fine.device.name if fine.device else 'Unknown' }}</span>
+                        <span class="portal-alert-sep" aria-hidden="true">·</span>
+                        <span>{{ fine.duration_minutes }} min</span>
+                    </div>
+
+                    <div class="portal-alert-plates">
+                        <div class="portal-alert-plates-main">
+                            <span class="text-secondary small">Detected</span>
+                            <span class="pw-plate-badge portal-plate-sm">{{ fine.detected_plate or '—' }}</span>
+                            {% if fine.expected_plate and fine.expected_plate != fine.detected_plate %}
+                            <span class="text-secondary small ms-1">Expected</span>
+                            <span class="pw-plate-badge portal-plate-sm">{{ fine.expected_plate }}</span>
+                            {% endif %}
+                        </div>
+                        <div class="portal-alert-plates-photo">
+                            {% if fine.photo_sent_at and fine.image_filename %}
+                            <a href="{{ url_for('serve_upload', filename=fine.image_filename) }}" target="_blank" class="btn btn-sm btn-outline-primary">Photo</a>
+                            {% elif fine.photo_requested %}
+                            <span class="portal-inline-status text-secondary small">Photo processing…</span>
+                            {% elif not fine.resolved %}
+                            <form method="POST" action="{{ url_for('request_photo', fine_id=fine.id) }}" class="m-0">
+                                <button type="submit" class="btn btn-sm btn-primary">Request photo</button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="portal-alert-actions">
+                        {% if fine.resolved %}
+                        <a href="{{ url_for('receipt', fine_id=fine.id) }}" target="_blank" class="btn btn-sm btn-outline-secondary">Receipt</a>
+                        {% elif fine.photo_sent_at and fine.image_filename %}
+                        {% if fine.appeal_status == 'none' %}
+                        <details class="portal-appeal-details">
+                            <summary class="btn btn-sm btn-outline-danger">Appeal</summary>
+                            <form method="POST" action="{{ url_for('appeal_fine', fine_id=fine.id) }}" class="portal-appeal-form">
+                                <input type="text" name="reason" class="form-control form-control-sm" placeholder="Why is this incorrect?" required>
+                                <button type="submit" class="btn btn-sm btn-danger">Submit appeal</button>
+                            </form>
+                        </details>
+                        {% elif fine.appeal_status == 'rejected_by_ai' %}
+                        <details class="portal-appeal-details">
+                            <summary class="btn btn-sm btn-outline-danger">Human appeal</summary>
+                            <form method="POST" action="{{ url_for('appeal_fine', fine_id=fine.id) }}" class="portal-appeal-form">
+                                <input type="text" name="reason" class="form-control form-control-sm" placeholder="Additional context" required>
+                                <button type="submit" class="btn btn-sm btn-danger">Submit</button>
+                            </form>
+                        </details>
+                        {% endif %}
+                        {% endif %}
+                    </div>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <div class="portal-empty pw-card border-0">
+            {{ empty_state(
+                'All clear',
+                'No violations for your plates right now. We will notify you when something changes.',
+                url_for('account_settings'),
+                'Manage plates',
+                url_for('find_parking'),
+                'Find parking'
+            ) }}
+        </div>
+        {% endif %}
+    </section>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}
 {% from "macros/park_map.html" import park_map_assets %}
-{% set portal_mapped = fines | selectattr('device') | selectattr('device.latitude') | list %}
 {% if portal_mapped %}
 {{ park_map_assets() }}
 <script>
@@ -189,7 +211,9 @@
             seen.add(key);
             return true;
         });
-        SpotflowMaps.render("portal-map", markers);
+        SpotflowMaps.render("portal-map", markers).catch(function (err) {
+            console.error("[portal-map]", err);
+        });
     });
 </script>
 {% endif %}
@@ -202,20 +226,15 @@
                 if (!sub) {
                     const response = await fetch('/api/push/public-key');
                     const vapidData = await response.json();
-                    
                     const convertedVapidKey = urlBase64ToUint8Array(vapidData.publicKey);
-                    
                     const newSub = await reg.pushManager.subscribe({
                         userVisibleOnly: true,
                         applicationServerKey: convertedVapidKey
                     });
-                    
                     await fetch('/api/push/subscribe', {
                         method: 'POST',
                         body: JSON.stringify(newSub),
-                        headers: {
-                            'Content-Type': 'application/json'
-                        }
+                        headers: { 'Content-Type': 'application/json' }
                     });
                 }
             } catch (err) {
@@ -223,7 +242,7 @@
             }
         }
     }
-    
+
     function urlBase64ToUint8Array(base64String) {
         const padding = '='.repeat((4 - base64String.length % 4) % 4);
         const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
@@ -236,14 +255,32 @@
     }
 
     window.addEventListener('load', () => {
-        setTimeout(subscribeToPush, 2000);
+        const consent = document.getElementById('push-consent');
+        const dismissed = localStorage.getItem('pw-push-dismissed');
+        const enabled = localStorage.getItem('pw-push-enabled');
+        if (consent && !dismissed && !enabled && 'PushManager' in window) {
+            consent.hidden = false;
+        }
+        document.getElementById('push-enable-btn')?.addEventListener('click', async () => {
+            await subscribeToPush();
+            localStorage.setItem('pw-push-enabled', '1');
+            if (consent) consent.hidden = true;
+        });
+        document.getElementById('push-dismiss-btn')?.addEventListener('click', () => {
+            localStorage.setItem('pw-push-dismissed', '1');
+            if (consent) consent.hidden = true;
+        });
     });
 
     const evtSource = new EventSource("/stream");
     evtSource.onmessage = function(event) {
         const msg = JSON.parse(event.data);
         if (msg.type === "new_fine" || msg.type === "fine_updated") {
-            window.location.reload();
+            if (window.SpotflowUI && window.SpotflowUI.showUpdateToast) {
+                window.SpotflowUI.showUpdateToast();
+            } else {
+                window.location.reload();
+            }
         }
     };
 </script>

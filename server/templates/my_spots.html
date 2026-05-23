@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "macros/ui.html" import breadcrumb, empty_state %}
 {% block title %}Spotflow — My Parking Spots{% endblock %}
 {% block content %}
 <div class="row justify-content-center mb-4">
@@ -6,6 +7,8 @@
         {% if is_demo is defined and is_demo %}
         <div class="demo-banner mb-4"><strong>Demo Mode</strong> — Changes are not saved.</div>
         {% endif %}
+
+        {{ breadcrumb([{'url': url_for('account_settings'), 'label': 'Account'}, {'url': url_for('my_spots'), 'label': 'My spots'}]) }}
 
         <div class="mb-4 mt-2">
             <h1 class="h3 fw-bold mb-1">My spots</h1>
@@ -53,7 +56,7 @@
                         </p>
                     </div>
                     {% if listing and listing.is_active %}
-                    <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle">Listed · {{ item.instant_display }} Spots/h</span>
+                    <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle">Listed · {{ item.instant_display }} {{ currency_name }}/h</span>
                     {% else %}
                     <span class="badge bg-secondary bg-opacity-10 text-secondary">Not listed</span>
                     {% endif %}
@@ -90,32 +93,32 @@
                     </div>
 
                     <div class="col-md-4">
-                        <label class="form-label">Min price (Spots / h)</label>
+                        <label class="form-label">Min price ({{ currency_name }} / h)</label>
                         <input type="number" name="owner_min_price" class="form-control" step="0.1" min="1"
                             value="{% if listing %}{{ (listing.owner_min_tenths / 10) }}{% else %}{{ pricing_default_min }}{% endif %}"
                             {% if is_demo is defined and is_demo %}disabled{% endif %}>
                     </div>
                     <div class="col-md-4">
-                        <label class="form-label">Max price (Spots / h)</label>
+                        <label class="form-label">Max price ({{ currency_name }} / h)</label>
                         <input type="number" name="owner_max_price" class="form-control" step="0.1" min="1"
                             value="{% if listing %}{{ (listing.owner_max_tenths / 10) }}{% else %}{{ pricing_default_max }}{% endif %}"
                             {% if is_demo is defined and is_demo %}disabled{% endif %}>
                     </div>
                     <div class="col-md-4">
-                        <label class="form-label">Your instant price (Spots / h)</label>
+                        <label class="form-label">Your instant price ({{ currency_name }} / h)</label>
                         <input type="number" name="instant_price" class="form-control" step="0.1" min="1"
                             value="{% if listing %}{{ (listing.instant_price_tenths or listing.instant_price_per_hour * 10) / 10 }}{% else %}{{ default_instant_hourly }}{% endif %}"
                             {% if is_demo is defined and is_demo %}disabled{% endif %}>
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label">Schedule deposit (Spots)</label>
+                        <label class="form-label">Schedule deposit ({{ currency_name }})</label>
                         <input type="number" name="schedule_deposit" class="form-control" step="0.1" min="1"
                             value="{% if listing %}{{ (listing.schedule_deposit_tenths or listing.schedule_deposit_spots * 10) / 10 }}{% else %}{{ default_schedule_deposit }}{% endif %}"
                             {% if is_demo is defined and is_demo %}disabled{% endif %}>
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label">Scheduled rate (Spots / h)</label>
+                        <label class="form-label">Scheduled rate ({{ currency_name }} / h)</label>
                         <input type="number" name="schedule_price" class="form-control" step="0.1" min="1"
                             value="{% if listing %}{{ (listing.schedule_price_tenths or listing.schedule_price_per_hour * 10) / 10 }}{% else %}{{ default_schedule_hourly }}{% endif %}"
                             {% if is_demo is defined and is_demo %}disabled{% endif %}>
@@ -130,7 +133,7 @@
                     <div class="col-12">
                         <div class="alert alert-info border-0 mb-0 py-3">
                             <p class="fw-semibold mb-1">Suggested price</p>
-                            <p class="mb-1">{{ format_spots(listing.suggested_instant_tenths) }} Spots/h instant · {{ format_spots(listing.suggested_schedule_tenths) }} Spots/h scheduled</p>
+                            <p class="mb-1">{{ format_spots(listing.suggested_instant_tenths) }} {{ currency_name }}/h instant · {{ format_spots(listing.suggested_schedule_tenths) }} {{ currency_name }}/h scheduled</p>
                             {% if listing.pricing_reason %}
                             <p class="small text-secondary mb-2">{{ listing.pricing_reason }}</p>
                             {% endif %}
@@ -177,7 +180,7 @@
                                 <span class="fw-medium ms-1">{{ b.renter_plate }}</span>
                                 <span class="d-block small text-secondary">
                                     {{ b.starts_at.strftime('%d %b %H:%M') }} – {{ b.ends_at.strftime('%d %b %H:%M') }}
-                                    · {{ b.total_spots }} Spots
+                                    · {{ b.total_spots }} {{ currency_name }}
                                 </span>
                             </div>
                             {% if not (is_demo is defined and is_demo) %}
@@ -204,9 +207,24 @@
         {% endfor %}
         {% else %}
         <div class="card pw-card border-0">
-            <div class="card-body p-4 text-center">
-                <p class="text-secondary mb-3">You do not own any spots yet. Claim one above or add a verified plate in account settings.</p>
-                <a href="{{ url_for('account_settings') }}" class="btn btn-outline-primary">Account settings</a>
+            <div class="card-body">
+                {% if claimable %}
+                {{ empty_state(
+                    'No owned spots yet',
+                    'Claim a monitored spot that matches your verified plate, then list it for rent.',
+                    url_for('account_settings'),
+                    'Manage plates'
+                ) }}
+                {% else %}
+                {{ empty_state(
+                    'No spots to claim',
+                    'Add and verify a license plate in Account. When a Pi camera monitors your spot, you can claim it here.',
+                    url_for('account_settings'),
+                    'Add a plate',
+                    url_for('find_parking'),
+                    'Find parking'
+                ) }}
+                {% endif %}
             </div>
         </div>
         {% endif %}
@@ -218,7 +236,7 @@
                 <div class="table-responsive">
                     <table class="table pw-table mb-0">
                         <thead>
-                            <tr><th>Spot</th><th>Renter</th><th>When</th><th>Status</th><th class="text-end">Spots</th></tr>
+                            <tr><th>Spot</th><th>Renter</th><th>When</th><th>Status</th><th class="text-end">{{ currency_name }}</th></tr>
                         </thead>
                         <tbody>
                             {% for b in my_bookings %}

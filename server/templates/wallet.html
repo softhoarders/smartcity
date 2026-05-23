@@ -1,5 +1,6 @@
 {% extends "base.html" %}
-{% block title %}Spotflow — Spots Wallet{% endblock %}
+{% from "macros/ui.html" import breadcrumb, empty_state %}
+{% block title %}Spotflow — {{ currency_name }} Wallet{% endblock %}
 {% block content %}
 <div class="row justify-content-center mb-4">
     <div class="col-12 col-lg-8">
@@ -7,23 +8,25 @@
         <div class="demo-banner mb-4"><strong>Demo Mode</strong> — Wallet changes are not saved.</div>
         {% endif %}
 
+        {{ breadcrumb([{'url': url_for('account_settings'), 'label': 'Account'}, {'url': url_for('wallet'), 'label': 'Wallet'}]) }}
+
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 mt-2 gap-3">
             <div>
-                <h1 class="h3 fw-bold mb-1">Spots wallet</h1>
+                <h1 class="h3 fw-bold mb-1">{{ currency_name }} wallet</h1>
                 <p class="text-secondary mb-0">Pay for parking and subscriptions.</p>
             </div>
             <div class="d-flex gap-2">
-                <a href="{{ url_for('wallet_topup') }}" class="btn btn-primary btn-sm">Buy Spots</a>
+                <a href="{{ url_for('wallet_topup') }}" class="btn btn-primary btn-sm">Buy {{ currency_name }}</a>
                 <a href="{{ url_for('account_settings') }}" class="btn btn-outline-secondary btn-sm">Account</a>
             </div>
         </div>
 
         <div class="alert alert-secondary border-0 mb-4 py-3">
-            <p class="mb-1 fw-semibold">How Spots work</p>
+            <p class="mb-1 fw-semibold">How {{ currency_name }} work</p>
             <ul class="mb-0 small text-secondary ps-3">
-                <li><strong>1 Spot = 1 lei (RON)</strong> — the rate is fixed and transparent.</li>
-                <li>No commission, no platform fee, and no tax added on top when you buy or spend Spots.</li>
-                <li>What you pay in lei is exactly what lands in your wallet (e.g. 50 lei → 50 Spots).</li>
+                <li><strong>1 {{ currency_singular }} = 1 lei (RON)</strong> — the rate is fixed and transparent.</li>
+                <li>No commission, no platform fee, and no tax added on top when you buy or spend {{ currency_name }}.</li>
+                <li>What you pay in lei is exactly what lands in your wallet (e.g. 50 lei → 50 {{ currency_name }}).</li>
             </ul>
         </div>
 
@@ -32,7 +35,7 @@
                 <div class="card pw-card border-0 h-100">
                     <div class="card-body p-4">
                         <p class="text-secondary small mb-1">Your balance</p>
-                        <p class="display-6 fw-bold mb-0 text-primary">{{ balance }} <span class="fs-5 fw-semibold">Spots</span></p>
+                        <p class="display-6 fw-bold mb-0 text-primary">{{ balance }} <span class="fs-5 fw-semibold">{{ currency_name }}</span></p>
                         <p class="text-secondary small mb-0 mt-2">≈ {{ balance }} lei</p>
                     </div>
                 </div>
@@ -44,20 +47,20 @@
                         {% if subscription_active %}
                         <p class="fw-semibold mb-1 text-success">Active</p>
                         <p class="small text-secondary mb-3">
-                            {{ subscription_monthly_lei }} lei / month — includes {{ subscription_monthly_spots }} Spots each cycle.
+                            {{ subscription_monthly_lei }} lei / month — includes {{ subscription_monthly_spots }} {{ currency_name }} each cycle.
                             {% if subscription_next_billing %}Next renewal: {{ subscription_next_billing.strftime('%d %b %Y') }}{% endif %}
                         </p>
                         {% else %}
                         <p class="fw-semibold mb-1">Not subscribed</p>
                         <p class="small text-secondary mb-3">
-                            Pay {{ subscription_monthly_lei }} lei per month and receive {{ subscription_monthly_spots }} Spots at the start of each billing cycle.
+                            Pay {{ subscription_monthly_lei }} lei per month and receive {{ subscription_monthly_spots }} {{ currency_name }} at the start of each billing cycle.
                         </p>
                         {% endif %}
                         {% if not (is_demo is defined and is_demo) %}
                         <div class="d-flex flex-wrap gap-2">
                             <form method="POST" action="{{ url_for('wallet') }}" class="m-0">
                                 <input type="hidden" name="action" value="subscribe_balance">
-                                <button type="submit" class="btn btn-outline-primary btn-sm" {% if balance < subscription_monthly_lei %}disabled title="Need enough Spots on balance"{% endif %}>
+                                <button type="submit" class="btn btn-outline-primary btn-sm" {% if balance < subscription_monthly_lei %}disabled title="Need enough {{ currency_name }} on balance"{% endif %}>
                                     Pay from balance
                                 </button>
                             </form>
@@ -74,7 +77,7 @@
                 <h2 class="h5 fw-bold mb-3">Recent activity</h2>
                 {% if transactions %}
                 <div class="table-responsive">
-                    <table class="table pw-table mb-0">
+                    <table class="table pw-table pw-table-cards mb-0">
                         <thead>
                             <tr>
                                 <th>Date</th>
@@ -85,9 +88,9 @@
                         <tbody>
                             {% for tx in transactions %}
                             <tr>
-                                <td class="text-secondary small">{{ tx.created_at.strftime('%d %b %Y %H:%M') if tx.created_at else '—' }}</td>
-                                <td>{{ tx.description }}</td>
-                                <td class="text-end fw-medium {% if tx.amount > 0 %}text-success{% else %}text-danger{% endif %}">
+                                <td class="text-secondary small" data-label="Date">{{ tx.created_at.strftime('%d %b %Y %H:%M') if tx.created_at else '—' }}</td>
+                                <td data-label="Description">{{ tx.description }}</td>
+                                <td class="text-end fw-medium {% if tx.amount > 0 %}text-success{% else %}text-danger{% endif %}" data-label="Amount">
                                     {% if tx.amount > 0 %}+{% endif %}{{ tx.amount }}
                                 </td>
                             </tr>
@@ -96,7 +99,14 @@
                     </table>
                 </div>
                 {% else %}
-                <p class="text-secondary mb-0">No transactions yet.</p>
+                {{ empty_state(
+                    'No transactions yet',
+                    'Top up your wallet to pay for parking, subscriptions, and bookings.',
+                    url_for('wallet_topup'),
+                    'Buy ' ~ currency_name,
+                    url_for('find_parking'),
+                    'Find parking'
+                ) }}
                 {% endif %}
             </div>
         </div>

@@ -141,3 +141,6 @@ def clear_pending_2fa():
     session.pop("pending_2fa_user_id", None)
     session.pop("pending_2fa_exp", None)
     session.pop("pending_2fa_remember", None)
+    session.pop("pending_2fa_email", None)
+    session.pop("pending_2fa_demo", None)
+    session.pop("pending_2fa_demo_role", None)

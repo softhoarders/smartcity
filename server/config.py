@@ -50,8 +50,10 @@ MOCK_MAIL_DIR = os.path.join(BASE_DIR, "mail_queue")
 os.makedirs(MOCK_MAIL_DIR, exist_ok=True)
 
 # ---------------------------------------------------------------------------
-# Spots wallet (1 Spot = 1 RON lei)
+# Wallet credits (1 Credit = 1 RON lei). DB columns remain spots_* for compatibility.
 # ---------------------------------------------------------------------------
+WALLET_CURRENCY_NAME = os.environ.get("WALLET_CURRENCY_NAME", "Credits")
+WALLET_CURRENCY_SINGULAR = os.environ.get("WALLET_CURRENCY_SINGULAR", "Credit")
 SPOT_TO_LEI = 1
 SUBSCRIPTION_MONTHLY_LEI = int(os.environ.get("SPOTS_SUBSCRIPTION_LEI", "50"))
 SUBSCRIPTION_MONTHLY_SPOTS = int(os.environ.get("SPOTS_SUBSCRIPTION_GRANT", "50"))
@@ -106,3 +108,5 @@ RATE_LIMIT_LOGIN_WINDOW = int(os.environ.get("RATE_LIMIT_LOGIN_WINDOW", "900"))
 
 # Simulated 2FA — show current code on verify page (always simulated, never real SMS)
 SIMULATED_2FA_SHOW_CODE = os.environ.get("SIMULATED_2FA_SHOW_CODE", "true").lower() in ("true", "1", "t")
+# Fixed mock code for login email verification (no real email sent)
+MOCK_LOGIN_2FA_PIN = os.environ.get("MOCK_LOGIN_2FA_PIN", "456789")

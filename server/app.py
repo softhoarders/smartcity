@@ -88,7 +88,11 @@ def _apply_security_headers(response):
 
 @app.context_processor
 def inject_globals():
-    ctx = {"format_spots": spot_prices.format_tenths}
+    ctx = {
+        "format_spots": spot_prices.format_tenths,
+        "currency_name": config.WALLET_CURRENCY_NAME,
+        "currency_singular": config.WALLET_CURRENCY_SINGULAR,
+    }
     if current_user.is_authenticated:
         ctx["is_demo"] = _is_demo()
         if not getattr(current_user, "is_admin", False) and current_user.id != 0:
@@ -519,6 +523,35 @@ def _group_devices_by_zone(devices):
     return list(zones.items())
 
 
+def _portal_stats(fines):
+    """Summary counts for the driver home screen."""
+    resolved = sum(1 for f in fines if getattr(f, "resolved", False))
+    total = len(fines)
+    open_count = total - resolved
+    action_count = 0
+    pending_count = 0
+    for f in fines:
+        if getattr(f, "resolved", False):
+            continue
+        appeal = getattr(f, "appeal_status", "none") or "none"
+        if appeal in ("pending_human", "pending_ai"):
+            pending_count += 1
+            continue
+        photo_sent = bool(getattr(f, "photo_sent_at", None))
+        photo_requested = bool(getattr(f, "photo_requested", False))
+        if (not photo_sent and not photo_requested) or (
+            photo_sent and appeal in ("none", "rejected_by_ai")
+        ):
+            action_count += 1
+    return {
+        "total": total,
+        "open": open_count,
+        "resolved": resolved,
+        "action": action_count,
+        "pending": pending_count,
+    }
+
+
 def _sort_demo_fines(fines):
     appeal_rank = {"pending_human": 0, "pending_ai": 1, "none": 2, "approved": 3, "rejected": 4}
 
@@ -605,21 +638,6 @@ def _demo_fines():
         make_fine(12, 106, "AB-12-CDE", "AB-12-CDE", 18, resolved=True, confidence=98.0, hours_ago=12),
     ]
 
-    fines[3].messages = _FakeMessages([
-        _FakeMessage("System",
-            "Violation recorded: B-600-WXY in spot P1-12 (assigned B-123-MAB) for 185 minutes."),
-        _FakeMessage("Maria Constantin",
-            "My brother borrowed the spot while my car was at the mechanic. I can share the garage receipt."),
-        _FakeMessage("AI Assessor",
-            "No guest-access record for P1-12 today. Escalating to human review."),
-        _FakeMessage("Maria Constantin",
-            "Uploaded invoice + written permission from building admin. Please waive this alert."),
-    ])
-    fines[9].messages = _FakeMessages([
-        _FakeMessage("Andrei Popescu", "Visitor stayed longer than expected — loading event supplies."),
-        _FakeMessage("AI Assessor",
-            "OCR confidence 76.5%. Pattern matches repeat plate CJ-99-ZZZ. Recommend admin review."),
-    ])
     return _sort_demo_fines(fines)
 
 
@@ -1488,14 +1506,37 @@ def verify_user(user_id, action):
 # Auth — Routes
 # ---------------------------------------------------------------------------
 
-def _start_2fa_or_login(user, *, remember=False):
-    if user.id > 0 and getattr(user, "twofa_enabled", False) and user.twofa_secret:
-        session["pending_2fa_user_id"] = user.id
-        session["pending_2fa_remember"] = remember
-        session["pending_2fa_exp"] = (_now() + timedelta(minutes=5)).timestamp()
-        return redirect(url_for("login_2fa"))
-    login_user(user, remember=remember)
-    return redirect(url_for("dashboard") if user.is_admin else "portal")
+def _pending_2fa_user():
+    """Resolve the user awaiting mock email verification."""
+    if session.get("pending_2fa_demo"):
+        role = session.get("pending_2fa_demo_role", "driver")
+        if role == "admin":
+            user = User(email="demo", password_hash="", license_plate="", role="admin", verification_status="approved")
+            user.id = -1
+            user.name = "Demo Admin"
+        else:
+            user = User(
+                email="demo",
+                password_hash="",
+                license_plate="B-123-MAB",
+                role="driver",
+                verification_status="approved",
+            )
+            user.id = -2
+            user.name = "Demo User"
+            user.plate_list = ["B123MAB"]
+        return user
+    return User.query.get(session.get("pending_2fa_user_id"))
+
+
+def _start_mock_login_2fa(user, *, remember=False):
+    session["pending_2fa_user_id"] = user.id
+    session["pending_2fa_remember"] = remember
+    session["pending_2fa_exp"] = (_now() + timedelta(minutes=5)).timestamp()
+    session["pending_2fa_email"] = getattr(user, "email", "") or "your email"
+    session["pending_2fa_demo"] = user.id < 0
+    session["pending_2fa_demo_role"] = "admin" if user.id == -1 else "driver"
+    return redirect(url_for("login_2fa"))
 
 
 @app.route("/admin/login", methods=["GET", "POST"])
@@ -1510,7 +1551,8 @@ def login():
     if request.method == "POST":
         form_action = request.form.get("form_action", "login")
         account_type = request.form.get("account_type", "driver")
-        email = request.form.get("email", "").lower().strip()
+        login_identifier = request.form.get("email", "").strip()
+        email = login_identifier.lower()
         password = request.form.get("password", "")
 
         if form_action == "signup":
@@ -1570,7 +1612,9 @@ def login():
             flash("Too many sign-in attempts. Please wait a few minutes.", "danger")
             return redirect(url_for("login"))
 
-        user = User.query.filter_by(email=email).first()
+        user = User.query.filter(db.func.lower(User.email) == email).first()
+        if not user and login_identifier:
+            user = User.query.filter(db.func.lower(User.name) == email).first()
 
         is_demo = email == "demo" and password == "demo123!"
         if is_demo:
@@ -1578,17 +1622,19 @@ def login():
                 demo_admin = User(email="demo", password_hash="", license_plate="", role="admin", verification_status="approved")
                 demo_admin.id = -1
                 demo_admin.name = "Demo Admin"
-                session["is_demo"] = True
-                login_user(demo_admin)
-                return redirect(url_for("dashboard"))
             else:
-                demo_user = User(email="demo", password_hash="", license_plate="B-123-MAB", role="driver", verification_status="approved")
-                demo_user.id = -2
-                demo_user.name = "Demo User"
-                demo_user.plate_list = ["B123MAB"]
-                session["is_demo"] = True
-                login_user(demo_user)
-                return redirect(url_for("portal"))
+                demo_admin = User(
+                    email="demo",
+                    password_hash="",
+                    license_plate="B-123-MAB",
+                    role="driver",
+                    verification_status="approved",
+                )
+                demo_admin.id = -2
+                demo_admin.name = "Demo User"
+                demo_admin.plate_list = ["B123MAB"]
+            session.pop("is_demo", None)
+            return _start_mock_login_2fa(demo_admin)
 
         session.pop("is_demo", None)
 
@@ -1607,10 +1653,10 @@ def login():
             elif account_type == "driver" and user.is_admin:
                 flash("Use the admin sign-in option for this account.", "danger")
             else:
-                return _start_2fa_or_login(user)
+                return _start_mock_login_2fa(user)
         else:
             security.record_failed_login()
-            flash("Invalid email or password.", "danger")
+            flash("Invalid username, email, or password.", "danger")
 
     return render_template("user_login.html")
 
@@ -1624,27 +1670,26 @@ def login_2fa():
         security.clear_pending_2fa()
         return redirect(url_for("login"))
 
-    user = User.query.get(session.get("pending_2fa_user_id"))
-    if not user or not user.twofa_enabled or not user.twofa_secret:
+    user = _pending_2fa_user()
+    if not user:
         security.clear_pending_2fa()
         return redirect(url_for("login"))
 
-    simulated_code = two_factor.current_code(user.twofa_secret) if config.SIMULATED_2FA_SHOW_CODE else None
+    masked_email = session.get("pending_2fa_email") or user.email or "your email"
 
     if request.method == "POST":
-        if two_factor.verify_code(user.twofa_secret, request.form.get("code", "")):
+        if two_factor.verify_mock_login_pin(request.form.get("code", "")):
             remember = bool(session.get("pending_2fa_remember"))
+            is_demo = bool(session.get("pending_2fa_demo"))
             security.clear_pending_2fa()
+            if is_demo:
+                session["is_demo"] = True
             login_user(user, remember=remember)
             flash("Signed in successfully.", "success")
             return redirect(url_for("dashboard") if user.is_admin else "portal")
         flash("Invalid verification code.", "danger")
 
-    return render_template(
-        "login_2fa.html",
-        simulated_code=simulated_code,
-        seconds_remaining=two_factor.seconds_remaining(),
-    )
+    return render_template("login_2fa.html", masked_email=masked_email)
 
 
 @app.route("/logout")
@@ -1850,7 +1895,7 @@ def api_register_user():
             user,
             config.NEW_USER_WELCOME_SPOTS,
             "welcome",
-            f"Welcome bonus ({config.NEW_USER_WELCOME_SPOTS} Spots)",
+            f"Welcome bonus ({config.NEW_USER_WELCOME_SPOTS} {config.WALLET_CURRENCY_NAME})",
         )
     db.session.commit()
     
@@ -1956,12 +2001,34 @@ def portal():
 
     if _is_demo():
         fines = [f for f in _demo_fines() if normalize_plate(f.expected_plate) in user_plates or normalize_plate(f.detected_plate) in user_plates]
-        return render_template("user_portal.html", fines=fines, user_plates=user_plates, is_demo=True)
+        portal_mapped = [
+            f for f in fines
+            if getattr(f, "device", None) and getattr(f.device, "latitude", None) is not None
+        ]
+        return render_template(
+            "user_portal.html",
+            fines=fines,
+            user_plates=user_plates,
+            stats=_portal_stats(fines),
+            portal_mapped=portal_mapped,
+            is_demo=True,
+        )
 
     fines = []
     if user_plates:
         fines = Fine.query.filter(Fine.expected_plate.in_(user_plates)).order_by(Fine.created_at.desc()).all()
-    return render_template("user_portal.html", fines=fines, user_plates=user_plates, is_demo=False)
+    portal_mapped = [
+        f for f in fines
+        if f.device and f.device.latitude is not None and f.device.longitude is not None
+    ]
+    return render_template(
+        "user_portal.html",
+        fines=fines,
+        user_plates=user_plates,
+        stats=_portal_stats(fines),
+        portal_mapped=portal_mapped,
+        is_demo=False,
+    )
 
 @app.route("/portal/settings", methods=["GET", "POST"])
 @login_required
@@ -2237,12 +2304,12 @@ def admin_handle_appeal(fine_id, action):
 @app.route("/fine/<int:fine_id>/chat", methods=["POST"])
 @login_required
 def add_chat_message(fine_id):
+    if not current_user.is_admin:
+        abort(404)
     if _is_demo():
         flash("Demo mode — no changes are saved.", "info")
-        return redirect(request.referrer or url_for("portal" if not current_user.is_admin else "dashboard"))
+        return redirect(request.referrer or url_for("dashboard"))
     fine = Fine.query.get_or_404(fine_id)
-    if not current_user.is_admin and not user_owns_plate(current_user, fine.expected_plate):
-        abort(403)
         
     content = request.form.get("message", "").strip()
     if not content and "attachment" not in request.files:
@@ -2325,7 +2392,7 @@ def wallet():
                 config.SUBSCRIPTION_MONTHLY_SPOTS,
                 "Monthly subscription activated",
             )
-            flash("Subscription activated. Monthly Spots have been added to your wallet.", "success")
+            flash(f"Subscription activated. Monthly {config.WALLET_CURRENCY_NAME.lower()} have been added to your wallet.", "success")
         except ValueError as exc:
             flash(str(exc), "danger")
 
@@ -2390,7 +2457,7 @@ def wallet_topup():
                     "Subscription via mock card",
                 )
                 flash(
-                    f"Subscription active. {config.SUBSCRIPTION_MONTHLY_SPOTS} Spots added to your wallet.",
+                    f"Subscription active. {config.SUBSCRIPTION_MONTHLY_SPOTS} {config.WALLET_CURRENCY_NAME.lower()} added to your wallet.",
                     "success",
                 )
             except ValueError as exc:
@@ -2407,7 +2474,7 @@ def wallet_topup():
                 commit=True,
             )
             n8n_events.on_wallet_event(current_user, "topup", added, f"Top-up {lei_amount} lei")
-            flash(f"Added {added} Spots to your wallet (mock payment).", "success")
+            flash(f"Added {added} {config.WALLET_CURRENCY_NAME.lower()} to your wallet (mock payment).", "success")
         except ValueError as exc:
             flash(str(exc), "danger")
         return redirect(url_for("wallet"))
@@ -2536,7 +2603,7 @@ def my_spots():
                 metadata=result,
                 commit=True,
             )
-            flash(f"Prices updated: {result.get('instant')} Spots/h instant.", "success")
+            flash(f"Prices updated: {result.get('instant')} {config.WALLET_CURRENCY_NAME.lower()}/h instant.", "success")
 
         elif action == "accept_suggestion":
             listing = SpotListing.query.filter_by(

@@ -49,7 +49,7 @@ def debit_spots(user: User, amount: int, kind: str, description: str, reference_
     if amount <= 0:
         raise ValueError("Debit amount must be positive")
     if user_balance(user) < amount:
-        raise ValueError("Insufficient Spots balance")
+        raise ValueError(f"Insufficient {config.WALLET_CURRENCY_NAME.lower()} balance")
     user.spots_balance = user_balance(user) - amount
     record_transaction(user, -amount, kind, description, reference_id)
     return user.spots_balance
@@ -234,11 +234,14 @@ def create_instant_booking(
 
     if listing.approval_mode == "auto":
         if user_balance(renter) < total:
-            raise ValueError("Insufficient Spots balance")
+            raise ValueError(f"Insufficient {config.WALLET_CURRENCY_NAME.lower()} balance")
         approve_booking(booking)
     else:
         if user_balance(renter) < total:
-            raise ValueError("Insufficient Spots balance — funds are checked again when the owner approves")
+            raise ValueError(
+                f"Insufficient {config.WALLET_CURRENCY_NAME.lower()} balance — "
+                "funds are checked again when the owner approves"
+            )
 
     db.session.commit()
     return booking
@@ -278,7 +281,7 @@ def create_scheduled_booking(
         raise ValueError("This spot is already reserved for part of that time")
 
     if user_balance(renter) < deposit:
-        raise ValueError("Insufficient Spots for the scheduling deposit")
+        raise ValueError(f"Insufficient {config.WALLET_CURRENCY_NAME.lower()} for the scheduling deposit")
 
     booking = SpotBooking(
         listing_id=listing.id,
@@ -321,7 +324,7 @@ def owner_approve_booking(booking: SpotBooking, owner: User) -> SpotBooking:
 
     owed = booking.total_spots - booking.paid_spots
     if owed > 0 and user_balance(booking.renter) < owed:
-        raise ValueError("Renter has insufficient Spots to complete payment")
+        raise ValueError(f"Renter has insufficient {config.WALLET_CURRENCY_NAME.lower()} to complete payment")
 
     approve_booking(booking)
     db.session.commit()
@@ -358,7 +361,7 @@ def mock_topup(user: User, lei_amount: int) -> int:
     spots = lei_to_spots(lei_amount)
     if spots <= 0:
         raise ValueError("Enter a positive amount")
-    credit_spots(user, spots, "topup", f"Top-up {lei_amount} lei ({spots} Spots)")
+    credit_spots(user, spots, "topup", f"Top-up {lei_amount} lei ({spots} {config.WALLET_CURRENCY_NAME})")
     db.session.commit()
     return spots
 
@@ -371,12 +374,12 @@ def activate_subscription(user: User) -> None:
 
     if user_balance(user) < spots_fee:
         raise ValueError(
-            f"You need at least {spots_fee} Spots ({fee} lei) on your balance to activate subscription, "
+            f"You need at least {spots_fee} {config.WALLET_CURRENCY_NAME.lower()} ({fee} lei) on your balance to activate subscription, "
             "or use the card checkout to pay in lei."
         )
 
     debit_spots(user, spots_fee, "subscription", f"Monthly subscription ({fee} lei)")
-    credit_spots(user, grant, "subscription_grant", f"Monthly Spots grant ({grant} Spots)")
+    credit_spots(user, grant, "subscription_grant", f"Monthly {config.WALLET_CURRENCY_NAME.lower()} grant ({grant} {config.WALLET_CURRENCY_NAME})")
     now = _utcnow()
     user.subscription_active = True
     if not user.subscription_started_at:
@@ -393,7 +396,7 @@ def subscribe_with_card_mock(user: User) -> None:
         user,
         grant,
         "subscription_grant",
-        f"Monthly subscription — {grant} Spots (mock card)",
+        f"Monthly subscription — {grant} {config.WALLET_CURRENCY_NAME} (mock card)",
     )
     user.subscription_active = True
     if not user.subscription_started_at:
@@ -413,7 +416,7 @@ def process_subscription_renewals():
         grant = config.SUBSCRIPTION_MONTHLY_SPOTS
         try:
             debit_spots(user, fee, "subscription", "Monthly subscription renewal")
-            credit_spots(user, grant, "subscription_grant", "Monthly Spots grant")
+            credit_spots(user, grant, "subscription_grant", f"Monthly {config.WALLET_CURRENCY_NAME.lower()} grant")
             user.subscription_next_billing_at = now + timedelta(days=30)
         except ValueError:
             user.subscription_active = False

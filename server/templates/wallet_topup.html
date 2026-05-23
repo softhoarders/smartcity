@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Spotflow — Buy Spots{% endblock %}
+{% block title %}Spotflow — Buy {{ currency_name }}{% endblock %}
 {% block content %}
 <div class="row justify-content-center mb-4">
     <div class="col-12 col-lg-6">
@@ -10,13 +10,13 @@
         <div class="mb-4 mt-2">
             <a href="{{ url_for('wallet') }}" class="text-secondary text-decoration-none small">← Back to wallet</a>
             <h1 class="h3 fw-bold mb-1 mt-2">
-                {% if plan == 'subscription' %}Monthly subscription{% else %}Buy Spots{% endif %}
+                {% if plan == 'subscription' %}Monthly subscription{% else %}Buy {{ currency_name }}{% endif %}
             </h1>
             <p class="text-secondary mb-0">
                 {% if plan == 'subscription' %}
-                Pay {{ subscription_monthly_lei }} lei and receive {{ subscription_monthly_spots }} Spots for the billing period.
+                Pay {{ subscription_monthly_lei }} lei and receive {{ subscription_monthly_spots }} {{ currency_name }} for the billing period.
                 {% else %}
-                Add Spots to your wallet using the demo card form below.
+                Add {{ currency_name }} to your wallet using the demo card form below.
                 {% endif %}
             </p>
         </div>
@@ -24,8 +24,8 @@
         <div class="alert alert-secondary border-0 mb-4 py-3">
             <p class="mb-1 fw-semibold">Pricing</p>
             <ul class="mb-0 small text-secondary ps-3">
-                <li><strong>1 Spot = 1 lei (RON)</strong></li>
-                <li>No commission or extra fees — the amount you enter is the Spots you receive.</li>
+                <li><strong>1 {{ currency_singular }} = 1 lei (RON)</strong></li>
+                <li>No commission or extra fees — the amount you enter is the {{ currency_name }} you receive.</li>
                 <li>No tax is calculated or added by Spotflow on top of your purchase.</li>
             </ul>
         </div>
@@ -39,7 +39,7 @@
                     <div class="mb-4">
                         <p class="mb-2">Monthly plan</p>
                         <p class="display-6 fw-bold mb-0">{{ subscription_monthly_lei }} <span class="fs-5 fw-semibold">lei</span></p>
-                        <p class="text-secondary small mb-0 mt-1">→ {{ subscription_monthly_spots }} Spots credited to your wallet</p>
+                        <p class="text-secondary small mb-0 mt-1">→ {{ subscription_monthly_spots }} {{ currency_name }} credited to your wallet</p>
                     </div>
                     <input type="hidden" name="lei_amount" value="{{ subscription_monthly_lei }}">
                     {% else %}
@@ -47,7 +47,7 @@
                         <label class="form-label">Amount to pay (lei)</label>
                         <input type="number" name="lei_amount" class="form-control" min="1" max="5000" value="50" required id="lei-input">
                         <div class="form-text">
-                            You will receive <strong><span id="spots-preview">50</span> Spots</strong> — same number as lei, no extras deducted.
+                            You will receive <strong><span id="credits-preview">50</span> {{ currency_name }}</strong> — same number as lei, no extras deducted.
                         </div>
                     </div>
                     {% endif %}
@@ -74,9 +74,9 @@
 
                     <button type="submit" class="btn btn-primary w-100">
                         {% if plan == 'subscription' %}
-                        Pay {{ subscription_monthly_lei }} lei — get {{ subscription_monthly_spots }} Spots
+                        Pay {{ subscription_monthly_lei }} lei — get {{ subscription_monthly_spots }} {{ currency_name }}
                         {% else %}
-                        Pay and add Spots
+                        Pay and add {{ currency_name }}
                         {% endif %}
                     </button>
                 </form>
@@ -94,7 +94,7 @@
 <script>
 document.addEventListener("DOMContentLoaded", () => {
     const lei = document.getElementById("lei-input");
-    const preview = document.getElementById("spots-preview");
+    const preview = document.getElementById("credits-preview");
     if (!lei || !preview) return;
     const sync = () => { preview.textContent = Math.max(1, parseInt(lei.value, 10) || 0); };
     lei.addEventListener("input", sync);

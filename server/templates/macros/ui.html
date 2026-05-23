@@ -1,0 +1,35 @@
+{% macro breadcrumb(items) %}
+<nav aria-label="Breadcrumb" class="pw-breadcrumb">
+    {% for item in items %}
+        {% if not loop.first %}<span class="pw-breadcrumb-sep" aria-hidden="true">/</span>{% endif %}
+        {% if loop.last %}
+        <span class="pw-breadcrumb-current" aria-current="page">{{ item.label }}</span>
+        {% else %}
+        <a href="{{ item.url }}">{{ item.label }}</a>
+        {% endif %}
+    {% endfor %}
+</nav>
+{% endmacro %}
+
+{% macro empty_state(title, description, cta_url=None, cta_label=None, secondary_url=None, secondary_label=None) %}
+<div class="pw-empty-state">
+    <div class="pw-empty-icon" aria-hidden="true">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="12" cy="12" r="9"/>
+            <path d="M12 8v4M12 16h.01"/>
+        </svg>
+    </div>
+    <h2 class="pw-empty-title">{{ title }}</h2>
+    <p class="pw-empty-desc">{{ description }}</p>
+    {% if cta_url or secondary_url %}
+    <div class="pw-empty-actions">
+        {% if cta_url %}
+        <a href="{{ cta_url }}" class="btn btn-primary btn-sm">{{ cta_label or 'Get started' }}</a>
+        {% endif %}
+        {% if secondary_url %}
+        <a href="{{ secondary_url }}" class="btn btn-outline-secondary btn-sm">{{ secondary_label or 'Learn more' }}</a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endmacro %}
