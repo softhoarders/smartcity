@@ -25,7 +25,14 @@ from dotenv import load_dotenv
 
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 import config
-from models import db, Device, Fine, User, UserPlate, PushSubscription, FineMessage
+from models import (
+    db, Device, Fine, User, UserPlate, PushSubscription, FineMessage,
+    SpotListing, SpotBooking, SpotTransaction, SpotActivityLog,
+)
+import spots_service
+import activity_log
+import pricing_engine
+import spot_prices
 from mailer import mail, PhotoMailerWorker
 from plate_document_verifier import verify_plate_registration_document, normalize_plate_for_claim
 import json
@@ -35,7 +42,7 @@ from pywebpush import webpush, WebPushException
 VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY")
 VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY")
 VAPID_CLAIMS = {
-    "sub": os.getenv("VAPID_SUBJECT", "mailto:admin@parkscan.com")
+    "sub": os.getenv("VAPID_SUBJECT", "mailto:admin@spotflow.com")
 }
 
 TERMINAL_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "terminal_config.yaml")
@@ -70,7 +77,13 @@ mail.init_app(app)
 
 @app.context_processor
 def inject_globals():
-    return {}
+    ctx = {"format_spots": spot_prices.format_tenths}
+    if current_user.is_authenticated and not getattr(current_user, "is_admin", False) and current_user.id > 0:
+        try:
+            ctx["nav_spots_balance"] = spots_service.user_balance(current_user)
+        except Exception:
+            ctx["nav_spots_balance"] = 0
+    return ctx
 
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -112,6 +125,58 @@ with app.app_context():
         if column_name not in plate_columns:
             db.session.execute(text(f"ALTER TABLE user_plates ADD COLUMN {column_name} {column_sql}"))
 
+    user_spots_columns = {
+        "spots_balance": "INTEGER NOT NULL DEFAULT 0",
+        "subscription_active": "BOOLEAN NOT NULL DEFAULT 0",
+        "subscription_started_at": "DATETIME",
+        "subscription_next_billing_at": "DATETIME",
+    }
+    for column_name, column_sql in user_spots_columns.items():
+        if column_name not in user_columns:
+            db.session.execute(text(f"ALTER TABLE users ADD COLUMN {column_name} {column_sql}"))
+
+    if "owner_user_id" not in device_columns:
+        db.session.execute(text("ALTER TABLE devices ADD COLUMN owner_user_id INTEGER"))
+
+    db.session.commit()
+    db.create_all()
+    inspector = inspect(db.engine)
+
+    listing_columns = set()
+    if inspector.has_table("spot_listings"):
+        listing_columns = {c["name"] for c in inspector.get_columns("spot_listings")}
+    listing_migrations = {
+        "instant_price_tenths": "INTEGER",
+        "schedule_price_tenths": "INTEGER",
+        "schedule_deposit_tenths": "INTEGER",
+        "pricing_mode": "VARCHAR(20) NOT NULL DEFAULT 'manual'",
+        "owner_min_tenths": f"INTEGER NOT NULL DEFAULT {config.PRICING_DEFAULT_MIN_TENTHS}",
+        "owner_max_tenths": f"INTEGER NOT NULL DEFAULT {config.PRICING_DEFAULT_MAX_TENTHS}",
+        "suggested_instant_tenths": "INTEGER",
+        "suggested_schedule_tenths": "INTEGER",
+        "dynamic_instant_tenths": "INTEGER",
+        "dynamic_schedule_tenths": "INTEGER",
+        "location_zone": "VARCHAR(30)",
+        "pricing_reason": "VARCHAR(500)",
+        "last_priced_at": "DATETIME",
+    }
+    for col, sql in listing_migrations.items():
+        if col not in listing_columns:
+            db.session.execute(text(f"ALTER TABLE spot_listings ADD COLUMN {col} {sql}"))
+
+    db.session.commit()
+
+    for listing in SpotListing.query.all():
+        if not listing.instant_price_tenths:
+            listing.instant_price_tenths = (listing.instant_price_per_hour or 10) * 10
+        if not listing.schedule_price_tenths:
+            listing.schedule_price_tenths = (listing.schedule_price_per_hour or 8) * 10
+        if not listing.schedule_deposit_tenths:
+            listing.schedule_deposit_tenths = (listing.schedule_deposit_spots or 5) * 10
+        if not listing.owner_min_tenths:
+            listing.owner_min_tenths = config.PRICING_DEFAULT_MIN_TENTHS
+        if not listing.owner_max_tenths:
+            listing.owner_max_tenths = config.PRICING_DEFAULT_MAX_TENTHS
     db.session.commit()
 
 # Start background mailer worker
@@ -134,6 +199,45 @@ def periodic_cleanup():
         time.sleep(86400) # Once a day
 
 threading.Thread(target=periodic_cleanup, daemon=True).start()
+
+
+def _periodic_pricing_refresh():
+    import time
+    while True:
+        time.sleep(config.PRICING_REFRESH_INTERVAL_SECONDS)
+        try:
+            with app.app_context():
+                n = pricing_engine.refresh_all_active_listings()
+                if n:
+                    activity_log.log_activity("pricing.batch_refresh", metadata={"count": n}, commit=True)
+        except Exception as exc:
+            print(f"[pricing] refresh error: {exc}")
+
+
+threading.Thread(target=_periodic_pricing_refresh, daemon=True).start()
+
+
+@app.after_request
+def _auto_log_portal_activity(response):
+    try:
+        if request.method != "GET":
+            return response
+        page = activity_log.AUTO_LOG_GET_ENDPOINTS.get(request.endpoint or "")
+        if not page:
+            return response
+        if not current_user.is_authenticated or getattr(current_user, "is_admin", False):
+            return response
+        if current_user.id <= 0 or _is_demo():
+            return response
+        activity_log.log_activity(
+            f"page.view.{page}",
+            user_id=current_user.id,
+            metadata={"path": request.path},
+            commit=True,
+        )
+    except Exception:
+        pass
+    return response
 
 # ---------------------------------------------------------------------------
 # Auth Helpers
@@ -527,7 +631,7 @@ def _demo_users():
         mu(5, "Cristina Munteanu", "cristina.munteanu@gmail.com", "B-441-PKR", "driver", "rejected", 20),
         mu(7, "Vlad Petrescu",     "vlad.petrescu@gmail.com",     "TM-88-XYZ", "driver", "approved", 14),
         mu(8, "Ioana Georgescu",   "ioana.g@company.ro",          "IF-99-KLM", "driver", "approved", 7),
-        mu(6, "Admin",             "admin@parkscan.ro",           "",           "admin",  "approved", 90),
+        mu(6, "Admin",             "admin@spotflow.ro",           "",           "admin",  "approved", 90),
     ]
     users[2].verification_document = "demo_id_elena.jpg"
     users[3].verification_document = "demo_registration_radu.pdf"
@@ -704,8 +808,11 @@ def api_get_device_config(mac):
     device = _get_device_by_mac(mac.upper())
     if device is None:
         return jsonify({"error": "Device not found"}), 404
+    spots_service.refresh_booking_statuses()
+    effective_plate = spots_service.effective_assigned_plate(device)
     return jsonify({
-        "assigned_plate": device.assigned_plate,
+        "assigned_plate": effective_plate,
+        "owner_plate": device.assigned_plate,
         "spot_label": device.spot_label,
         "name": device.name,
     }), 200
@@ -795,6 +902,11 @@ def api_report_fine():
     if device is None:
         return jsonify({"error": "Device not found"}), 404
 
+    spots_service.refresh_booking_statuses()
+    effective_expected = spots_service.effective_assigned_plate(device)
+    if not expected_plate and effective_expected:
+        expected_plate = normalize_plate(effective_expected)
+
     # Handle uploaded evidence image
     image_filename = None
     if "image" in request.files:
@@ -815,7 +927,7 @@ def api_report_fine():
     fine = Fine(
         device_id=device.id,
         detected_plate=detected_plate,
-        expected_plate=expected_plate or (device.assigned_plate or "N/A"),
+        expected_plate=expected_plate or normalize_plate(effective_expected or device.assigned_plate or "N/A"),
         image_filename=image_filename,
         first_seen=first_seen,
         last_seen=_now(),
@@ -1527,6 +1639,14 @@ def api_register_user():
     )
     
     db.session.add(user)
+    db.session.flush()
+    if config.NEW_USER_WELCOME_SPOTS > 0:
+        spots_service.credit_spots(
+            user,
+            config.NEW_USER_WELCOME_SPOTS,
+            "welcome",
+            f"Welcome bonus ({config.NEW_USER_WELCOME_SPOTS} Spots)",
+        )
     db.session.commit()
     
     return jsonify({"status": "ok", "message": "User registered"}), 201
@@ -1910,6 +2030,506 @@ def stream():
                 sse_clients.remove(q)
     return Response(event_stream(), content_type="text/event-stream")
 
+def _require_driver_portal():
+    if getattr(current_user, "is_admin", False) or current_user.id == 0:
+        return redirect(url_for("dashboard"))
+    return None
+
+
+@app.route("/portal/wallet", methods=["GET", "POST"])
+@login_required
+def wallet():
+    denied = _require_driver_portal()
+    if denied:
+        return denied
+    if _is_demo():
+        return render_template(
+            "wallet.html",
+            balance=120,
+            subscription_active=True,
+            subscription_next_billing=_now() + timedelta(days=18),
+            subscription_monthly_lei=config.SUBSCRIPTION_MONTHLY_LEI,
+            subscription_monthly_spots=config.SUBSCRIPTION_MONTHLY_SPOTS,
+            transactions=[],
+            is_demo=True,
+        )
+
+    spots_service.ensure_user_wallet(current_user)
+
+    if request.method == "POST" and request.form.get("action") == "subscribe_balance":
+        try:
+            spots_service.activate_subscription(current_user)
+            flash("Subscription activated. Monthly Spots have been added to your wallet.", "success")
+        except ValueError as exc:
+            flash(str(exc), "danger")
+
+    txs = (
+        SpotTransaction.query.filter_by(user_id=current_user.id)
+        .order_by(SpotTransaction.created_at.desc())
+        .limit(25)
+        .all()
+    )
+    return render_template(
+        "wallet.html",
+        balance=spots_service.user_balance(current_user),
+        subscription_active=current_user.subscription_active,
+        subscription_next_billing=current_user.subscription_next_billing_at,
+        subscription_monthly_lei=config.SUBSCRIPTION_MONTHLY_LEI,
+        subscription_monthly_spots=config.SUBSCRIPTION_MONTHLY_SPOTS,
+        transactions=txs,
+    )
+
+
+@app.route("/portal/wallet/topup", methods=["GET", "POST"])
+@login_required
+def wallet_topup():
+    denied = _require_driver_portal()
+    if denied:
+        return denied
+
+    plan = request.args.get("plan") or request.form.get("plan") or ""
+
+    if _is_demo():
+        if request.method == "POST":
+            flash("Demo mode — payment not processed.", "info")
+            return redirect(url_for("wallet"))
+        return render_template(
+            "wallet_topup.html",
+            plan=plan,
+            subscription_monthly_lei=config.SUBSCRIPTION_MONTHLY_LEI,
+            subscription_monthly_spots=config.SUBSCRIPTION_MONTHLY_SPOTS,
+            is_demo=True,
+        )
+
+    if request.method == "POST":
+        card_number = re.sub(r"\D", "", request.form.get("card_number", ""))
+        if len(card_number) < 13:
+            flash("Enter a valid demo card number.", "danger")
+            return redirect(url_for("wallet_topup", plan=plan))
+
+        if plan == "subscription":
+            try:
+                spots_service.subscribe_with_card_mock(current_user)
+                activity_log.log_activity(
+                    "wallet.subscription_card",
+                    user_id=current_user.id,
+                    metadata={"spots": config.SUBSCRIPTION_MONTHLY_SPOTS},
+                    commit=True,
+                )
+                flash(
+                    f"Subscription active. {config.SUBSCRIPTION_MONTHLY_SPOTS} Spots added to your wallet.",
+                    "success",
+                )
+            except ValueError as exc:
+                flash(str(exc), "danger")
+            return redirect(url_for("wallet"))
+
+        lei_amount = request.form.get("lei_amount", type=int) or 0
+        try:
+            added = spots_service.mock_topup(current_user, lei_amount)
+            activity_log.log_activity(
+                "wallet.topup",
+                user_id=current_user.id,
+                metadata={"lei": lei_amount, "spots": added},
+                commit=True,
+            )
+            flash(f"Added {added} Spots to your wallet (mock payment).", "success")
+        except ValueError as exc:
+            flash(str(exc), "danger")
+        return redirect(url_for("wallet"))
+
+    return render_template(
+        "wallet_topup.html",
+        plan=plan,
+        subscription_monthly_lei=config.SUBSCRIPTION_MONTHLY_LEI,
+        subscription_monthly_spots=config.SUBSCRIPTION_MONTHLY_SPOTS,
+    )
+
+
+@app.route("/portal/my-spots", methods=["GET", "POST"])
+@login_required
+def my_spots():
+    denied = _require_driver_portal()
+    if denied:
+        return denied
+
+    if _is_demo():
+        demo_devices = [d for d in _demo_devices() if d.id in (101, 102)]
+        owned = [{"device": d, "listing": None, "pending": []} for d in demo_devices[:1]]
+        return render_template(
+            "my_spots.html",
+            owned=owned,
+            claimable=[],
+            my_bookings=[],
+            default_instant_hourly=config.DEFAULT_INSTANT_PRICE_PER_HOUR,
+            default_schedule_deposit=config.DEFAULT_SCHEDULE_DEPOSIT,
+            default_schedule_hourly=config.DEFAULT_SCHEDULE_PRICE_PER_HOUR,
+            pricing_default_min=config.PRICING_DEFAULT_MIN_TENTHS / 10,
+            pricing_default_max=config.PRICING_DEFAULT_MAX_TENTHS / 10,
+            is_demo=True,
+        )
+
+    plates = user_plate_values(current_user)
+
+    if request.method == "POST":
+        action = request.form.get("action")
+
+        if action == "claim":
+            device_id = request.form.get("device_id", type=int)
+            device = Device.query.get_or_404(device_id)
+            if device.owner_user_id:
+                flash("This spot is already owned.", "warning")
+            elif normalize_plate(device.assigned_plate or "") not in plates:
+                flash("You can only claim spots assigned to your verified plates.", "danger")
+            else:
+                device.owner_user_id = current_user.id
+                db.session.commit()
+                activity_log.log_activity(
+                    "spot.claimed",
+                    user_id=current_user.id,
+                    device_id=device.id,
+                    metadata={"spot_label": device.spot_label},
+                    commit=True,
+                )
+                flash(f"You now own spot {device.spot_label}.", "success")
+
+        elif action == "save_listing":
+            device_id = request.form.get("device_id", type=int)
+            device = Device.query.filter_by(id=device_id, owner_user_id=current_user.id).first()
+            if not device:
+                flash("Spot not found.", "danger")
+            else:
+                listing = SpotListing.query.filter_by(device_id=device.id).first()
+                if not listing:
+                    listing = SpotListing(owner_id=current_user.id, device_id=device.id)
+                    db.session.add(listing)
+                listing.is_active = request.form.get("is_active") == "1"
+                listing.approval_mode = request.form.get("approval_mode", "auto")
+                listing.pricing_mode = request.form.get("pricing_mode", "manual")
+                listing.owner_min_tenths = spot_prices.parse_decimal_to_tenths(
+                    request.form.get("owner_min_price"),
+                    config.PRICING_DEFAULT_MIN_TENTHS,
+                )
+                listing.owner_max_tenths = spot_prices.parse_decimal_to_tenths(
+                    request.form.get("owner_max_price"),
+                    config.PRICING_DEFAULT_MAX_TENTHS,
+                )
+                if listing.owner_min_tenths > listing.owner_max_tenths:
+                    listing.owner_max_tenths = listing.owner_min_tenths
+
+                instant_tenths = spot_prices.parse_decimal_to_tenths(
+                    request.form.get("instant_price"),
+                    (listing.instant_price_per_hour or 10) * 10,
+                )
+                schedule_tenths = spot_prices.parse_decimal_to_tenths(
+                    request.form.get("schedule_price"),
+                    (listing.schedule_price_per_hour or 8) * 10,
+                )
+                deposit_tenths = spot_prices.parse_decimal_to_tenths(
+                    request.form.get("schedule_deposit"),
+                    (listing.schedule_deposit_spots or 5) * 10,
+                )
+                listing.instant_price_tenths = max(listing.owner_min_tenths, min(listing.owner_max_tenths, instant_tenths))
+                listing.schedule_price_tenths = max(listing.owner_min_tenths, min(listing.owner_max_tenths, schedule_tenths))
+                listing.schedule_deposit_tenths = deposit_tenths
+                listing.instant_price_per_hour = (listing.instant_price_tenths + 9) // 10
+                listing.schedule_price_per_hour = (listing.schedule_price_tenths + 9) // 10
+                listing.schedule_deposit_spots = (deposit_tenths + 9) // 10
+                listing.description = (request.form.get("description") or "").strip() or None
+                listing.updated_at = _now()
+                db.session.commit()
+                activity_log.log_activity(
+                    "listing.updated",
+                    user_id=current_user.id,
+                    listing_id=listing.id,
+                    device_id=device.id,
+                    metadata={"pricing_mode": listing.pricing_mode, "is_active": listing.is_active},
+                    commit=True,
+                )
+                if listing.pricing_mode in ("auto", "suggest"):
+                    pricing_engine.refresh_listing_prices(listing)
+                flash("Listing saved.", "success")
+
+        elif action == "refresh_pricing":
+            listing = SpotListing.query.filter_by(
+                id=request.form.get("listing_id", type=int),
+                owner_id=current_user.id,
+            ).first_or_404()
+            result = pricing_engine.refresh_listing_prices(listing)
+            activity_log.log_activity(
+                "pricing.refreshed",
+                user_id=current_user.id,
+                listing_id=listing.id,
+                device_id=listing.device_id,
+                metadata=result,
+                commit=True,
+            )
+            flash(f"Prices updated: {result.get('instant')} Spots/h instant.", "success")
+
+        elif action == "accept_suggestion":
+            listing = SpotListing.query.filter_by(
+                id=request.form.get("listing_id", type=int),
+                owner_id=current_user.id,
+            ).first_or_404()
+            try:
+                pricing_engine.accept_suggestion(listing)
+                activity_log.log_activity(
+                    "pricing.suggestion_accepted",
+                    user_id=current_user.id,
+                    listing_id=listing.id,
+                    commit=True,
+                )
+                flash("Suggested prices applied to your listing.", "success")
+            except ValueError as exc:
+                flash(str(exc), "danger")
+
+        elif action == "approve_booking":
+            booking = SpotBooking.query.get_or_404(request.form.get("booking_id", type=int))
+            try:
+                spots_service.owner_approve_booking(booking, current_user)
+                activity_log.log_activity(
+                    "booking.approved",
+                    user_id=current_user.id,
+                    listing_id=booking.listing_id,
+                    booking_id=booking.id,
+                    commit=True,
+                )
+                flash("Booking approved. The renter can park during the reserved window.", "success")
+            except ValueError as exc:
+                flash(str(exc), "danger")
+
+        elif action == "reject_booking":
+            booking = SpotBooking.query.get_or_404(request.form.get("booking_id", type=int))
+            try:
+                spots_service.owner_reject_booking(booking, current_user)
+                activity_log.log_activity(
+                    "booking.rejected",
+                    user_id=current_user.id,
+                    listing_id=booking.listing_id,
+                    booking_id=booking.id,
+                    commit=True,
+                )
+                flash("Booking rejected and deposit refunded if applicable.", "info")
+            except ValueError as exc:
+                flash(str(exc), "danger")
+
+        return redirect(url_for("my_spots"))
+
+    owned_devices = Device.query.filter_by(owner_user_id=current_user.id).all()
+    owned = []
+    for device in owned_devices:
+        listing = SpotListing.query.filter_by(device_id=device.id).first()
+        pending = []
+        if listing:
+            pending = (
+                SpotBooking.query.filter_by(listing_id=listing.id, status="pending_approval")
+                .order_by(SpotBooking.starts_at.asc())
+                .all()
+            )
+        if listing and listing.pricing_mode in ("auto", "suggest"):
+            pricing_engine.refresh_listing_prices(listing, commit=False)
+        owned.append({
+            "device": device,
+            "listing": listing,
+            "pending": pending,
+            "instant_display": spot_prices.format_tenths(
+                spot_prices.effective_instant_tenths(listing) if listing else None
+            ),
+            "schedule_display": spot_prices.format_tenths(
+                spot_prices.effective_schedule_tenths(listing) if listing else None
+            ),
+        })
+    db.session.commit()
+
+    claimable = []
+    if plates:
+        candidates = Device.query.filter(Device.owner_user_id.is_(None)).order_by(Device.spot_label.asc()).all()
+        claimable = [
+            d for d in candidates
+            if normalize_plate(d.assigned_plate or "") in plates
+        ]
+
+    listing_ids = [item["listing"].id for item in owned if item["listing"]]
+    my_bookings = []
+    if listing_ids:
+        my_bookings = (
+            SpotBooking.query.filter(SpotBooking.listing_id.in_(listing_ids))
+            .order_by(SpotBooking.created_at.desc())
+            .limit(20)
+            .all()
+        )
+
+    return render_template(
+        "my_spots.html",
+        owned=owned,
+        claimable=claimable,
+        my_bookings=my_bookings,
+        default_instant_hourly=config.DEFAULT_INSTANT_PRICE_PER_HOUR,
+        default_schedule_deposit=config.DEFAULT_SCHEDULE_DEPOSIT,
+        default_schedule_hourly=config.DEFAULT_SCHEDULE_PRICE_PER_HOUR,
+        pricing_default_min=config.PRICING_DEFAULT_MIN_TENTHS / 10,
+        pricing_default_max=config.PRICING_DEFAULT_MAX_TENTHS / 10,
+    )
+
+
+@app.route("/portal/find-parking", methods=["GET", "POST"])
+@login_required
+def find_parking():
+    denied = _require_driver_portal()
+    if denied:
+        return denied
+
+    user_plates = user_plate_values(current_user)
+
+    if _is_demo():
+        listings = []
+        return render_template(
+            "find_parking.html",
+            listings=listings,
+            user_plates=user_plates or ["B123MAB"],
+            balance=120,
+            renter_bookings=[],
+            mapped=False,
+            is_demo=True,
+        )
+
+    spots_service.ensure_user_wallet(current_user)
+
+    if request.method == "POST":
+        if not user_plates:
+            flash("Add a verified plate in account settings before booking.", "warning")
+            return redirect(url_for("find_parking"))
+
+        listing_id = request.form.get("listing_id", type=int)
+        listing = SpotListing.query.filter_by(id=listing_id, is_active=True).first()
+        if not listing:
+            flash("Listing not found or inactive.", "danger")
+            return redirect(url_for("find_parking"))
+
+        renter_plate = normalize_plate(request.form.get("renter_plate", ""))
+        if renter_plate not in user_plates:
+            flash("Select one of your verified plates.", "danger")
+            return redirect(url_for("find_parking"))
+
+        action = request.form.get("action")
+        try:
+            if action == "instant_book":
+                hours = request.form.get("hours", type=int) or config.MIN_INSTANT_HOURS
+                activity_log.log_activity(
+                    "booking.instant_attempt",
+                    user_id=current_user.id,
+                    listing_id=listing.id,
+                    device_id=listing.device_id,
+                    metadata={"hours": hours, "plate": renter_plate},
+                    commit=True,
+                )
+                booking = spots_service.create_instant_booking(
+                    listing, current_user, renter_plate, hours
+                )
+                activity_log.log_activity(
+                    "booking.instant_created",
+                    user_id=current_user.id,
+                    listing_id=listing.id,
+                    booking_id=booking.id,
+                    metadata={"status": booking.status, "total_spots": booking.total_spots},
+                    commit=True,
+                )
+                if booking.status == "active":
+                    flash("Paid and confirmed. You can park now — your plate is authorized for this spot.", "success")
+                elif booking.status == "pending_approval":
+                    flash("Payment reserved. Waiting for the owner to approve your booking.", "info")
+                else:
+                    flash("Booking confirmed.", "success")
+            elif action == "schedule_book":
+                starts_raw = request.form.get("starts_at", "")
+                ends_raw = request.form.get("ends_at", "")
+                try:
+                    starts_at = datetime.fromisoformat(starts_raw)
+                    ends_at = datetime.fromisoformat(ends_raw)
+                except ValueError:
+                    flash("Invalid date/time.", "danger")
+                    return redirect(url_for("find_parking"))
+                if starts_at.tzinfo is None:
+                    starts_at = starts_at.replace(tzinfo=timezone.utc)
+                if ends_at.tzinfo is None:
+                    ends_at = ends_at.replace(tzinfo=timezone.utc)
+                activity_log.log_activity(
+                    "booking.schedule_attempt",
+                    user_id=current_user.id,
+                    listing_id=listing.id,
+                    device_id=listing.device_id,
+                    metadata={"starts": starts_raw, "ends": ends_raw},
+                    commit=True,
+                )
+                booking = spots_service.create_scheduled_booking(
+                    listing, current_user, renter_plate, starts_at, ends_at
+                )
+                activity_log.log_activity(
+                    "booking.schedule_created",
+                    user_id=current_user.id,
+                    listing_id=listing.id,
+                    booking_id=booking.id,
+                    metadata={"status": booking.status, "total_spots": booking.total_spots},
+                    commit=True,
+                )
+                if booking.status == "active":
+                    flash("Reservation confirmed. You can park during your scheduled window.", "success")
+                elif booking.status == "approved":
+                    flash("Reservation confirmed for your selected time.", "success")
+                else:
+                    flash("Deposit paid. Waiting for owner approval.", "info")
+            else:
+                flash("Unknown action.", "danger")
+        except ValueError as exc:
+            flash(str(exc), "danger")
+        return redirect(url_for("find_parking"))
+
+    active_listings = (
+        SpotListing.query.filter_by(is_active=True)
+        .join(Device)
+        .order_by(Device.spot_label.asc())
+        .all()
+    )
+    listings = []
+    for lst in active_listings:
+        if lst.owner_id == current_user.id:
+            continue
+        if lst.pricing_mode in ("auto", "suggest"):
+            pricing_engine.refresh_listing_prices(lst, commit=False)
+        listings.append({
+            "listing": lst,
+            "device": lst.device,
+            "instant_display": spot_prices.format_tenths(spot_prices.effective_instant_tenths(lst)),
+            "schedule_display": spot_prices.format_tenths(spot_prices.effective_schedule_tenths(lst)),
+            "deposit_display": spot_prices.format_tenths(spot_prices.effective_deposit_tenths(lst)),
+        })
+        activity_log.log_activity(
+            "listing.card_view",
+            user_id=current_user.id,
+            listing_id=lst.id,
+            device_id=lst.device_id,
+            commit=False,
+        )
+    db.session.commit()
+    mapped = any(item["device"].latitude for item in listings)
+
+    renter_bookings = (
+        SpotBooking.query.filter_by(renter_id=current_user.id)
+        .order_by(SpotBooking.created_at.desc())
+        .limit(15)
+        .all()
+    )
+
+    return render_template(
+        "find_parking.html",
+        listings=listings,
+        user_plates=user_plates,
+        balance=spots_service.user_balance(current_user),
+        renter_bookings=renter_bookings,
+        mapped=mapped,
+    )
+
+
 @app.route("/portal/fine/<int:fine_id>/receipt", methods=["GET"])
 @login_required
 def receipt(fine_id):
@@ -1927,7 +2547,7 @@ def receipt(fine_id):
     <!DOCTYPE html>
     <html>
     <head>
-        <title>ParkScan Receipt - {fine.id}</title>
+        <title>Spotflow Receipt - {fine.id}</title>
         <style>
             body {{ font-family: -apple-system, sans-serif; padding: 40px; color: #333; }}
             .header {{ font-size: 24px; font-weight: bold; margin-bottom: 20px; border-bottom: 2px solid #eee; padding-bottom: 10px; }}
@@ -1937,7 +2557,7 @@ def receipt(fine_id):
         </style>
     </head>
     <body onload="window.print()">
-        <div class="header">ParkScan - Official Resolution Receipt</div>
+        <div class="header">Spotflow - Official Resolution Receipt</div>
         <div class="details">
             <p><strong>Driver Name:</strong> {current_user.name}</p>
             <p><strong>Expected Plate:</strong> {fine.expected_plate}</p>

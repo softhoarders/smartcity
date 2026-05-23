@@ -16,7 +16,7 @@ def generate_keys():
     with open(".env", "a") as f:
         f.write(f"\nVAPID_PRIVATE_KEY={private_key}\n")
         f.write(f"VAPID_PUBLIC_KEY={public_key}\n")
-        f.write(f"VAPID_SUBJECT=mailto:admin@parkscan.com\n")
+        f.write(f"VAPID_SUBJECT=mailto:admin@spotflow.com\n")
     
     print("VAPID keys generated and stored in .env")
 

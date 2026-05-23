@@ -25,11 +25,11 @@
         }
 
         leafletReady = new Promise((resolve, reject) => {
-            if (!document.querySelector("link[data-parkscan-leaflet]")) {
+            if (!document.querySelector("link[data-spotflow-leaflet]")) {
                 const link = document.createElement("link");
                 link.rel = "stylesheet";
                 link.href = LEAFLET_CSS;
-                link.dataset.parkscanLeaflet = "1";
+                link.dataset.spotflowLeaflet = "1";
                 document.head.appendChild(link);
             }
 
@@ -64,9 +64,9 @@
             const L = await loadLeaflet();
             container.classList.add("pw-map-host", "pw-map-surface");
 
-            if (container._parkscanMap) {
-                container._parkscanMap.remove();
-                container._parkscanMap = null;
+            if (container._spotflowMap) {
+                container._spotflowMap.remove();
+                container._spotflowMap = null;
             }
 
             const map = L.map(container, {
@@ -80,7 +80,7 @@
                 subdomains: "abcd",
             }).addTo(map);
 
-            container._parkscanMap = map;
+            container._spotflowMap = map;
 
             const safeMarkers = (markers || []).filter((m) => m.lat != null && m.lng != null);
             const bounds = [];
@@ -113,14 +113,14 @@
             setTimeout(() => map.invalidateSize(), 120);
             return map;
         } catch (error) {
-            console.error("[ParkScanMaps]", error);
+            console.error("[SpotflowMaps]", error);
             container.innerHTML =
                 '<div class="pw-map-fallback">Map could not be loaded. Check your network connection.</div>';
             return null;
         }
     }
 
-    window.ParkScanMaps = {
+    window.SpotflowMaps = {
         STATUS_COLORS,
         render,
     };

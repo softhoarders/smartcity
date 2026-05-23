@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}ParkScan — My Fines{% endblock %}
+{% block title %}Spotflow — My Fines{% endblock %}
 
 {% block content %}
 <div class="row justify-content-center mb-4">
@@ -24,7 +24,11 @@
                     {% endif %}
                 </div>
             </div>
-            <a href="{{ url_for('account_settings') }}" class="btn btn-outline-primary">Account settings</a>
+            <div class="d-flex flex-wrap gap-2">
+                <a href="{{ url_for('find_parking') }}" class="btn btn-primary">Find parking</a>
+                <a href="{{ url_for('wallet') }}" class="btn btn-outline-primary">Wallet</a>
+                <a href="{{ url_for('account_settings') }}" class="btn btn-outline-secondary">Account</a>
+            </div>
         </div>
 
         {% if not user_plates %}
@@ -195,7 +199,7 @@
             seen.add(key);
             return true;
         });
-        ParkScanMaps.render("portal-map", markers);
+        SpotflowMaps.render("portal-map", markers);
     });
 </script>
 {% endif %}

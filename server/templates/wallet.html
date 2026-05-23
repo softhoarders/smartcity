@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Spotflow — Spots Wallet{% endblock %}
+{% block content %}
+<div class="row justify-content-center mb-4">
+    <div class="col-12 col-lg-8">
+        {% if is_demo is defined and is_demo %}
+        <div class="demo-banner mb-4"><strong>Demo Mode</strong> — Wallet changes are not saved.</div>
+        {% endif %}
+
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 mt-2 gap-3">
+            <div>
+                <h1 class="h3 fw-bold mb-1">Spots Wallet</h1>
+                <p class="text-secondary mb-0">Pay for parking and subscriptions with Spots.</p>
+            </div>
+            <a href="{{ url_for('wallet_topup') }}" class="btn btn-primary">Buy Spots</a>
+        </div>
+
+        <div class="alert alert-secondary border-0 mb-4 py-3">
+            <p class="mb-1 fw-semibold">How Spots work</p>
+            <ul class="mb-0 small text-secondary ps-3">
+                <li><strong>1 Spot = 1 lei (RON)</strong> — the rate is fixed and transparent.</li>
+                <li>No commission, no platform fee, and no tax added on top when you buy or spend Spots.</li>
+                <li>What you pay in lei is exactly what lands in your wallet (e.g. 50 lei → 50 Spots).</li>
+            </ul>
+        </div>
+
+        <div class="row g-3 mb-4">
+            <div class="col-md-6">
+                <div class="card pw-card border-0 h-100">
+                    <div class="card-body p-4">
+                        <p class="text-secondary small mb-1">Your balance</p>
+                        <p class="display-6 fw-bold mb-0 text-primary">{{ balance }} <span class="fs-5 fw-semibold">Spots</span></p>
+                        <p class="text-secondary small mb-0 mt-2">≈ {{ balance }} lei</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card pw-card border-0 h-100">
+                    <div class="card-body p-4">
+                        <p class="text-secondary small mb-1">Monthly subscription</p>
+                        {% if subscription_active %}
+                        <p class="fw-semibold mb-1 text-success">Active</p>
+                        <p class="small text-secondary mb-3">
+                            {{ subscription_monthly_lei }} lei / month — includes {{ subscription_monthly_spots }} Spots each cycle.
+                            {% if subscription_next_billing %}Next renewal: {{ subscription_next_billing.strftime('%d %b %Y') }}{% endif %}
+                        </p>
+                        {% else %}
+                        <p class="fw-semibold mb-1">Not subscribed</p>
+                        <p class="small text-secondary mb-3">
+                            Pay {{ subscription_monthly_lei }} lei per month and receive {{ subscription_monthly_spots }} Spots at the start of each billing cycle.
+                        </p>
+                        {% endif %}
+                        {% if not (is_demo is defined and is_demo) %}
+                        <div class="d-flex flex-wrap gap-2">
+                            <form method="POST" action="{{ url_for('wallet') }}" class="m-0">
+                                <input type="hidden" name="action" value="subscribe_balance">
+                                <button type="submit" class="btn btn-outline-primary btn-sm" {% if balance < subscription_monthly_lei %}disabled title="Need enough Spots on balance"{% endif %}>
+                                    Pay from balance
+                                </button>
+                            </form>
+                            <a href="{{ url_for('wallet_topup') }}?plan=subscription" class="btn btn-primary btn-sm">Subscribe ({{ subscription_monthly_lei }} lei)</a>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card pw-card border-0">
+            <div class="card-body p-4">
+                <h2 class="h5 fw-bold mb-3">Recent activity</h2>
+                {% if transactions %}
+                <div class="table-responsive">
+                    <table class="table pw-table mb-0">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Description</th>
+                                <th class="text-end">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for tx in transactions %}
+                            <tr>
+                                <td class="text-secondary small">{{ tx.created_at.strftime('%d %b %Y %H:%M') if tx.created_at else '—' }}</td>
+                                <td>{{ tx.description }}</td>
+                                <td class="text-end fw-medium {% if tx.amount > 0 %}text-success{% else %}text-danger{% endif %}">
+                                    {% if tx.amount > 0 %}+{% endif %}{{ tx.amount }}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-secondary mb-0">No transactions yet.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

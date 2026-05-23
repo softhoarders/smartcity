@@ -1,11 +1,9 @@
-# ParkWatch / ParkScan Smart City Parking Monitor
+# Spotflow — Smart City Parking
 
-ParkWatch is a smart parking monitoring system with two deployable parts:
+**Spotflow** is the user-facing product for smart parking: monitoring bays, renting spots, Spots wallet payments, and fair appeals. Under the hood it uses a **ParkWatch** server and Raspberry Pi clients:
 
-- `server/`: a Flask web application for administrators and drivers.
-- `client/`: a Raspberry Pi parking-spot monitor that captures vehicle images, reads license plates, and reports mismatches.
-
-The user-facing web product is branded as ParkScan in the templates and PWA metadata. The code and services use the ParkWatch name in several places.
+- `server/`: Flask web application for administrators and drivers (branded Spotflow in the UI).
+- `client/`: Raspberry Pi monitor that captures images, reads license plates, and reports mismatches.
 
 ## What It Does
 

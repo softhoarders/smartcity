@@ -1,6 +1,6 @@
 {
-  "name": "ParkScan Monitoring",
-  "short_name": "ParkScan",
+  "name": "Spotflow Monitoring",
+  "short_name": "Spotflow",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#F5F5F7",

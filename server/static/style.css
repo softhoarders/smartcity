@@ -1,4 +1,4 @@
-/* ===== ParkScan — Apple Style Theme ===== */
+/* ===== Spotflow — Apple Style Theme ===== */
 
 :root {
     --pw-bg: #0a0c12;
@@ -21,9 +21,9 @@
     --pw-radius: 16px;
     --pw-radius-sm: 8px;
     --pw-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
-    --pw-map-height-hero: min(52vh, 480px);
-    --pw-map-height-lg: 400px;
-    --pw-map-height-md: 280px;
+    --pw-map-height-hero: min(70vh, 640px);
+    --pw-map-height-lg: 560px;
+    --pw-map-height-md: 440px;
 }
 
 .terminal-body {
@@ -1045,7 +1045,7 @@ h1, h2, h3, h4, h5, h6, .fw-bold {
 
 .pw-map-frame--hero {
     height: var(--pw-map-height-hero);
-    min-height: 380px;
+    min-height: 480px;
     margin-bottom: 1.25rem;
 }
 

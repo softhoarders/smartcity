@@ -1,6 +1,6 @@
 # Architecture
 
-ParkWatch / ParkScan is split into a server-side operations portal and one or more edge clients installed at parking spots.
+**Spotflow** (web app) and the **ParkWatch** backend are split into a server-side operations portal and one or more edge clients installed at parking spots.
 
 ## Components
 

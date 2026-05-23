@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}ParkScan — Account Settings{% endblock %}
+{% block title %}Spotflow — Account Settings{% endblock %}
 {% block content %}
 <div class="row justify-content-center mb-4">
     <div class="col-12 col-lg-8">
@@ -14,7 +14,11 @@
                 <h1 class="h3 fw-bold mb-1">Account Settings</h1>
                 <p class="text-secondary mb-0">Manage your profile and verified license plates.</p>
             </div>
-            <a href="{{ url_for('portal') }}" class="btn btn-outline-secondary mt-3 mt-md-0">Back to portal</a>
+            <div class="d-flex flex-wrap gap-2 mt-3 mt-md-0">
+                <a href="{{ url_for('wallet') }}" class="btn btn-outline-primary">Spots wallet</a>
+                <a href="{{ url_for('my_spots') }}" class="btn btn-outline-secondary">My spots</a>
+                <a href="{{ url_for('portal') }}" class="btn btn-outline-secondary">Back to portal</a>
+            </div>
         </div>
 
         <div class="card pw-card border-0 mb-4">

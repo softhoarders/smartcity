@@ -1,9 +1,10 @@
 # Documentation Index
 
-This directory contains the detailed project documentation for ParkWatch / ParkScan.
+This directory contains the detailed project documentation for **Spotflow** (user-facing) and **ParkWatch** (internal/server naming).
 
 ## Read These First
 
+- [Product Overview](PRODUCT_OVERVIEW.md): non-technical guide to what Spotflow is and who it serves (~5 pages).
 - [Architecture](ARCHITECTURE.md): how the server, client, database, OCR, notifications, and appeals fit together.
 - [Deployment](DEPLOYMENT.md): how to install and run the server and Raspberry Pi client.
 - [API Reference](API.md): device, fine, user, push, stream, and page routes.

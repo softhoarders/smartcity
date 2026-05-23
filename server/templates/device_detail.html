@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}ParkScan - {{ device.name }}{% endblock %}
+{% block title %}Spotflow - {{ device.name }}{% endblock %}
 
 {% block content %}
 <div class="admin-page">
@@ -234,7 +234,7 @@
 {{ park_map_assets() }}
 <script>
     document.addEventListener("DOMContentLoaded", function () {
-        ParkScanMaps.render("device-map", [{
+        SpotflowMaps.render("device-map", [{
             lat: {{ device.latitude }},
             lng: {{ device.longitude }},
             title: {{ device.name | tojson }},

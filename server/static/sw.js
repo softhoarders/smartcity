@@ -1,5 +1,5 @@
 self.addEventListener('push', function(event) {
-    let payload = { title: "ParkScan Notification", body: "You have a new update." };
+    let payload = { title: "Spotflow Notification", body: "You have a new update." };
 
     if (event.data) {
         try {

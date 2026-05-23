@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}ParkScan - Analytics{% endblock %}
+{% block title %}Spotflow - Analytics{% endblock %}
 
 {% block content %}
 <div class="admin-page">
@@ -154,7 +154,7 @@
             }{% if not loop.last %},{% endif %}
             {% endfor %}
         ];
-        ParkScanMaps.render("analytics-map", markers);
+        SpotflowMaps.render("analytics-map", markers);
     });
 </script>
 {% endif %}

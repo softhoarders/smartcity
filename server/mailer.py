@@ -83,7 +83,7 @@ class PhotoMailerWorker(threading.Thread):
         out_path = os.path.join(config.MOCK_MAIL_DIR, filename)
         with open(out_path, "w") as f:
             f.write(f"To: {email}\n")
-            f.write(f"Subject: ParkScan: Photographic Evidence for Fine #{fine.id}\n")
+            f.write(f"Subject: Spotflow: Photographic Evidence for Fine #{fine.id}\n")
             f.write(f"Attachment: {os.path.basename(filepath)}\n")
             f.write(f"Message: Attached is the photographic evidence requested.\n")
         print(f"[MAILER-MOCK] Saved mock email to {out_path}")
@@ -91,7 +91,7 @@ class PhotoMailerWorker(threading.Thread):
     def _real_send(self, fine, email, filepath):
         """Send a real email using Flask-Mail"""
         msg = Message(
-            f"ParkScan: Photographic Evidence for Fine #{fine.id}",
+            f"Spotflow: Photographic Evidence for Fine #{fine.id}",
             sender=config.MAIL_DEFAULT_SENDER,
             recipients=[email]
         )

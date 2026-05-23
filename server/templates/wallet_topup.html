@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Spotflow — Buy Spots{% endblock %}
+{% block content %}
+<div class="row justify-content-center mb-4">
+    <div class="col-12 col-lg-6">
+        {% if is_demo is defined and is_demo %}
+        <div class="demo-banner mb-4"><strong>Demo Mode</strong> — Payments are simulated; no real money is charged.</div>
+        {% endif %}
+
+        <div class="mb-4 mt-2">
+            <a href="{{ url_for('wallet') }}" class="text-secondary text-decoration-none small">← Back to wallet</a>
+            <h1 class="h3 fw-bold mb-1 mt-2">
+                {% if plan == 'subscription' %}Monthly subscription{% else %}Buy Spots{% endif %}
+            </h1>
+            <p class="text-secondary mb-0">
+                {% if plan == 'subscription' %}
+                Pay {{ subscription_monthly_lei }} lei and receive {{ subscription_monthly_spots }} Spots for the billing period.
+                {% else %}
+                Add Spots to your wallet using the demo card form below.
+                {% endif %}
+            </p>
+        </div>
+
+        <div class="alert alert-secondary border-0 mb-4 py-3">
+            <p class="mb-1 fw-semibold">Pricing</p>
+            <ul class="mb-0 small text-secondary ps-3">
+                <li><strong>1 Spot = 1 lei (RON)</strong></li>
+                <li>No commission or extra fees — the amount you enter is the Spots you receive.</li>
+                <li>No tax is calculated or added by Spotflow on top of your purchase.</li>
+            </ul>
+        </div>
+
+        <div class="card pw-card border-0">
+            <div class="card-body p-4">
+                <form method="POST" action="{{ url_for('wallet_topup') }}" id="topup-form">
+                    <input type="hidden" name="plan" value="{{ plan or '' }}">
+
+                    {% if plan == 'subscription' %}
+                    <div class="mb-4">
+                        <p class="mb-2">Monthly plan</p>
+                        <p class="display-6 fw-bold mb-0">{{ subscription_monthly_lei }} <span class="fs-5 fw-semibold">lei</span></p>
+                        <p class="text-secondary small mb-0 mt-1">→ {{ subscription_monthly_spots }} Spots credited to your wallet</p>
+                    </div>
+                    <input type="hidden" name="lei_amount" value="{{ subscription_monthly_lei }}">
+                    {% else %}
+                    <div class="mb-3">
+                        <label class="form-label">Amount to pay (lei)</label>
+                        <input type="number" name="lei_amount" class="form-control" min="1" max="5000" value="50" required id="lei-input">
+                        <div class="form-text">
+                            You will receive <strong><span id="spots-preview">50</span> Spots</strong> — same number as lei, no extras deducted.
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <p class="fw-semibold small text-secondary mb-3">Payment details (demo only)</p>
+                    <div class="mb-3">
+                        <label class="form-label">Name on card</label>
+                        <input type="text" name="card_name" class="form-control" placeholder="Maria Popescu" required autocomplete="cc-name">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Card number</label>
+                        <input type="text" name="card_number" class="form-control" placeholder="4242 4242 4242 4242" maxlength="19" required autocomplete="cc-number">
+                    </div>
+                    <div class="row g-3 mb-4">
+                        <div class="col-6">
+                            <label class="form-label">Expiry</label>
+                            <input type="text" name="card_expiry" class="form-control" placeholder="12/28" required autocomplete="cc-exp">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">CVC</label>
+                            <input type="text" name="card_cvc" class="form-control" placeholder="123" maxlength="4" required autocomplete="cc-csc">
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100">
+                        {% if plan == 'subscription' %}
+                        Pay {{ subscription_monthly_lei }} lei — get {{ subscription_monthly_spots }} Spots
+                        {% else %}
+                        Pay and add Spots
+                        {% endif %}
+                    </button>
+                </form>
+                <p class="small text-secondary text-center mt-3 mb-0">
+                    Demo checkout only. No real payment is processed.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if plan != 'subscription' %}
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    const lei = document.getElementById("lei-input");
+    const preview = document.getElementById("spots-preview");
+    if (!lei || !preview) return;
+    const sync = () => { preview.textContent = Math.max(1, parseInt(lei.value, 10) || 0); };
+    lei.addEventListener("input", sync);
+    sync();
+});
+</script>
+{% endif %}
+{% endblock %}

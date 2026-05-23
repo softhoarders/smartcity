@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}ParkScan - Admin Dashboard{% endblock %}
+{% block title %}Spotflow - Admin Dashboard{% endblock %}
 
 {% block content %}
 <div class="admin-page">
@@ -425,7 +425,7 @@
             }{% if not loop.last %},{% endif %}
             {% endfor %}
         ];
-        ParkScanMaps.render("dashboard-map", markers);
+        SpotflowMaps.render("dashboard-map", markers);
     });
 </script>
 {% endif %}

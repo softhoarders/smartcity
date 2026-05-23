@@ -22,7 +22,16 @@ class Device(db.Model):
     latitude = db.Column(db.Float, nullable=True)
     longitude = db.Column(db.Float, nullable=True)
     notes = db.Column(db.Text, nullable=True)
+    owner_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True, index=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    owner = db.relationship("User", foreign_keys=[owner_user_id], backref="owned_devices")
+    listing = db.relationship(
+        "SpotListing",
+        backref="device",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
 
     fines = db.relationship("Fine", backref="device", lazy="dynamic",
                             order_by="Fine.created_at.desc()")
@@ -52,6 +61,7 @@ class Device(db.Model):
             "latitude": self.latitude,
             "longitude": self.longitude,
             "notes": self.notes,
+            "owner_user_id": self.owner_user_id,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
@@ -131,6 +141,10 @@ class User(UserMixin, db.Model):
     verification_status = db.Column(db.String(20), default="approved", nullable=False)
     verification_document = db.Column(db.String(255), nullable=True)
     verification_notes = db.Column(db.String(500), nullable=True)
+    spots_balance = db.Column(db.Integer, default=0, nullable=False)
+    subscription_active = db.Column(db.Boolean, default=False, nullable=False)
+    subscription_started_at = db.Column(db.DateTime, nullable=True)
+    subscription_next_billing_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     
     # We use UserMixin which provides is_authenticated, is_active, is_anonymous, get_id()
@@ -178,3 +192,101 @@ class PushSubscription(db.Model):
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     
     user = db.relationship('User', backref=db.backref('push_subscriptions', lazy=True))
+
+
+class SpotListing(db.Model):
+    """A parking spot offered for rent by its owner."""
+    __tablename__ = "spot_listings"
+
+    id = db.Column(db.Integer, primary_key=True)
+    owner_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    device_id = db.Column(db.Integer, db.ForeignKey("devices.id"), nullable=False, unique=True)
+    is_active = db.Column(db.Boolean, default=False, nullable=False)
+    approval_mode = db.Column(db.String(20), default="auto", nullable=False)  # auto | manual
+    instant_price_per_hour = db.Column(db.Integer, default=10, nullable=False)
+    schedule_deposit_spots = db.Column(db.Integer, default=5, nullable=False)
+    schedule_price_per_hour = db.Column(db.Integer, default=8, nullable=False)
+    instant_price_tenths = db.Column(db.Integer, nullable=True)
+    schedule_price_tenths = db.Column(db.Integer, nullable=True)
+    schedule_deposit_tenths = db.Column(db.Integer, nullable=True)
+    pricing_mode = db.Column(db.String(20), default="manual", nullable=False)  # manual | auto | suggest
+    owner_min_tenths = db.Column(db.Integer, default=50, nullable=False)
+    owner_max_tenths = db.Column(db.Integer, default=300, nullable=False)
+    suggested_instant_tenths = db.Column(db.Integer, nullable=True)
+    suggested_schedule_tenths = db.Column(db.Integer, nullable=True)
+    dynamic_instant_tenths = db.Column(db.Integer, nullable=True)
+    dynamic_schedule_tenths = db.Column(db.Integer, nullable=True)
+    location_zone = db.Column(db.String(30), nullable=True)
+    pricing_reason = db.Column(db.String(500), nullable=True)
+    last_priced_at = db.Column(db.DateTime, nullable=True)
+    description = db.Column(db.String(500), nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    owner = db.relationship("User", backref=db.backref("spot_listings", lazy="dynamic"))
+    bookings = db.relationship("SpotBooking", backref="listing", lazy="dynamic")
+
+
+class SpotActivityLog(db.Model):
+    """Automatic log of user and system actions for demand analytics."""
+    __tablename__ = "spot_activity_log"
+
+    id = db.Column(db.Integer, primary_key=True)
+    event_type = db.Column(db.String(60), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True, index=True)
+    listing_id = db.Column(db.Integer, db.ForeignKey("spot_listings.id"), nullable=True, index=True)
+    device_id = db.Column(db.Integer, db.ForeignKey("devices.id"), nullable=True, index=True)
+    booking_id = db.Column(db.Integer, db.ForeignKey("spot_bookings.id"), nullable=True)
+    endpoint = db.Column(db.String(80), nullable=True)
+    metadata_json = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+
+    user = db.relationship("User", backref=db.backref("activity_logs", lazy="dynamic"))
+    listing = db.relationship("SpotListing", backref=db.backref("activity_logs", lazy="dynamic"))
+
+
+class SpotGeoCache(db.Model):
+    """Cached Nominatim / weather data per device."""
+    __tablename__ = "spot_geo_cache"
+
+    id = db.Column(db.Integer, primary_key=True)
+    device_id = db.Column(db.Integer, db.ForeignKey("devices.id"), nullable=False, unique=True)
+    data_json = db.Column(db.Text, nullable=True)
+    fetched_at = db.Column(db.DateTime, nullable=True)
+
+    device = db.relationship("Device", backref=db.backref("geo_cache", uselist=False))
+
+
+class SpotBooking(db.Model):
+    """Instant rental or scheduled reservation for a listed spot."""
+    __tablename__ = "spot_bookings"
+
+    id = db.Column(db.Integer, primary_key=True)
+    listing_id = db.Column(db.Integer, db.ForeignKey("spot_listings.id"), nullable=False, index=True)
+    renter_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    renter_plate = db.Column(db.String(20), nullable=False)
+    booking_type = db.Column(db.String(20), nullable=False)  # instant | scheduled
+    status = db.Column(db.String(30), default="pending_approval", nullable=False)
+    starts_at = db.Column(db.DateTime, nullable=False)
+    ends_at = db.Column(db.DateTime, nullable=False)
+    deposit_spots = db.Column(db.Integer, default=0, nullable=False)
+    total_spots = db.Column(db.Integer, default=0, nullable=False)
+    paid_spots = db.Column(db.Integer, default=0, nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    renter = db.relationship("User", backref=db.backref("spot_bookings", lazy="dynamic"))
+
+
+class SpotTransaction(db.Model):
+    """Ledger entry for Spots credits and debits."""
+    __tablename__ = "spot_transactions"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    amount = db.Column(db.Integer, nullable=False)
+    kind = db.Column(db.String(40), nullable=False)
+    description = db.Column(db.String(255), nullable=False)
+    reference_id = db.Column(db.Integer, nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    user = db.relationship("User", backref=db.backref("spot_transactions", lazy="dynamic"))
