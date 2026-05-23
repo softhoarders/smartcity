@@ -1,6 +1,6 @@
 # ParkWatch Client
 
-Raspberry Pi / DietPi edge client: periodic 720p capture, license-plate OCR, server sync, and energy-aware operation.
+Raspberry Pi Zero / DietPi edge client: periodic 720p capture, license-plate OCR, server sync, and energy-aware operation.
 
 ## Features
 
@@ -12,7 +12,7 @@ Raspberry Pi / DietPi edge client: periodic 720p capture, license-plate OCR, ser
 - **systemd** service with **boot autostart** (`WantedBy=multi-user.target`)
 - Health endpoint on port `3000`
 
-## Quick install (DietPi / Raspberry Pi)
+## Quick install (Pi Zero / DietPi / Raspberry Pi OS)
 
 ```bash
 cd client

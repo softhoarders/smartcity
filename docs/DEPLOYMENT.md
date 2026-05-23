@@ -127,20 +127,22 @@ The script appends values to `server/.env`.
 
 ## Client Deployment
 
-### Raspberry Pi / DietPi Install
+### Raspberry Pi Zero / DietPi Install
 
 ```bash
 cd client
+chmod +x install.sh
 ./install.sh
 ```
 
 The installer:
 
-- Installs OS packages.
+- Installs OS packages (`python3-opencv`, `python3-numpy`, Tesseract, and related libs).
+- Uses `libopenblas-dev` on Bookworm+ (replaces removed `libatlas-base-dev`).
 - Creates a Python virtual environment with system site packages.
-- Installs Python dependencies.
-- Creates `captures/`.
-- Writes `/etc/systemd/system/parkwatch.service`.
+- Installs remaining Python dependencies via [piwheels](https://www.piwheels.org/) on Raspberry Pi.
+- Creates `captures/` and `evidence/`.
+- Writes `/etc/default/parkwatch` and `/etc/systemd/system/parkwatch.service`.
 
 Edit the service:
 

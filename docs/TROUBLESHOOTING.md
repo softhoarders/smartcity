@@ -61,6 +61,22 @@ If using configured admin credentials, confirm:
 - `PARKWATCH_ADMIN_USER`
 - `PARKWATCH_ADMIN_HASH`
 
+## Client Install Fails on Raspberry Pi
+
+### `libatlas-base-dev` has no installation candidate
+
+This package was removed in Debian Bookworm and recent Raspberry Pi OS. Use the current `client/install.sh`, which installs `libopenblas-dev` instead and pulls OpenCV/NumPy from apt on the Pi.
+
+```bash
+cd client
+git pull
+./install.sh
+```
+
+### `pip` fails building OpenCV or NumPy on Pi Zero
+
+The installer uses apt `python3-opencv` and `python3-numpy` with `--system-site-packages` and only pip-installs lightweight packages on Raspberry Pi. Ensure the Pi has network access to `piwheels.org`.
+
 ## Client Cannot Register
 
 Check:

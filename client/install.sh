@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# ParkWatch Client — DietPi / Raspberry Pi installer
+# ParkWatch Client — Raspberry Pi Zero / DietPi installer
 # Headless capture every ~12 min (day) with energy-saving defaults and boot autostart.
 set -euo pipefail
 
 echo "============================================"
-echo "  ParkWatch Client Installer (DietPi)"
+echo "  ParkWatch Client Installer (Raspberry Pi)"
 echo "============================================"
 echo ""
 
@@ -13,28 +13,41 @@ SERVICE_USER="${SUDO_USER:-$(whoami)}"
 ENV_FILE="/etc/default/parkwatch"
 SERVICE_FILE="/etc/systemd/system/parkwatch.service"
 
+is_raspberry_pi() {
+    [ -f /etc/rpi-issue ] || grep -qiE 'raspberry|bcm2835' /proc/cpuinfo 2>/dev/null
+}
+
 read -r -p "ParkWatch server URL [http://YOUR_SERVER_IP:2026]: " SERVER_URL
 SERVER_URL="${SERVER_URL:-http://YOUR_SERVER_IP:2026}"
 
 echo "[*] Updating package lists..."
 sudo apt-get update -qq
 
-echo "[*] Installing system dependencies..."
-sudo apt-get install -y \
-    python3 \
-    python3-pip \
-    python3-venv \
-    tesseract-ocr \
-    tesseract-ocr-ron \
-    tesseract-ocr-eng \
-    libopencv-dev \
-    python3-opencv \
-    libatlas-base-dev \
-    libjpeg-dev \
-    libpng-dev \
-    libtiff-dev \
-    v4l-utils \
+APT_PACKAGES=(
+    python3
+    python3-pip
+    python3-venv
+    python3-numpy
+    tesseract-ocr
+    tesseract-ocr-ron
+    tesseract-ocr-eng
+    python3-opencv
+    libjpeg-dev
+    libpng-dev
+    libtiff-dev
+    v4l-utils
     iw
+)
+
+# libatlas-base-dev was removed in Debian Bookworm / recent Raspberry Pi OS.
+if apt-cache show libopenblas-dev &>/dev/null; then
+    APT_PACKAGES+=(libopenblas-dev)
+elif apt-cache show libatlas-base-dev &>/dev/null; then
+    APT_PACKAGES+=(libatlas-base-dev)
+fi
+
+echo "[*] Installing system dependencies..."
+sudo apt-get install -y "${APT_PACKAGES[@]}"
 
 if [ ! -d "${INSTALL_DIR}/venv" ]; then
     echo "[*] Creating virtual environment..."
@@ -47,7 +60,21 @@ echo "[*] Installing Python dependencies..."
 # shellcheck disable=SC1091
 source "${INSTALL_DIR}/venv/bin/activate"
 pip install --upgrade pip -q
-pip install -r "${INSTALL_DIR}/requirements.txt" -q
+
+PIP_ARGS=()
+if is_raspberry_pi; then
+    echo "[*] Using piwheels for Raspberry Pi builds..."
+    PIP_ARGS+=(--extra-index-url https://www.piwheels.org/simple)
+    # Prefer apt python3-opencv / python3-numpy on Pi (especially Pi Zero).
+    pip install "${PIP_ARGS[@]}" \
+        pytesseract==0.3.13 \
+        requests==2.32.3 \
+        flask==3.1.1 \
+        imutils==0.5.4 \
+        -q
+else
+    pip install "${PIP_ARGS[@]}" -r "${INSTALL_DIR}/requirements.txt" -q
+fi
 
 mkdir -p "${INSTALL_DIR}/captures" "${INSTALL_DIR}/evidence"
 
