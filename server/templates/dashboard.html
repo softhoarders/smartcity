@@ -3,12 +3,6 @@
 
 {% block content %}
 <div class="admin-page">
-    {% if is_demo is defined and is_demo %}
-    <div class="demo-banner">
-        <strong>Demo mode</strong> — Sample data only. Use <code>demo / demo123!</code> to explore. Nothing is saved.
-    </div>
-    {% endif %}
-
     {% set active_fines = fines|rejectattr('resolved')|list %}
     {% set appeal_count = fines|selectattr('appeal_status', 'equalto', 'pending_human')|list|length + fines|selectattr('appeal_status', 'equalto', 'pending_ai')|list|length %}
     {% set offline_count = devices|rejectattr('is_online')|list|length %}

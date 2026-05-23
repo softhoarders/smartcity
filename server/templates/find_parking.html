@@ -5,10 +5,6 @@
 {% block content %}
 <div class="row justify-content-center mb-4">
     <div class="col-12 col-lg-10">
-        {% if is_demo is defined and is_demo %}
-        <div class="demo-banner mb-4"><strong>Demo Mode</strong> — Bookings are simulated.</div>
-        {% endif %}
-
         {{ breadcrumb([{'url': url_for('account_settings'), 'label': 'Account'}, {'url': url_for('find_parking'), 'label': 'Find parking'}]) }}
 
         {% if balance is defined %}

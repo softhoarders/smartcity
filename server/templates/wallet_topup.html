@@ -1,88 +1,131 @@
 {% extends "base.html" %}
+{% from "macros/ui.html" import breadcrumb %}
 {% block title %}Spotflow — Buy {{ currency_name }}{% endblock %}
 {% block content %}
 <div class="row justify-content-center mb-4">
-    <div class="col-12 col-lg-6">
-        {% if is_demo is defined and is_demo %}
-        <div class="demo-banner mb-4"><strong>Demo Mode</strong> — Payments are simulated; no real money is charged.</div>
-        {% endif %}
+    <div class="col-12 col-xl-10">
+        {{ breadcrumb([
+            {'url': url_for('account_settings'), 'label': 'Account'},
+            {'url': url_for('wallet'), 'label': 'Wallet'},
+            {'url': url_for('wallet_topup'), 'label': 'Buy ' ~ currency_name}
+        ]) }}
 
-        <div class="mb-4 mt-2">
-            <a href="{{ url_for('wallet') }}" class="text-secondary text-decoration-none small">← Back to wallet</a>
-            <h1 class="h3 fw-bold mb-1 mt-2">
-                {% if plan == 'subscription' %}Monthly subscription{% else %}Buy {{ currency_name }}{% endif %}
-            </h1>
-            <p class="text-secondary mb-0">
-                {% if plan == 'subscription' %}
-                Pay {{ subscription_monthly_lei }} lei and receive {{ subscription_monthly_spots }} {{ currency_name }} for the billing period.
-                {% else %}
-                Add {{ currency_name }} to your wallet using the demo card form below.
-                {% endif %}
-            </p>
-        </div>
-
-        <div class="alert alert-secondary border-0 mb-4 py-3">
-            <p class="mb-1 fw-semibold">Pricing</p>
-            <ul class="mb-0 small text-secondary ps-3">
-                <li><strong>1 {{ currency_singular }} = 1 lei (RON)</strong></li>
-                <li>No commission or extra fees — the amount you enter is the {{ currency_name }} you receive.</li>
-                <li>No tax is calculated or added by Spotflow on top of your purchase.</li>
-            </ul>
-        </div>
-
-        <div class="card pw-card border-0">
-            <div class="card-body p-4">
-                <form method="POST" action="{{ url_for('wallet_topup') }}" id="topup-form">
-                    <input type="hidden" name="plan" value="{{ plan or '' }}">
-
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-3 mb-4 mt-2">
+            <div>
+                <h1 class="h3 fw-bold mb-1">
+                    {% if plan == 'subscription' %}Monthly subscription{% else %}Buy {{ currency_name }}{% endif %}
+                </h1>
+                <p class="text-secondary mb-0">
                     {% if plan == 'subscription' %}
-                    <div class="mb-4">
-                        <p class="mb-2">Monthly plan</p>
-                        <p class="display-6 fw-bold mb-0">{{ subscription_monthly_lei }} <span class="fs-5 fw-semibold">lei</span></p>
-                        <p class="text-secondary small mb-0 mt-1">→ {{ subscription_monthly_spots }} {{ currency_name }} credited to your wallet</p>
-                    </div>
-                    <input type="hidden" name="lei_amount" value="{{ subscription_monthly_lei }}">
+                    {{ subscription_monthly_lei }} lei per month · {{ subscription_monthly_spots }} {{ currency_name }} each cycle.
                     {% else %}
-                    <div class="mb-3">
-                        <label class="form-label">Amount to pay (lei)</label>
-                        <input type="number" name="lei_amount" class="form-control" min="1" max="5000" value="50" required id="lei-input">
-                        <div class="form-text">
-                            You will receive <strong><span id="credits-preview">50</span> {{ currency_name }}</strong> — same number as lei, no extras deducted.
-                        </div>
-                    </div>
+                    1 {{ currency_singular }} = 1 lei. No fees or tax added at checkout.
                     {% endif %}
-
-                    <p class="fw-semibold small text-secondary mb-3">Payment details (demo only)</p>
-                    <div class="mb-3">
-                        <label class="form-label">Name on card</label>
-                        <input type="text" name="card_name" class="form-control" placeholder="Maria Popescu" required autocomplete="cc-name">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Card number</label>
-                        <input type="text" name="card_number" class="form-control" placeholder="4242 4242 4242 4242" maxlength="19" required autocomplete="cc-number">
-                    </div>
-                    <div class="row g-3 mb-4">
-                        <div class="col-6">
-                            <label class="form-label">Expiry</label>
-                            <input type="text" name="card_expiry" class="form-control" placeholder="12/28" required autocomplete="cc-exp">
-                        </div>
-                        <div class="col-6">
-                            <label class="form-label">CVC</label>
-                            <input type="text" name="card_cvc" class="form-control" placeholder="123" maxlength="4" required autocomplete="cc-csc">
-                        </div>
-                    </div>
-
-                    <button type="submit" class="btn btn-primary w-100">
-                        {% if plan == 'subscription' %}
-                        Pay {{ subscription_monthly_lei }} lei — get {{ subscription_monthly_spots }} {{ currency_name }}
-                        {% else %}
-                        Pay and add {{ currency_name }}
-                        {% endif %}
-                    </button>
-                </form>
-                <p class="small text-secondary text-center mt-3 mb-0">
-                    Demo checkout only. No real payment is processed.
                 </p>
+            </div>
+            <a href="{{ url_for('wallet') }}" class="btn btn-outline-secondary btn-sm">Back to wallet</a>
+        </div>
+
+        <div class="pw-pay-layout">
+            <section class="pw-pay-card-stage" aria-label="Card preview">
+                <div class="pw-pay-card" id="pay-card" data-brand="generic">
+                    <div class="pw-pay-card-face pw-pay-card-front">
+                        <div class="pw-pay-card-top">
+                            <span class="pw-pay-card-chip" aria-hidden="true"></span>
+                            <span class="pw-pay-card-brand" id="pay-card-brand">CARD</span>
+                        </div>
+                        <p class="pw-pay-card-number" id="pay-card-number">•••• •••• •••• ••••</p>
+                        <p class="pw-pay-card-label">Cardholder</p>
+                        <p class="pw-pay-card-name" id="pay-card-name">YOUR NAME</p>
+                        <div class="pw-pay-card-expiry-wrap">
+                            <p class="pw-pay-card-label mb-0">Expires</p>
+                            <p class="pw-pay-card-expiry mb-0" id="pay-card-expiry">MM/YY</p>
+                        </div>
+                    </div>
+                    <div class="pw-pay-card-face pw-pay-card-back">
+                        <div class="pw-pay-card-stripe" aria-hidden="true"></div>
+                        <div class="pw-pay-card-cvc-box">
+                            <span class="pw-pay-card-label">CVC</span>
+                            <span class="pw-pay-card-cvc">•••</span>
+                        </div>
+                        <p class="pw-pay-card-back-note">Secure demo checkout — no real charge</p>
+                    </div>
+                </div>
+                <p class="pw-pay-card-hint small text-secondary mb-0">
+                    Try <code class="pw-inline-code">4242 4242 4242 4242</code> with any future expiry and CVC.
+                </p>
+            </section>
+
+            <section class="pw-pay-form-panel pw-card border-0">
+                <div class="card-body p-4 p-md-5">
+                    <form method="POST" action="{{ url_for('wallet_topup') }}" id="topup-form" autocomplete="off">
+                        <input type="hidden" name="plan" value="{{ plan or '' }}">
+
+                        {% if plan == 'subscription' %}
+                        <div class="pw-pay-summary mb-4">
+                            <p class="text-secondary small mb-1">Due today</p>
+                            <p class="display-6 fw-bold mb-0">{{ subscription_monthly_lei }} <span class="fs-5 fw-semibold">lei</span></p>
+                            <p class="text-secondary small mb-0 mt-1">→ {{ subscription_monthly_spots }} {{ currency_name }} credited immediately</p>
+                        </div>
+                        <input type="hidden" name="lei_amount" value="{{ subscription_monthly_lei }}">
+                        {% else %}
+                        <div class="mb-3">
+                            <label class="form-label">Amount (lei)</label>
+                            <div class="pw-quick-amounts mb-2" role="group" aria-label="Quick amounts">
+                                <button type="button" class="pw-quick-amount" data-quick-amount="25">25</button>
+                                <button type="button" class="pw-quick-amount" data-quick-amount="50">50</button>
+                                <button type="button" class="pw-quick-amount" data-quick-amount="100">100</button>
+                                <button type="button" class="pw-quick-amount" data-quick-amount="200">200</button>
+                            </div>
+                            <input type="number" name="lei_amount" class="form-control form-control-lg" min="1" max="5000" value="50" required id="lei-input">
+                            <p class="form-text mb-0">
+                                You receive <strong><span id="credits-preview">50</span> {{ currency_name }}</strong> — same as lei paid.
+                            </p>
+                        </div>
+                        {% endif %}
+
+                        <hr class="pw-pay-divider">
+
+                        <div class="mb-3">
+                            <label class="form-label">Name on card</label>
+                            <input type="text" name="card_name" class="form-control" placeholder="Maria Popescu" required autocomplete="cc-name" value="{% if is_demo is defined and is_demo %}Demo User{% endif %}">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Card number</label>
+                            <input type="text" name="card_number" class="form-control" placeholder="4242 4242 4242 4242" inputmode="numeric" maxlength="19" required autocomplete="cc-number" value="{% if is_demo is defined and is_demo %}4242 4242 4242 4242{% endif %}">
+                        </div>
+                        <div class="row g-3 mb-4">
+                            <div class="col-6">
+                                <label class="form-label">Expiry</label>
+                                <input type="text" name="card_expiry" class="form-control" placeholder="12/28" inputmode="numeric" maxlength="5" required autocomplete="cc-exp" value="{% if is_demo is defined and is_demo %}12/28{% endif %}">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">CVC</label>
+                                <input type="text" name="card_cvc" class="form-control" placeholder="123" inputmode="numeric" maxlength="4" required autocomplete="cc-csc" value="{% if is_demo is defined and is_demo %}123{% endif %}">
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary btn-lg w-100">
+                            {% if plan == 'subscription' %}
+                            Pay {{ subscription_monthly_lei }} lei
+                            {% else %}
+                            Pay securely
+                            {% endif %}
+                        </button>
+                    </form>
+                </div>
+            </section>
+        </div>
+
+        <div class="pw-pay-processing" id="pay-processing" hidden aria-hidden="true" role="status">
+            <div class="pw-pay-processing-card pw-card border-0">
+                <div class="pw-pay-processing-spinner" aria-hidden="true"></div>
+                <p class="fw-semibold mb-3">Processing payment</p>
+                <ol class="pw-pay-steps list-unstyled mb-0">
+                    <li data-pay-step>Validating card</li>
+                    <li data-pay-step>Authorizing with bank</li>
+                    <li data-pay-step>Adding {{ currency_name }} to wallet</li>
+                </ol>
             </div>
         </div>
     </div>
@@ -90,16 +133,5 @@
 {% endblock %}
 
 {% block scripts %}
-{% if plan != 'subscription' %}
-<script>
-document.addEventListener("DOMContentLoaded", () => {
-    const lei = document.getElementById("lei-input");
-    const preview = document.getElementById("credits-preview");
-    if (!lei || !preview) return;
-    const sync = () => { preview.textContent = Math.max(1, parseInt(lei.value, 10) || 0); };
-    lei.addEventListener("input", sync);
-    sync();
-});
-</script>
-{% endif %}
+<script src="{{ url_for('static', filename='wallet-topup.js') }}"></script>
 {% endblock %}

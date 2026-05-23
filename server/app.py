@@ -97,7 +97,7 @@ def inject_globals():
         ctx["is_demo"] = _is_demo()
         if not getattr(current_user, "is_admin", False) and current_user.id != 0:
             if _is_demo():
-                ctx["nav_spots_balance"] = 120
+                ctx["nav_spots_balance"] = _demo_wallet_balance()
             elif current_user.id > 0:
                 try:
                     ctx["nav_spots_balance"] = spots_service.user_balance(current_user)
@@ -746,6 +746,70 @@ def _demo_wallet_transactions():
             created_at=base - timedelta(days=1),
         ),
     ]
+
+
+def _demo_wallet_state():
+    state = session.get("demo_wallet")
+    if state is None:
+        state = {"balance": 120, "extra_txs": [], "subscription_active": True}
+        session["demo_wallet"] = state
+    return state
+
+
+def _demo_wallet_balance():
+    return int(_demo_wallet_state().get("balance", 120))
+
+
+def _demo_wallet_transactions_merged():
+    from types import SimpleNamespace
+
+    txs = list(_demo_wallet_transactions())
+    for raw in _demo_wallet_state().get("extra_txs", []):
+        txs.append(
+            SimpleNamespace(
+                amount=raw["amount"],
+                description=raw["description"],
+                created_at=datetime.fromisoformat(raw["created_at"]),
+            )
+        )
+    txs.sort(key=lambda t: t.created_at, reverse=True)
+    return txs[:25]
+
+
+def _demo_wallet_credit(amount: int, description: str) -> None:
+    state = _demo_wallet_state()
+    state["balance"] = int(state.get("balance", 120)) + amount
+    state.setdefault("extra_txs", []).insert(
+        0,
+        {
+            "amount": amount,
+            "description": description,
+            "created_at": _now().isoformat(),
+        },
+    )
+    session["demo_wallet"] = state
+    session.modified = True
+
+
+def _validate_mock_card(card_number: str, card_expiry: str, card_cvc: str) -> str | None:
+    digits = re.sub(r"\D", "", card_number or "")
+    if len(digits) < 13:
+        return "Enter a valid card number."
+    cvc = re.sub(r"\D", "", card_cvc or "")
+    if len(cvc) < 3:
+        return "Enter a valid CVC."
+    expiry = (card_expiry or "").strip()
+    if not re.match(r"^\d{2}/\d{2}$", expiry):
+        return "Use MM/YY for expiry."
+    month = int(expiry[:2])
+    if month < 1 or month > 12:
+        return "Expiry month must be between 01 and 12."
+    return None
+
+
+def _card_last4(card_number: str) -> str:
+    digits = re.sub(r"\D", "", card_number or "")
+    return digits[-4:] if len(digits) >= 4 else "0000"
 
 
 def _demo_rental_listings():
@@ -1735,6 +1799,7 @@ def login_2fa():
 @login_required
 def logout():
     session.pop("is_demo", None)
+    session.pop("demo_wallet", None)
     security.clear_pending_2fa()
     logout_user()
     return redirect(url_for("index"))
@@ -2409,14 +2474,32 @@ def wallet():
     if denied:
         return denied
     if _is_demo():
+        state = _demo_wallet_state()
+        if request.method == "POST" and request.form.get("action") == "subscribe_balance":
+            cost = config.SUBSCRIPTION_MONTHLY_LEI
+            if _demo_wallet_balance() < cost:
+                flash(f"Need at least {cost} {config.WALLET_CURRENCY_NAME.lower()} on balance.", "danger")
+            else:
+                state["balance"] = _demo_wallet_balance() - cost
+                state["subscription_active"] = True
+                _demo_wallet_credit(
+                    config.SUBSCRIPTION_MONTHLY_SPOTS,
+                    "Monthly subscription (balance)",
+                )
+                flash(
+                    f"Subscription activated. {config.SUBSCRIPTION_MONTHLY_SPOTS} "
+                    f"{config.WALLET_CURRENCY_NAME.lower()} added to your wallet.",
+                    "success",
+                )
+            return redirect(url_for("wallet"))
         return render_template(
             "wallet.html",
-            balance=120,
-            subscription_active=True,
+            balance=_demo_wallet_balance(),
+            subscription_active=bool(state.get("subscription_active", True)),
             subscription_next_billing=_now() + timedelta(days=18),
             subscription_monthly_lei=config.SUBSCRIPTION_MONTHLY_LEI,
             subscription_monthly_spots=config.SUBSCRIPTION_MONTHLY_SPOTS,
-            transactions=_demo_wallet_transactions(),
+            transactions=_demo_wallet_transactions_merged(),
             is_demo=True,
         )
 
@@ -2464,8 +2547,39 @@ def wallet_topup():
 
     if _is_demo():
         if request.method == "POST":
-            flash("Demo mode — payment not processed.", "info")
+            card_number = request.form.get("card_number", "")
+            card_expiry = request.form.get("card_expiry", "")
+            card_cvc = request.form.get("card_cvc", "")
+            card_error = _validate_mock_card(card_number, card_expiry, card_cvc)
+            if card_error:
+                flash(card_error, "danger")
+                return redirect(url_for("wallet_topup", plan=plan))
+
+            last4 = _card_last4(card_number)
+            if plan == "subscription":
+                state = _demo_wallet_state()
+                state["subscription_active"] = True
+                _demo_wallet_credit(
+                    config.SUBSCRIPTION_MONTHLY_SPOTS,
+                    f"Subscription · card ending {last4}",
+                )
+                flash(
+                    f"Subscription activated. {config.SUBSCRIPTION_MONTHLY_SPOTS} {config.WALLET_CURRENCY_NAME.lower()} added to your wallet.",
+                    "success",
+                )
+                return redirect(url_for("wallet"))
+
+            lei_amount = request.form.get("lei_amount", type=int) or 0
+            if lei_amount < 1 or lei_amount > 5000:
+                flash("Enter an amount between 1 and 5000 lei.", "danger")
+                return redirect(url_for("wallet_topup", plan=plan))
+            _demo_wallet_credit(lei_amount, f"Top-up · card ending {last4}")
+            flash(
+                f"Added {lei_amount} {config.WALLET_CURRENCY_NAME.lower()} to your wallet.",
+                "success",
+            )
             return redirect(url_for("wallet"))
+
         return render_template(
             "wallet_topup.html",
             plan=plan,
@@ -2475,10 +2589,15 @@ def wallet_topup():
         )
 
     if request.method == "POST":
-        card_number = re.sub(r"\D", "", request.form.get("card_number", ""))
-        if len(card_number) < 13:
-            flash("Enter a valid demo card number.", "danger")
+        card_number = request.form.get("card_number", "")
+        card_expiry = request.form.get("card_expiry", "")
+        card_cvc = request.form.get("card_cvc", "")
+        card_error = _validate_mock_card(card_number, card_expiry, card_cvc)
+        if card_error:
+            flash(card_error, "danger")
             return redirect(url_for("wallet_topup", plan=plan))
+
+        card_number = re.sub(r"\D", "", card_number)
 
         if plan == "subscription":
             try:
