@@ -13,8 +13,8 @@
     <div class="auth-photo-panel">
         <div class="auth-photo-copy">
             <span class="auth-kicker">ParkScan access</span>
-            <h1>Parking alerts tied to the plate you actually own.</h1>
-            <p>Drivers upload ownership proof during signup. Admins review it before alerts and fine evidence are visible.</p>
+            <h1>Parking alerts tied to the plates you register.</h1>
+            <p>Create an account with your username and email, then add license plates anytime in account settings.</p>
         </div>
     </div>
 
@@ -30,7 +30,7 @@
             </div>
 
             {% if mode == 'signup' %}
-            <form method="POST" action="{{ url_for('login') }}" enctype="multipart/form-data" class="auth-form" id="signup-form">
+            <form method="POST" action="{{ url_for('login') }}" class="auth-form" id="signup-form">
                 <input type="hidden" name="form_action" value="signup">
 
                 <div class="auth-role-toggle">
@@ -45,21 +45,12 @@
                 </div>
 
                 <div>
-                    <label class="form-label">Full name</label>
-                    <input type="text" name="name" class="form-control" required autocomplete="name" placeholder="Alex Ionescu">
+                    <label class="form-label">Username</label>
+                    <input type="text" name="name" class="form-control" required autocomplete="username" placeholder="alex.ionescu">
                 </div>
                 <div>
                     <label class="form-label">Email address</label>
                     <input type="email" name="email" class="form-control" required autocomplete="email" placeholder="name@example.com">
-                </div>
-                <div class="driver-only">
-                    <label class="form-label">License plate</label>
-                    <input type="text" name="license_plate" class="form-control pw-plate-input" placeholder="B123ABC" autocomplete="off">
-                </div>
-                <div class="driver-only">
-                    <label class="form-label">Plate ownership proof</label>
-                    <input type="file" name="plate_proof" class="form-control" accept=".png,.jpg,.jpeg,.webp,.pdf">
-                    <p class="auth-help">Upload registration, insurance, or another document where the name and plate can be checked.</p>
                 </div>
                 <div class="admin-only">
                     <label class="form-label">Admin invite code</label>
@@ -116,9 +107,6 @@
         if (!form) return;
         const selected = form.querySelector("input[name='account_type']:checked").value;
         form.classList.toggle("is-admin", selected === "admin");
-        form.querySelectorAll(".driver-only input").forEach((input) => {
-            input.required = selected === "driver";
-        });
         form.querySelectorAll(".admin-only input").forEach((input) => {
             input.required = selected === "admin";
         });

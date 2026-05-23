@@ -25,7 +25,7 @@ from dotenv import load_dotenv
 
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 import config
-from models import db, Device, Fine, User, PushSubscription, FineMessage
+from models import db, Device, Fine, User, UserPlate, PushSubscription, FineMessage
 from mailer import mail, PhotoMailerWorker
 import json
 from pywebpush import webpush, WebPushException
@@ -66,6 +66,10 @@ CORS(app)
 db.init_app(app)
 bcrypt = Bcrypt(app)
 mail.init_app(app)
+
+@app.context_processor
+def inject_globals():
+    return {}
 
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -138,6 +142,7 @@ def load_user(user_id):
         demo_user = User(email="demo", password_hash="", license_plate="B-123-MAB", role="driver", verification_status="approved")
         demo_user.id = -2
         demo_user.name = "Demo User"
+        demo_user.plate_list = ["B123MAB"]
         return demo_user
     return User.query.get(int(user_id))
 
@@ -360,23 +365,64 @@ def _is_demo():
     return session.get("is_demo", False) or (current_user.is_authenticated and current_user.id in (-1, -2))
 
 
+def _group_devices_by_zone(devices):
+    from collections import OrderedDict
+    zones = OrderedDict()
+    for d in devices:
+        zone = getattr(d, "location_zone", None)
+        if not zone and " — " in (d.name or ""):
+            zone = d.name.split(" — ", 1)[0]
+        zone = zone or "Other locations"
+        zones.setdefault(zone, []).append(d)
+    return list(zones.items())
+
+
+def _sort_demo_fines(fines):
+    appeal_rank = {"pending_human": 0, "pending_ai": 1, "none": 2, "approved": 3, "rejected": 4}
+
+    def key(f):
+        return (
+            0 if not f.resolved else 1,
+            appeal_rank.get(f.appeal_status, 9),
+            -(f.created_at.timestamp() if f.created_at else 0),
+        )
+
+    return sorted(fines, key=key)
+
+
 def _demo_devices():
     from types import SimpleNamespace
     base = _now()
-    def make_device(id_, name, spot, plate, status, lat, lng, online=True, wifi=78, temp=52.3):
+    fine_counts = {101: 2, 102: 2, 103: 1, 104: 0, 105: 0, 106: 1, 107: 2, 108: 0, 109: 1, 110: 1, 111: 0, 112: 0, 113: 1, 114: 0}
+
+    def make_device(id_, name, spot, plate, status, lat, lng, zone, online=True, wifi=78, temp=52.3, capture=False, notes=None):
         d = SimpleNamespace()
         d.id = id_; d.name = name; d.spot_label = spot; d.assigned_plate = plate
-        d.current_status = status; d.is_online = online; d.mac_address = f"AA:BB:CC:DD:EE:0{id_}"
-        d.last_seen = base - timedelta(seconds=30 if online else 300)
+        d.current_status = status; d.is_online = online
+        d.mac_address = f"AA:BB:CC:DD:EE:{id_:02X}"
+        d.last_seen = base - timedelta(seconds=30 if online else 7200)
         d.last_wifi = wifi; d.last_temp = temp; d.created_at = base - timedelta(days=30)
-        d.capture_requested = False; d.latitude = lat; d.longitude = lng; d.notes = None
-        d.fines = SimpleNamespace(count=lambda: 3)
+        d.capture_requested = capture; d.latitude = lat; d.longitude = lng
+        d.location_zone = zone; d.notes = notes
+        n = fine_counts.get(id_, 0)
+        d.fines = SimpleNamespace(count=lambda n=n: n)
         return d
+
     return [
-        make_device(101, "Calea Victoriei — Level 1", "P1-12", "B-123-MAB", "occupied",   44.4383, 26.1034),
-        make_device(102, "Calea Victoriei — Level 1", "P1-08", "CJ-45-PQR", "violation",  44.4385, 26.1036, wifi=61, temp=49.1),
-        make_device(103, "Bulevardul Unirii — Surface", "C-03", "B-789-TUV", "empty",      44.4270, 26.1055),
-        make_device(104, "Bulevardul Unirii — Accessible", "H-01", None, "empty",          44.4268, 26.1050, online=False, wifi=None, temp=None),
+        make_device(101, "Calea Victoriei — Level 1", "P1-12", "B-123-MAB", "occupied", 44.4383, 26.1034, "Calea Victoriei", wifi=82, temp=51.2, notes="Reserved tenant spot — high traffic"),
+        make_device(102, "Calea Victoriei — Level 1", "P1-08", "CJ-45-PQR", "violation", 44.4385, 26.1036, "Calea Victoriei", wifi=61, temp=49.1),
+        make_device(103, "Bulevardul Unirii — Surface", "C-03", "B-789-TUV", "empty", 44.4270, 26.1055, "Bulevardul Unirii", wifi=74, temp=48.6),
+        make_device(104, "Bulevardul Unirii — Accessible", "H-01", None, "empty", 44.4268, 26.1050, "Bulevardul Unirii", online=False, wifi=None, temp=None, notes="Awaiting plate assignment"),
+        make_device(105, "Piata Universitatii — Garage", "P2-04", "B-441-PKR", "correct", 44.4358, 26.1025, "Piata Universitatii", wifi=88, temp=47.9),
+        make_device(106, "Strada Franceza — Curbside", "F-12", "AB-12-CDE", "occupied", 44.4312, 26.0988, "Strada Franceza", wifi=70, temp=53.4),
+        make_device(107, "Calea Dorobantilor — North", "D-07", "TM-88-XYZ", "violation", 44.4560, 26.0975, "Calea Dorobantilor", wifi=58, temp=55.1, capture=True),
+        make_device(108, "Gara de Nord — Drop-off", "GN-01", None, "empty", 44.4465, 26.0745, "Gara de Nord", online=False, wifi=None, temp=None),
+        make_device(109, "Herastrau — Lakeside", "H-22", "B-555-LUX", "occupied", 44.4792, 26.0820, "Herastrau", wifi=76, temp=46.8),
+        make_device(110, "Pipera — Office Park", "PI-09", "IF-99-KLM", "violation", 44.4935, 26.1188, "Pipera", wifi=64, temp=50.2),
+        make_device(111, "Titan — Retail Lot", "T-15", "CL-10-ZZZ", "empty", 44.4168, 26.1520, "Titan", wifi=81, temp=49.5),
+        make_device(112, "Drumul Taberei — Block B", "DT-03", "BV-77-ABC", "correct", 44.4120, 26.0340, "Drumul Taberei", wifi=79, temp=48.1),
+        make_device(113, "Calea Victoriei — Rooftop", "P3-02", "B-212-GLS", "occupied", 44.4380, 26.1040, "Calea Victoriei", wifi=80, temp=50.0),
+        make_device(114, "Old Town — Strada Lipscani", "L-05", None, "empty", 44.4318, 26.1015, "Old Town", wifi=72, temp=47.2, notes="Pi arriving Thursday"),
     ]
 
 
@@ -384,42 +430,68 @@ def _demo_fines():
     from types import SimpleNamespace
     base = _now()
     devices = {d.id: d for d in _demo_devices()}
-    def make_fine(id_, dev_id, detected, expected, mins, resolved=False, appeal="none", confidence=91.0):
+    def make_fine(id_, dev_id, detected, expected, mins, resolved=False, appeal="none", confidence=91.0,
+                  photo_requested=False, photo_sent=False, hours_ago=None):
         f = SimpleNamespace()
         f.id = id_; f.device_id = dev_id; f.device = devices.get(dev_id)
         f.detected_plate = detected; f.expected_plate = expected
         f.duration_minutes = mins; f.resolved = resolved; f.appeal_status = appeal
-        f.confidence_score = confidence; f.image_filename = None
-        f.first_seen = base - timedelta(hours=id_ * 4); f.last_seen = f.first_seen + timedelta(minutes=mins)
-        f.created_at = f.first_seen; f.photo_requested = False; f.photo_sent_at = None
+        f.confidence_score = confidence
+        f.image_filename = "demo_evidence.jpg" if not resolved else None
+        ago = hours_ago if hours_ago is not None else id_ * 3
+        f.first_seen = base - timedelta(hours=ago, minutes=mins)
+        f.last_seen = f.first_seen + timedelta(minutes=mins)
+        f.created_at = base - timedelta(hours=ago)
+        f.photo_requested = photo_requested
+        f.photo_sent_at = (base - timedelta(hours=ago - 1)) if photo_sent else None
         f.appeal_reason = None; f.last_notified = None
         f.messages = _FakeMessages()
         return f
+
     fines = [
-        # Stranger parked in the demo driver's reserved spot — active alert
-        make_fine(1, 101, "B-900-ZAB", "B-123-MAB", 47),
-        # CJ plate resolved — owner showed valid visitor pass
-        make_fine(2, 102, "CJ-45-PQR", "CJ-45-PQR", 128, resolved=True, appeal="none"),
-        # Unknown vehicle in spot C-03, short overstay, still active
-        make_fine(3, 103, "IF-22-RST", "B-789-TUV", 22, confidence=87.4),
-        # Repeat offender in demo driver's spot, driver escalated to human review
-        make_fine(4, 101, "B-600-WXY", "B-123-MAB", 185, resolved=False, appeal="pending_human"),
+        make_fine(1, 101, "B-900-ZAB", "B-123-MAB", 47, confidence=94.2, photo_requested=True, hours_ago=1),
+        make_fine(2, 102, "CJ-45-PQR", "CJ-45-PQR", 128, resolved=True, hours_ago=48),
+        make_fine(3, 103, "IF-22-RST", "B-789-TUV", 22, confidence=87.4, hours_ago=2),
+        make_fine(4, 101, "B-600-WXY", "B-123-MAB", 185, appeal="pending_human", confidence=92.8, hours_ago=6),
+        make_fine(5, 107, "B-111-WRG", "TM-88-XYZ", 64, confidence=93.2, hours_ago=3),
+        make_fine(6, 110, "B-200-FKE", "IF-99-KLM", 38, confidence=89.6, hours_ago=4),
+        make_fine(7, 106, "GL-55-NNN", "AB-12-CDE", 95, confidence=91.8, hours_ago=8),
+        make_fine(8, 109, "B-999-XXX", "B-555-LUX", 12, confidence=84.1, hours_ago=0.5),
+        make_fine(9, 107, "PH-44-QQQ", "TM-88-XYZ", 210, resolved=True, appeal="approved", confidence=88.0, hours_ago=72),
+        make_fine(10, 102, "CJ-99-ZZZ", "CJ-45-PQR", 55, appeal="pending_ai", confidence=76.5, hours_ago=5),
+        make_fine(11, 113, "B-808-DLV", "B-212-GLS", 31, confidence=90.1, hours_ago=2.5),
+        make_fine(12, 106, "AB-12-CDE", "AB-12-CDE", 18, resolved=True, confidence=98.0, hours_ago=12),
     ]
+
     fines[3].messages = _FakeMessages([
         _FakeMessage("System",
-            "Violation recorded: B-600-WXY occupied reserved spot P1-12 "
-            "(assigned to B-123-MAB) for 185 minutes."),
+            "Violation recorded: B-600-WXY in spot P1-12 (assigned B-123-MAB) for 185 minutes."),
         _FakeMessage("Maria Constantin",
-            "This is my brother's car. I gave him permission to use my spot while "
-            "my car was at the mechanic. Please review."),
+            "My brother borrowed the spot while my car was at the mechanic. I can share the garage receipt."),
         _FakeMessage("AI Assessor",
-            "No temporary guest access record found for spot P1-12 on this date. "
-            "If you have proof of authorisation, please submit it for human review."),
+            "No guest-access record for P1-12 today. Escalating to human review."),
         _FakeMessage("Maria Constantin",
-            "I've attached the garage invoice and a message confirming my brother "
-            "had permission. This violation should be waived."),
+            "Uploaded invoice + written permission from building admin. Please waive this alert."),
     ])
-    return fines
+    fines[9].messages = _FakeMessages([
+        _FakeMessage("Andrei Popescu", "Visitor stayed longer than expected — loading event supplies."),
+        _FakeMessage("AI Assessor",
+            "OCR confidence 76.5%. Pattern matches repeat plate CJ-99-ZZZ. Recommend admin review."),
+    ])
+    return _sort_demo_fines(fines)
+
+
+def _demo_activity_feed():
+    from types import SimpleNamespace
+    base = _now()
+    return [
+        SimpleNamespace(when=base - timedelta(minutes=4), level="danger", title="New violation", detail="P1-12 — detected B-900-ZAB (expected B-123-MAB)"),
+        SimpleNamespace(when=base - timedelta(minutes=18), level="warning", title="Appeal submitted", detail="Maria Constantin — spot P1-12 human review"),
+        SimpleNamespace(when=base - timedelta(minutes=42), level="info", title="Capture completed", detail="Calea Dorobantilor D-07 — admin requested snapshot"),
+        SimpleNamespace(when=base - timedelta(hours=2), level="success", title="Violation resolved", detail="TM-88-XYZ — appeal approved, evidence verified"),
+        SimpleNamespace(when=base - timedelta(hours=5), level="muted", title="Device offline", detail="Gara de Nord GN-01 — no heartbeat for 2h"),
+        SimpleNamespace(when=base - timedelta(hours=8), level="info", title="Plate assigned", detail="Piata Universitatii P2-04 → B-441-PKR"),
+    ]
 
 
 def _demo_users():
@@ -431,15 +503,22 @@ def _demo_users():
         u.role = role; u.verification_status = status; u.is_admin = (role == "admin")
         u.created_at = base - timedelta(days=days_ago)
         u.verification_document = None
+        normalized = re.sub(r"[^A-Z0-9]", "", (plate or "").upper())
+        u.plate_values = (lambda p=normalized: [p] if p else [])
         return u
-    return [
+    users = [
         mu(1, "Maria Constantin",  "maria.constantin@gmail.com",  "B-123-MAB", "driver", "approved", 45),
         mu(2, "Andrei Popescu",    "andrei.popescu@yahoo.com",    "CJ-45-PQR", "driver", "approved", 30),
         mu(3, "Elena Ionescu",     "e.ionescu@gmail.com",         "B-789-TUV", "driver", "pending",   3),
         mu(4, "Radu Dumitrescu",   "radu.d@outlook.com",          "IF-22-RST", "driver", "pending",   1),
         mu(5, "Cristina Munteanu", "cristina.munteanu@gmail.com", "B-441-PKR", "driver", "rejected", 20),
+        mu(7, "Vlad Petrescu",     "vlad.petrescu@gmail.com",     "TM-88-XYZ", "driver", "approved", 14),
+        mu(8, "Ioana Georgescu",   "ioana.g@company.ro",          "IF-99-KLM", "driver", "approved", 7),
         mu(6, "Admin",             "admin@parkscan.ro",           "",           "admin",  "approved", 90),
     ]
+    users[2].verification_document = "demo_id_elena.jpg"
+    users[3].verification_document = "demo_registration_radu.pdf"
+    return users
 
 
 def _get_device_by_mac(mac):
@@ -453,6 +532,49 @@ def normalize_plate(plate):
 def is_valid_plate(plate):
     normalized = normalize_plate(plate)
     return 5 <= len(normalized) <= 10 and any(char.isalpha() for char in normalized) and any(char.isdigit() for char in normalized)
+
+
+def user_plate_values(user):
+    if hasattr(user, "plate_list"):
+        return list(user.plate_list)
+    if hasattr(user, "plates") and hasattr(user.plates, "all"):
+        return user.plate_values()
+    legacy = normalize_plate(getattr(user, "license_plate", ""))
+    return [legacy] if legacy else []
+
+
+def user_owns_plate(user, plate):
+    normalized = normalize_plate(plate)
+    return normalized in user_plate_values(user)
+
+
+def find_user_by_plate(plate):
+    normalized = normalize_plate(plate)
+    if not normalized:
+        return None
+    row = UserPlate.query.filter_by(plate=normalized).first()
+    if row:
+        return row.user
+    return User.query.filter_by(license_plate=normalized).first()
+
+
+def sync_user_primary_plate(user):
+    plates = user.plate_values()
+    user.license_plate = plates[0] if plates else ""
+
+
+def migrate_legacy_user_plates():
+    for user in User.query.filter(User.role == "driver").all():
+        legacy_plate = normalize_plate(user.license_plate)
+        if legacy_plate and not UserPlate.query.filter_by(plate=legacy_plate).first():
+            db.session.add(UserPlate(user_id=user.id, plate=legacy_plate))
+        if user.verification_status != "approved":
+            user.verification_status = "approved"
+    db.session.commit()
+
+
+with app.app_context():
+    migrate_legacy_user_plates()
 
 
 def allowed_proof_file(filename):
@@ -668,7 +790,7 @@ def api_report_fine():
 
     # Notify user if expected plate matches a registered user using throttling
     if fine.expected_plate:
-        user = User.query.filter_by(license_plate=fine.expected_plate.upper()).first()
+        user = find_user_by_plate(fine.expected_plate)
         if user:
             recent_alert = Fine.query.filter(
                 Fine.expected_plate == fine.expected_plate,
@@ -718,17 +840,25 @@ def index():
 def dashboard():
     if _is_demo():
         devices = _demo_devices()
-        recent_fines = _demo_fines()
+        all_fines = _demo_fines()
         pending_users = [u for u in _demo_users() if u.verification_status == "pending"]
         chart_labels = [(_now() - timedelta(days=i)).strftime("%a") for i in range(6, -1, -1)]
-        chart_data = [3, 1, 5, 2, 4, 1, 2]
-        return render_template("dashboard.html", devices=devices, fines=recent_fines,
-                               pending_users=pending_users, chart_labels=chart_labels,
-                               chart_data=chart_data, is_demo=True)
+        chart_data = [4, 7, 5, 11, 8, 6, 9]
+        return render_template(
+            "dashboard.html",
+            devices=devices,
+            fines=all_fines,
+            pending_users=pending_users,
+            chart_labels=chart_labels,
+            chart_data=chart_data,
+            device_zones=_group_devices_by_zone(devices),
+            activity_feed=_demo_activity_feed(),
+            is_demo=True,
+        )
 
     devices = Device.query.order_by(Device.created_at.desc()).all()
     recent_fines = Fine.query.order_by(Fine.created_at.desc()).limit(20).all()
-    pending_users = User.query.filter_by(role="driver", verification_status="pending").order_by(User.created_at.desc()).all()
+    pending_users = []
 
     sevendays_ago = _now() - timedelta(days=6)
     last_7_fines = Fine.query.filter(Fine.created_at >= sevendays_ago).all()
@@ -747,7 +877,16 @@ def dashboard():
     chart_labels = list(reversed(list(day_counts.keys())))
     chart_data = [day_counts[l] for l in chart_labels]
 
-    return render_template("dashboard.html", devices=devices, fines=recent_fines, pending_users=pending_users, chart_labels=chart_labels, chart_data=chart_data)
+    return render_template(
+        "dashboard.html",
+        devices=devices,
+        fines=recent_fines,
+        pending_users=pending_users,
+        chart_labels=chart_labels,
+        chart_data=chart_data,
+        device_zones=_group_devices_by_zone(devices),
+        activity_feed=[],
+    )
 
 
 @app.route("/device/<int:device_id>")
@@ -1045,7 +1184,6 @@ def login():
         if form_action == "signup":
             name = request.form.get("name", "").strip() or ("Administrator" if account_type == "admin" else "Driver")
             role = "admin" if account_type == "admin" else "driver"
-            plate = normalize_plate(request.form.get("license_plate", ""))
 
             if not email or not password:
                 flash("Email and password are required.", "danger")
@@ -1065,20 +1203,10 @@ def login():
                     flash("Admin invite code is not valid.", "danger")
                     return redirect(url_for("login", mode="signup", account_type="admin"))
                 verification_status = "approved"
-                verification_document = None
                 plate = ""
             else:
-                if not is_valid_plate(plate):
-                    flash("Enter a valid license plate with letters and numbers.", "danger")
-                    return redirect(url_for("login", mode="signup", account_type="driver"))
-                if User.query.filter_by(license_plate=plate).first():
-                    flash("That license plate is already connected to an account.", "danger")
-                    return redirect(url_for("login", mode="signup", account_type="driver"))
-                verification_document = save_verification_document(request.files.get("plate_proof"), plate)
-                if not verification_document:
-                    flash("Upload a vehicle registration, insurance card, or ownership proof as PNG, JPG, WEBP, or PDF.", "danger")
-                    return redirect(url_for("login", mode="signup", account_type="driver"))
-                verification_status = "pending"
+                verification_status = "approved"
+                plate = ""
 
             hashed = bcrypt.generate_password_hash(password).decode("utf-8")
             user = User(
@@ -1088,7 +1216,6 @@ def login():
                 name=name,
                 role=role,
                 verification_status=verification_status,
-                verification_document=verification_document,
             )
             db.session.add(user)
             db.session.commit()
@@ -1098,8 +1225,9 @@ def login():
                 flash("Admin account created.", "success")
                 return redirect(url_for("dashboard"))
 
-            flash("Account created. An admin will review your plate proof before alerts are shown.", "success")
-            return redirect(url_for("login"))
+            login_user(user)
+            flash("Account created. Add your license plates in account settings.", "success")
+            return redirect(url_for("account_settings"))
 
         user = User.query.filter_by(email=email).first()
 
@@ -1116,6 +1244,7 @@ def login():
                 demo_user = User(email="demo", password_hash="", license_plate="B-123-MAB", role="driver", verification_status="approved")
                 demo_user.id = -2
                 demo_user.name = "Demo User"
+                demo_user.plate_list = ["B123MAB"]
                 session["is_demo"] = True
                 login_user(demo_user)
                 return redirect(url_for("portal"))
@@ -1319,28 +1448,22 @@ def api_register_user():
     
     email = data.get("email", "").lower().strip()
     password = data.get("password", "")
-    plate = normalize_plate(data.get("license_plate", ""))
     name = data.get("name", "Driver").strip()
     
-    if not all([email, password, plate]):
-         return jsonify({"error": "email, password, and license_plate are required"}), 400
-    if not is_valid_plate(plate):
-        return jsonify({"error": "license_plate is not valid"}), 400
+    if not all([email, password]):
+         return jsonify({"error": "email and password are required"}), 400
          
     if User.query.filter_by(email=email).first():
         return jsonify({"error": "Email already registered"}), 400
-    if User.query.filter_by(license_plate=plate).first():
-        return jsonify({"error": "License plate already registered"}), 400
         
     hashed = bcrypt.generate_password_hash(password).decode('utf-8')
     user = User(
         email=email,
         password_hash=hashed,
-        license_plate=plate,
+        license_plate="",
         name=name,
         role="driver",
-        verification_status="pending",
-        verification_notes="Created through API; ownership proof still required.",
+        verification_status="approved",
     )
     
     db.session.add(user)
@@ -1444,15 +1567,72 @@ def portal():
     if getattr(current_user, 'is_admin', False) or current_user.id == 0:
         return redirect(url_for('dashboard'))
 
+    user_plates = user_plate_values(current_user)
+
     if _is_demo():
-        plate = normalize_plate(current_user.license_plate)
-        fines = [f for f in _demo_fines() if normalize_plate(f.expected_plate) == plate or normalize_plate(f.detected_plate) == plate]
-        return render_template("user_portal.html", fines=fines, is_demo=True)
+        fines = [f for f in _demo_fines() if normalize_plate(f.expected_plate) in user_plates or normalize_plate(f.detected_plate) in user_plates]
+        return render_template("user_portal.html", fines=fines, user_plates=user_plates, is_demo=True)
 
     fines = []
-    if current_user.verification_status == "approved":
-        fines = Fine.query.filter_by(expected_plate=current_user.license_plate).order_by(Fine.created_at.desc()).all()
-    return render_template("user_portal.html", fines=fines)
+    if user_plates:
+        fines = Fine.query.filter(Fine.expected_plate.in_(user_plates)).order_by(Fine.created_at.desc()).all()
+    return render_template("user_portal.html", fines=fines, user_plates=user_plates)
+
+@app.route("/portal/settings", methods=["GET", "POST"])
+@login_required
+def account_settings():
+    if getattr(current_user, "is_admin", False) or current_user.id == 0:
+        return redirect(url_for("dashboard"))
+
+    if _is_demo():
+        flash("Demo mode — account settings are read-only.", "info")
+        return render_template(
+            "account_settings.html",
+            user_plates=user_plate_values(current_user),
+            plate_rows=[],
+            is_demo=True,
+        )
+
+    if request.method == "POST":
+        action = request.form.get("action", "")
+
+        if action == "add_plate":
+            plate = normalize_plate(request.form.get("license_plate", ""))
+            if not is_valid_plate(plate):
+                flash("Enter a valid license plate with letters and numbers.", "danger")
+            elif UserPlate.query.filter_by(plate=plate).first():
+                flash("That license plate is already registered to an account.", "danger")
+            else:
+                db.session.add(UserPlate(user_id=current_user.id, plate=plate))
+                sync_user_primary_plate(current_user)
+                db.session.commit()
+                flash(f"Added plate {plate}.", "success")
+
+        elif action == "remove_plate":
+            plate_id = request.form.get("plate_id", type=int)
+            row = UserPlate.query.filter_by(id=plate_id, user_id=current_user.id).first()
+            if row:
+                db.session.delete(row)
+                sync_user_primary_plate(current_user)
+                db.session.commit()
+                flash("License plate removed.", "success")
+            else:
+                flash("Plate not found.", "danger")
+
+        elif action == "update_profile":
+            name = request.form.get("name", "").strip()
+            if name:
+                current_user.name = name
+                db.session.commit()
+                flash("Profile updated.", "success")
+            else:
+                flash("Username cannot be empty.", "danger")
+
+        return redirect(url_for("account_settings"))
+
+    plate_rows = [{"id": row.id, "plate": row.plate} for row in current_user.plates]
+    return render_template("account_settings.html", user_plates=user_plate_values(current_user), plate_rows=plate_rows)
+
 
 @app.route("/portal/fine/<int:fine_id>/request-photo", methods=["POST"])
 @login_required
@@ -1462,7 +1642,7 @@ def request_photo(fine_id):
         return redirect(url_for("portal"))
     fine = Fine.query.get_or_404(fine_id)
     
-    if fine.expected_plate != current_user.license_plate:
+    if not user_owns_plate(current_user, fine.expected_plate):
         abort(403)
         
     if not fine.photo_requested:
@@ -1481,7 +1661,7 @@ def appeal_fine(fine_id):
         return redirect(url_for("portal"))
     fine = Fine.query.get_or_404(fine_id)
     
-    if fine.expected_plate != current_user.license_plate:
+    if not user_owns_plate(current_user, fine.expected_plate):
         abort(403)
         
     reason = request.form.get("reason", "I am appealing this fine.")
@@ -1559,7 +1739,7 @@ def add_chat_message(fine_id):
         flash("Demo mode — no changes are saved.", "info")
         return redirect(request.referrer or url_for("portal" if not current_user.is_admin else "dashboard"))
     fine = Fine.query.get_or_404(fine_id)
-    if not current_user.is_admin and fine.expected_plate != current_user.license_plate:
+    if not current_user.is_admin and not user_owns_plate(current_user, fine.expected_plate):
         abort(403)
         
     content = request.form.get("message", "").strip()
@@ -1617,7 +1797,7 @@ def receipt(fine_id):
             abort(404)
     else:
         fine = Fine.query.get_or_404(fine_id)
-        if fine.expected_plate != current_user.license_plate:
+        if not user_owns_plate(current_user, fine.expected_plate):
             abort(403)
         
     # Super simple printable view

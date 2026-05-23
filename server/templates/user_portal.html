@@ -10,42 +10,44 @@
         </div>
         {% endif %}
 
-        <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between mb-4 mt-2">
+        <div class="d-flex flex-column flex-md-row align-items-md-start justify-content-between mb-4 mt-2 gap-3">
             <div>
                 <h1 class="h3 fw-bold mb-1">My Parking Activity</h1>
-                <p class="text-secondary mb-0">Record for plate: <span class="badge pw-plate-badge ms-2">{{ current_user.license_plate }}</span></p>
+                <p class="text-secondary mb-2">Plates on your account:</p>
+                <div class="d-flex flex-wrap gap-2">
+                    {% if user_plates %}
+                        {% for plate in user_plates %}
+                        <span class="badge pw-plate-badge">{{ plate }}</span>
+                        {% endfor %}
+                    {% else %}
+                        <span class="text-secondary small">No plates added yet.</span>
+                    {% endif %}
+                </div>
+            </div>
+            <a href="{{ url_for('account_settings') }}" class="btn btn-outline-primary">Account settings</a>
+        </div>
+
+        {% if not user_plates %}
+        <div class="card pw-card border-0 mb-4">
+            <div class="card-body p-4">
+                <h2 class="h5 fw-bold">Add a license plate</h2>
+                <p class="text-secondary mb-3">Add at least one plate in account settings to start receiving parking alerts for your vehicles.</p>
+                <a href="{{ url_for('account_settings') }}" class="btn btn-primary">Go to account settings</a>
             </div>
         </div>
+        {% endif %}
 
         {% set portal_mapped = fines | selectattr('device') | selectattr('device.latitude') | list %}
         {% if portal_mapped %}
         <div class="card pw-card border-0 mb-4">
             <div class="card-body p-3">
                 <p class="fw-semibold mb-2 small text-secondary">YOUR MONITORED SPOTS</p>
-                <div id="portal-map" style="height:200px; border-radius:10px; overflow:hidden;"></div>
+                <div id="portal-map" class="pw-map-frame pw-map-frame--md"></div>
             </div>
         </div>
         {% endif %}
 
-        {% if current_user.verification_status != 'approved' %}
-        <div class="card pw-card border-0 mb-4">
-            <div class="card-body p-4">
-                <span class="badge {% if current_user.verification_status == 'rejected' %}bg-danger{% else %}bg-warning{% endif %} mb-3">
-                    {{ current_user.verification_status|title }}
-                </span>
-                <h2 class="h5 fw-bold">Plate ownership review</h2>
-                <p class="text-secondary mb-0">
-                    {% if current_user.verification_status == 'rejected' %}
-                    Your proof was not approved. Contact an administrator with updated ownership documentation before parking alerts are shown here.
-                    {% else %}
-                    Your account is waiting for an administrator to confirm that your uploaded proof matches {{ current_user.license_plate }}.
-                    {% endif %}
-                </p>
-            </div>
-        </div>
-        {% endif %}
-
-        {% if fines and current_user.verification_status == 'approved' %}
+        {% if fines and user_plates %}
         <div class="card pw-card border-0">
             <div class="table-responsive">
                 <table class="table pw-table mb-0">
@@ -71,7 +73,7 @@
                                 <span class="small text-secondary">{{ fine.device.spot_label if fine.device else 'N/A' }}</span>
                             </td>
                             <td class="py-3">
-                                {% if fine.detected_plate != current_user.license_plate %}
+                                {% if fine.detected_plate not in user_plates %}
                                 <span class="badge bg-danger">Mismatch: {{ fine.detected_plate }}</span>
                                 {% else %}
                                 <span class="badge bg-success">Match</span>
@@ -152,7 +154,7 @@
                 </table>
             </div>
         </div>
-        {% elif current_user.verification_status == 'approved' %}
+        {% elif user_plates %}
         <div class="card pw-card border-0">
             <div class="card-body p-5 text-center">
                 <div class="d-inline-flex justify-content-center align-items-center rounded-circle bg-light mb-3" style="width: 64px; height: 64px;">
@@ -168,35 +170,33 @@
 {% endblock %}
 
 {% block scripts %}
+{% from "macros/park_map.html" import park_map_assets %}
 {% set portal_mapped = fines | selectattr('device') | selectattr('device.latitude') | list %}
 {% if portal_mapped %}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+{{ park_map_assets() }}
 <script>
-    const pMap = L.map('portal-map');
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors'
-    }).addTo(pMap);
-    const pBounds = [];
-    const statusColors = { violation: '#FF3B30', occupied: '#FF9500', empty: '#34C759', correct: '#007AFF' };
-    {% for f in portal_mapped %}
-    {% if f.device and f.device.latitude %}
-    (function() {
-        const lat = {{ f.device.latitude }}, lng = {{ f.device.longitude }};
-        pBounds.push([lat, lng]);
-        const color = statusColors['{{ f.device.current_status }}'] || '#8E8E93';
-        const icon = L.divIcon({
-            className: '',
-            html: `<div style="background:${color};width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.3)"></div>`,
-            iconSize: [14, 14], iconAnchor: [7, 7]
+    document.addEventListener("DOMContentLoaded", function () {
+        const seen = new Set();
+        const markers = [
+            {% for f in portal_mapped %}
+            {% if f.device and f.device.latitude %}
+            {
+                lat: {{ f.device.latitude }},
+                lng: {{ f.device.longitude }},
+                title: {{ f.device.spot_label | tojson }},
+                subtitle: {{ f.device.name | tojson }},
+                status: {{ f.device.current_status | tojson }}
+            },
+            {% endif %}
+            {% endfor %}
+        ].filter(function (marker) {
+            const key = marker.lat + "," + marker.lng;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
         });
-        L.marker([lat, lng], { icon }).addTo(pMap)
-            .bindPopup('<strong>{{ f.device.spot_label }}</strong>');
-    })();
-    {% endif %}
-    {% endfor %}
-    if (pBounds.length === 1) { pMap.setView(pBounds[0], 16); }
-    else if (pBounds.length > 1) { pMap.fitBounds(pBounds, { padding: [30, 30] }); }
+        ParkScanMaps.render("portal-map", markers);
+    });
 </script>
 {% endif %}
 <script>
@@ -243,10 +243,8 @@
         return outputArray;
     }
 
-    // Attempt subscription automatically on load if supported
+  // Attempt subscription automatically on load if supported
     window.addEventListener('load', () => {
-        // We might want to ask permission first, but browser will prompt automatically when subscribe is called
-        // if permission isn't already granted. 
         setTimeout(subscribeToPush, 2000);
     });
 
@@ -259,3 +257,4 @@
     };
 </script>
 {% endblock %}
+

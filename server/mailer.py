@@ -1,10 +1,15 @@
 import os
+import re
 import time
 import threading
 from flask_mail import Mail, Message
 from flask import current_app
 import config
 from models import db, Fine
+
+
+def _normalize_plate(plate):
+    return re.sub(r"[^A-Z0-9]", "", (plate or "").upper())
 
 mail = Mail()
 
@@ -34,8 +39,10 @@ class PhotoMailerWorker(threading.Thread):
             # should be able to request photos for that spot.
             
             # Since this is a simple system, we just send to the user associated with that spot/plate
-            from models import User
-            user = User.query.filter_by(license_plate=fine.expected_plate).first()
+            from models import User, UserPlate
+            normalized = _normalize_plate(fine.expected_plate)
+            row = UserPlate.query.filter_by(plate=normalized).first()
+            user = row.user if row else User.query.filter_by(license_plate=normalized).first()
             
             if not user:
                 print(f"[MAILER] Warning: No user found for plate {fine.expected_plate} (Fine #{fine.id})")

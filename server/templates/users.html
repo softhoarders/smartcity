@@ -25,8 +25,8 @@
                 <small>Admins</small>
             </div>
             <div class="admin-metric">
-                <span>{{ users | selectattr('verification_status', 'equalto', 'pending') | list | length }}</span>
-                <small>Pending</small>
+                <span>{% set ns = namespace(count=0) %}{% for user in users %}{% if not user.is_admin %}{% set ns.count = ns.count + (user.plate_values() | length) %}{% endif %}{% endfor %}{{ ns.count }}</span>
+                <small>Plates</small>
             </div>
         </div>
     </section>
@@ -47,8 +47,7 @@
                     <tr>
                         <th>User</th>
                         <th>Role</th>
-                        <th>Plate</th>
-                        <th>Status</th>
+                        <th>Plates</th>
                         <th>Joined</th>
                         <th class="text-end">Actions</th>
                     </tr>
@@ -68,19 +67,15 @@
                             {% endif %}
                         </td>
                         <td>
-                            {% if user.license_plate %}
-                            <span class="badge pw-plate-badge">{{ user.license_plate }}</span>
+                            {% set plates = user.plate_values() %}
+                            {% if plates %}
+                            <div class="d-flex flex-wrap gap-1">
+                                {% for plate in plates %}
+                                <span class="badge pw-plate-badge">{{ plate }}</span>
+                                {% endfor %}
+                            </div>
                             {% else %}
                             <span class="text-secondary small">—</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if user.verification_status == 'approved' %}
-                            <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle">Approved</span>
-                            {% elif user.verification_status == 'pending' %}
-                            <span class="badge bg-warning bg-opacity-10 text-warning-emphasis border border-warning-subtle">Pending</span>
-                            {% elif user.verification_status == 'rejected' %}
-                            <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle">Rejected</span>
                             {% endif %}
                         </td>
                         <td>
@@ -88,14 +83,6 @@
                         </td>
                         <td class="text-end">
                             <div class="admin-actions">
-                                {% if user.verification_status == 'pending' and not user.is_admin %}
-                                <form method="POST" action="{{ url_for('verify_user', user_id=user.id, action='approve') }}">
-                                    <button type="submit" class="btn btn-sm btn-success">Approve</button>
-                                </form>
-                                <form method="POST" action="{{ url_for('verify_user', user_id=user.id, action='reject') }}">
-                                    <button type="submit" class="btn btn-sm btn-outline-danger">Reject</button>
-                                </form>
-                                {% endif %}
                                 {% if not user.is_admin %}
                                 <form method="POST" action="{{ url_for('delete_user', user_id=user.id) }}"
                                       data-confirm="Delete {{ user.name }}? This cannot be undone.">

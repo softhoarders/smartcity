@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}ParkScan — Account Settings{% endblock %}
+{% block content %}
+<div class="row justify-content-center mb-4">
+    <div class="col-12 col-lg-8">
+        {% if is_demo is defined and is_demo %}
+        <div class="demo-banner mb-4">
+            <strong>Demo Mode</strong> — Account settings are read-only in demo mode.
+        </div>
+        {% endif %}
+
+        <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between mb-4 mt-2">
+            <div>
+                <h1 class="h3 fw-bold mb-1">Account Settings</h1>
+                <p class="text-secondary mb-0">Manage your profile and license plates.</p>
+            </div>
+            <a href="{{ url_for('portal') }}" class="btn btn-outline-secondary mt-3 mt-md-0">Back to portal</a>
+        </div>
+
+        <div class="card pw-card border-0 mb-4">
+            <div class="card-body p-4">
+                <h2 class="h5 fw-bold mb-3">Profile</h2>
+                <form method="POST" action="{{ url_for('account_settings') }}" class="row g-3">
+                    <input type="hidden" name="action" value="update_profile">
+                    <div class="col-md-6">
+                        <label class="form-label">Username</label>
+                        <input type="text" name="name" class="form-control" value="{{ current_user.name }}" required {% if is_demo is defined and is_demo %}disabled{% endif %}>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-control" value="{{ current_user.email }}" disabled>
+                    </div>
+                    {% if not (is_demo is defined and is_demo) %}
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-primary">Save profile</button>
+                    </div>
+                    {% endif %}
+                </form>
+            </div>
+        </div>
+
+        <div class="card pw-card border-0">
+            <div class="card-body p-4">
+                <h2 class="h5 fw-bold mb-1">License Plates</h2>
+                <p class="text-secondary mb-4">Add the plates you want to monitor. No review is required.</p>
+
+                {% if plate_rows %}
+                <ul class="list-group list-group-flush mb-4">
+                    {% for row in plate_rows %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                        <span class="badge pw-plate-badge">{{ row.plate }}</span>
+                        {% if not (is_demo is defined and is_demo) %}
+                        <form method="POST" action="{{ url_for('account_settings') }}" class="m-0" data-confirm="Remove plate {{ row.plate }}?">
+                            <input type="hidden" name="action" value="remove_plate">
+                            <input type="hidden" name="plate_id" value="{{ row.id }}">
+                            <button type="submit" class="btn btn-sm btn-outline-danger">Remove</button>
+                        </form>
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% elif user_plates %}
+                <div class="d-flex flex-wrap gap-2 mb-4">
+                    {% for plate in user_plates %}
+                    <span class="badge pw-plate-badge">{{ plate }}</span>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-secondary mb-4">No plates added yet. Add one below to start receiving parking alerts.</p>
+                {% endif %}
+
+                {% if not (is_demo is defined and is_demo) %}
+                <form method="POST" action="{{ url_for('account_settings') }}" class="row g-3 align-items-end">
+                    <input type="hidden" name="action" value="add_plate">
+                    <div class="col-md-8">
+                        <label class="form-label">New license plate</label>
+                        <input type="text" name="license_plate" class="form-control pw-plate-input" placeholder="B123ABC" required autocomplete="off">
+                    </div>
+                    <div class="col-md-4">
+                        <button type="submit" class="btn btn-primary w-100">Add plate</button>
+                    </div>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

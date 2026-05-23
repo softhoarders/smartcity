@@ -102,7 +102,7 @@
             </div>
 
             {% if device.latitude and device.longitude %}
-            <div id="device-map" style="height:200px; border-radius:12px; overflow:hidden; margin-bottom:1rem;"></div>
+            <div id="device-map" class="pw-map-frame pw-map-frame--md" style="margin-bottom:1rem;"></div>
             {% endif %}
 
             <form method="POST" action="{{ url_for('device_set_location', device_id=device.id) }}" class="admin-form">
@@ -229,18 +229,21 @@
 {% endblock %}
 
 {% block scripts %}
+{% from "macros/park_map.html" import park_map_assets %}
 {% if device.latitude and device.longitude %}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+{{ park_map_assets() }}
 <script>
-    const map = L.map('device-map').setView([{{ device.latitude }}, {{ device.longitude }}], 16);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors'
-    }).addTo(map);
-    L.marker([{{ device.latitude }}, {{ device.longitude }}])
-        .addTo(map)
-        .bindPopup('<strong>{{ device.name }}</strong><br>{{ device.spot_label }}')
-        .openPopup();
+    document.addEventListener("DOMContentLoaded", function () {
+        ParkScanMaps.render("device-map", [{
+            lat: {{ device.latitude }},
+            lng: {{ device.longitude }},
+            title: {{ device.name | tojson }},
+            subtitle: {{ device.spot_label | tojson }},
+            status: {{ device.current_status | tojson }},
+            selected: true
+        }], { single: true });
+    });
 </script>
 {% endif %}
 {% endblock %}
+

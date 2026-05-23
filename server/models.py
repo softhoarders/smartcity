@@ -98,6 +98,18 @@ class Fine(db.Model):
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
+class UserPlate(db.Model):
+    """License plates registered to a driver account."""
+    __tablename__ = "user_plates"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    plate = db.Column(db.String(20), nullable=False, unique=True, index=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    user = db.relationship("User", backref=db.backref("plates", lazy="dynamic", cascade="all, delete-orphan"))
+
+
 class User(UserMixin, db.Model):
     """A driver user account."""
     __tablename__ = "users"
@@ -105,10 +117,10 @@ class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(120), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(128), nullable=False)
-    license_plate = db.Column(db.String(20), nullable=False)
+    license_plate = db.Column(db.String(20), nullable=False, default="")
     name = db.Column(db.String(100), default="Driver")
     role = db.Column(db.String(20), default="driver", nullable=False)
-    verification_status = db.Column(db.String(20), default="pending", nullable=False)
+    verification_status = db.Column(db.String(20), default="approved", nullable=False)
     verification_document = db.Column(db.String(255), nullable=True)
     verification_notes = db.Column(db.String(500), nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
@@ -121,7 +133,16 @@ class User(UserMixin, db.Model):
 
     @property
     def is_verified_driver(self):
-        return self.role == "driver" and self.verification_status == "approved"
+        return self.role == "driver"
+
+    def plate_values(self):
+        """Normalized plates for this account (UserPlate rows + legacy column)."""
+        values = [row.plate for row in self.plates]
+        legacy = (self.license_plate or "").strip().upper()
+        legacy = "".join(ch for ch in legacy if ch.isalnum())
+        if legacy and legacy not in values:
+            values.append(legacy)
+        return values
 
 class FineMessage(db.Model):
     """Stores chat history for fine appeals."""

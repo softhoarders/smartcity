@@ -96,7 +96,7 @@
                 <h2>Device Map</h2>
             </div>
         </div>
-        <div id="analytics-map" style="height:340px; border-radius:12px; overflow:hidden;"></div>
+        <div id="analytics-map" class="pw-map-frame pw-map-frame--lg"></div>
     </section>
     {% endif %}
 </div>
@@ -139,30 +139,23 @@
 
 {% set mapped = devices | selectattr('latitude') | list %}
 {% if mapped %}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+{% from "macros/park_map.html" import park_map_assets %}
+{{ park_map_assets() }}
 <script>
-    const aMap = L.map('analytics-map');
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors'
-    }).addTo(aMap);
-    const aBounds = [];
-    const statusColors = { violation: '#FF3B30', occupied: '#FF9500', empty: '#34C759', correct: '#007AFF' };
-    {% for d in mapped %}
-    (function() {
-        const lat = {{ d.latitude }}, lng = {{ d.longitude }};
-        aBounds.push([lat, lng]);
-        const color = statusColors['{{ d.current_status }}'] || '#8E8E93';
-        const icon = L.divIcon({
-            className: '',
-            html: `<div style="background:${color};width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.3)"></div>`,
-            iconSize: [14, 14], iconAnchor: [7, 7]
-        });
-        L.marker([lat, lng], { icon }).addTo(aMap)
-            .bindPopup('<strong>{{ d.name }}</strong><br>{{ d.spot_label }}');
-    })();
-    {% endfor %}
-    aBounds.length === 1 ? aMap.setView(aBounds[0], 16) : aMap.fitBounds(aBounds, { padding: [30, 30] });
+    document.addEventListener("DOMContentLoaded", function () {
+        const markers = [
+            {% for d in mapped %}
+            {
+                lat: {{ d.latitude }},
+                lng: {{ d.longitude }},
+                title: {{ d.name | tojson }},
+                subtitle: {{ d.spot_label | tojson }},
+                status: {{ d.current_status | tojson }}
+            }{% if not loop.last %},{% endif %}
+            {% endfor %}
+        ];
+        ParkScanMaps.render("analytics-map", markers);
+    });
 </script>
 {% endif %}
 {% endblock %}

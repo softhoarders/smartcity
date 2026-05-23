@@ -5,7 +5,7 @@ Runs the monitoring loop:
   1. Register with server (MAC-based identity)
   2. Start health endpoint on port 3000
   3. Loop: capture → detect plate → compare → report fine if mismatch
-  4. Sleep based on time of day (10 min day / 30 min night)
+  4. Sleep based on time of day (~12 min day / ~20 min night, configurable)
 """
 
 import os
@@ -15,11 +15,13 @@ import shutil
 import threading
 from datetime import datetime, timedelta
 
+import requests
 from flask import Flask, jsonify
 
 import config
 from camera import capture_image, cleanup_old_captures
 from plate_reader import read_plate
+from power_manager import apply_runtime_defaults, energy_wait, set_active_mode, set_idle_mode
 from communicator import (
     get_mac_address,
     register_device,
@@ -201,7 +203,12 @@ def main():
     if config.TEST_IMAGE:
         print(f"  TEST MODE: using {config.TEST_IMAGE}")
     print("=" * 50)
+    print(f"  Day interval: {config.DAY_INTERVAL}s | Night: {config.NIGHT_INTERVAL}s")
+    print(f"  Energy save: {'on' if config.ENERGY_SAVE else 'off'}")
+    print("=" * 50)
     print()
+
+    apply_runtime_defaults()
 
     # 1. Get MAC address
     mac = get_mac_address()
@@ -251,7 +258,7 @@ def main():
                 print("[MAIN] ! SERVER REQUESTED IMMEDIATE CAPTURE !")
                 
             # Periodically adjust camera based on weather
-            if cycle % 30 == 1:
+            if cycle % config.WEATHER_POLL_CYCLES == 1:
                 _update_weather_camera_settings()
 
             # Fetch config (assigned plate)
@@ -263,13 +270,13 @@ def main():
 
             if not assigned_plate and not force_capture:
                 print("[MAIN] No plate assigned — skipping capture.")
-                time.sleep(interval)
+                energy_wait(interval)
                 continue
 
             if assigned_plate:
                 print(f"[MAIN] Assigned plate: {assigned_plate}")
 
-            # Capture image
+            set_active_mode()
             _status["state"] = "capturing"
             image_path = capture_image()
             _status["last_capture"] = datetime.now().isoformat()
@@ -277,7 +284,8 @@ def main():
             if not image_path:
                 print("[MAIN] Capture failed — skipping cycle.")
                 _status["state"] = "monitoring"
-                time.sleep(interval)
+                set_idle_mode()
+                energy_wait(interval)
                 continue
 
             # Detect plate
@@ -292,7 +300,8 @@ def main():
                 _status["spot_status"] = "empty"
                 _clear_mismatch()
                 _status["state"] = "monitoring"
-                time.sleep(interval)
+                set_idle_mode()
+                energy_wait(interval)
                 continue
 
             if not assigned_plate:
@@ -354,12 +363,13 @@ def main():
                 cleanup_old_evidence(14)
 
             _status["state"] = "monitoring"
+            set_idle_mode()
             if force_capture:
-                print("[MAIN] Immediate capture execution complete. Resuming normal interval in 5s...")
-                time.sleep(5)
+                print("[MAIN] Immediate capture complete. Short pause before next interval...")
+                energy_wait(5)
             else:
-                print(f"[MAIN] Sleeping {interval}s ({time_mode} mode)...")
-                time.sleep(interval)
+                print(f"[MAIN] Idle until next cycle ({interval}s, {time_mode} mode)...")
+                energy_wait(interval)
 
         except KeyboardInterrupt:
             print("\n[MAIN] Shutting down...")

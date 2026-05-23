@@ -1,18 +1,24 @@
 #!/usr/bin/env bash
-# ParkWatch Client — DietPi Install Script
-# For Raspberry Pi Zero 2 W running DietPi (headless, no GUI)
-set -e
+# ParkWatch Client — DietPi / Raspberry Pi installer
+# Headless capture every ~12 min (day) with energy-saving defaults and boot autostart.
+set -euo pipefail
 
 echo "============================================"
 echo "  ParkWatch Client Installer (DietPi)"
 echo "============================================"
 echo ""
 
-# Update packages
-echo "[*] Updating package lists..."
-sudo apt-get update
+INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SERVICE_USER="${SUDO_USER:-$(whoami)}"
+ENV_FILE="/etc/default/parkwatch"
+SERVICE_FILE="/etc/systemd/system/parkwatch.service"
 
-# Install system dependencies
+read -r -p "ParkWatch server URL [http://YOUR_SERVER_IP:2026]: " SERVER_URL
+SERVER_URL="${SERVER_URL:-http://YOUR_SERVER_IP:2026}"
+
+echo "[*] Updating package lists..."
+sudo apt-get update -qq
+
 echo "[*] Installing system dependencies..."
 sudo apt-get install -y \
     python3 \
@@ -27,72 +33,81 @@ sudo apt-get install -y \
     libjpeg-dev \
     libpng-dev \
     libtiff-dev \
-    v4l-utils
+    v4l-utils \
+    iw
 
-echo "[✓] System dependencies installed."
-
-# Create virtual environment
-if [ ! -d "venv" ]; then
+if [ ! -d "${INSTALL_DIR}/venv" ]; then
     echo "[*] Creating virtual environment..."
-    python3 -m venv venv --system-site-packages
+    python3 -m venv "${INSTALL_DIR}/venv" --system-site-packages
 else
     echo "[✓] Virtual environment already exists."
 fi
 
-# Install Python dependencies
 echo "[*] Installing Python dependencies..."
-source venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
+# shellcheck disable=SC1091
+source "${INSTALL_DIR}/venv/bin/activate"
+pip install --upgrade pip -q
+pip install -r "${INSTALL_DIR}/requirements.txt" -q
 
-# Create captures directory
-mkdir -p captures
+mkdir -p "${INSTALL_DIR}/captures" "${INSTALL_DIR}/evidence"
 
-# Create systemd service for auto-start
-echo "[*] Setting up systemd service..."
-INSTALL_DIR=$(pwd)
-SERVICE_FILE="/etc/systemd/system/parkwatch.service"
+echo "[*] Writing ${ENV_FILE}..."
+sudo tee "${ENV_FILE}" > /dev/null <<EOF
+# ParkWatch client environment (edit and restart: sudo systemctl restart parkwatch)
+PARKWATCH_SERVER=${SERVER_URL}
+PARKWATCH_ENERGY_SAVE=1
+PARKWATCH_DAY_INTERVAL=720
+PARKWATCH_NIGHT_INTERVAL=1200
+PARKWATCH_CAMERA=0
+PARKWATCH_CAPTURE_WIDTH=1280
+PARKWATCH_CAPTURE_HEIGHT=720
+EOF
+sudo chmod 644 "${ENV_FILE}"
 
-sudo tee "$SERVICE_FILE" > /dev/null <<EOF
+echo "[*] Applying one-time power optimizations..."
+PARKWATCH_ENERGY_SAVE=1 "${INSTALL_DIR}/venv/bin/python" -c "from power_manager import apply_install_defaults; apply_install_defaults()" || true
+
+echo "[*] Installing systemd service (starts on boot)..."
+sudo tee "${SERVICE_FILE}" > /dev/null <<EOF
 [Unit]
 Description=ParkWatch Parking Monitor Client
-After=network-online.target
+After=network-online.target local-fs.target
 Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
 
 [Service]
 Type=simple
-User=$(whoami)
+User=${SERVICE_USER}
+Group=${SERVICE_USER}
 WorkingDirectory=${INSTALL_DIR}
+EnvironmentFile=-${ENV_FILE}
+ExecStartPre=/bin/sleep 15
 ExecStart=${INSTALL_DIR}/venv/bin/python ${INSTALL_DIR}/main.py
 Restart=always
-RestartSec=30
-Environment="PARKWATCH_SERVER=http://YOUR_SERVER_IP:2026"
+RestartSec=45
+Nice=5
+IOSchedulingClass=idle
+SupplementaryGroups=video
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-echo "[✓] Systemd service created at ${SERVICE_FILE}"
+sudo systemctl daemon-reload
+sudo systemctl enable parkwatch.service
+echo "[*] Starting parkwatch.service..."
+sudo systemctl restart parkwatch.service || true
+
 echo ""
 echo "============================================"
-echo "  Installation complete!"
+echo "  Installation complete"
 echo "============================================"
 echo ""
-echo "  BEFORE STARTING: Edit the server URL:"
+echo "  Config:  sudo nano ${ENV_FILE}"
+echo "  Status:  sudo systemctl status parkwatch"
+echo "  Logs:    journalctl -u parkwatch -f"
+echo "  Health:  http://$(hostname -I 2>/dev/null | awk '{print $1}'):3000/"
 echo ""
-echo "    sudo nano /etc/systemd/system/parkwatch.service"
-echo "    # Change YOUR_SERVER_IP to your server's IP"
-echo ""
-echo "  Then enable and start the service:"
-echo ""
-echo "    sudo systemctl daemon-reload"
-echo "    sudo systemctl enable parkwatch"
-echo "    sudo systemctl start parkwatch"
-echo ""
-echo "  Or run manually:"
-echo ""
-echo "    source venv/bin/activate"
-echo "    PARKWATCH_SERVER=http://YOUR_SERVER_IP:2026 python main.py"
-echo ""
-echo "  Health check: http://localhost:3000/"
+echo "  Service is enabled — it will start automatically after reboot."
 echo "============================================"

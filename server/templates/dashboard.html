@@ -5,15 +5,20 @@
 <div class="admin-page">
     {% if is_demo is defined and is_demo %}
     <div class="demo-banner">
-        <strong>Demo Mode</strong> — You're viewing sample data. No real devices or fines are shown, and no changes are saved.
+        <strong>Demo Mode</strong> — Sample network with 14 devices and 12 alerts.
+        Sign in with <code>demo</code> / <code>demo123!</code> (Admin tab) to explore. Changes are not saved.
     </div>
     {% endif %}
+
+    {% set active_fines = fines|rejectattr('resolved')|list %}
+    {% set appeal_count = fines|selectattr('appeal_status', 'equalto', 'pending_human')|list|length + fines|selectattr('appeal_status', 'equalto', 'pending_ai')|list|length %}
+    {% set offline_count = devices|rejectattr('is_online')|list|length %}
 
     <section class="admin-hero">
         <div>
             <span class="admin-eyebrow">Operations</span>
             <h1>{% if show_all_fines is defined and show_all_fines %}Fine Records{% else %}Parking Command Center{% endif %}</h1>
-            <p>Monitor devices, verify plate ownership, and resolve parking events from one focused workspace.</p>
+            <p>Monitor devices and resolve parking events from one focused workspace.</p>
         </div>
         <div class="admin-hero-metrics">
             <div class="admin-metric">
@@ -25,11 +30,62 @@
                 <small>Online</small>
             </div>
             <div class="admin-metric">
-                <span>{{ fines|rejectattr('resolved')|list|length }}</span>
+                <span>{{ active_fines|length }}</span>
                 <small>Active</small>
             </div>
         </div>
     </section>
+
+    {% if active_fines or appeal_count or offline_count %}
+    <div class="admin-attention-strip">
+        {% if active_fines|length %}
+        <span class="admin-attention-chip danger">{{ active_fines|length }} active violation{{ 's' if active_fines|length != 1 }}</span>
+        {% endif %}
+        {% if appeal_count %}
+        <span class="admin-attention-chip warning">{{ appeal_count }} appeal{{ 's' if appeal_count != 1 }} need review</span>
+        {% endif %}
+        {% if offline_count %}
+        <span class="admin-attention-chip muted">{{ offline_count }} device{{ 's' if offline_count != 1 }} offline</span>
+        {% endif %}
+        {% if devices|selectattr('capture_requested')|list|length %}
+        <span class="admin-attention-chip info">{{ devices|selectattr('capture_requested')|list|length }} capture queued</span>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <div class="admin-dashboard-row">
+        <section class="admin-panel admin-chart-panel">
+            <div class="admin-section-header">
+                <div>
+                    <span class="admin-eyebrow">Trend</span>
+                    <h2>Violations (7 days)</h2>
+                </div>
+            </div>
+            <canvas id="weekChart" height="120"></canvas>
+        </section>
+
+        {% if activity_feed is defined and activity_feed %}
+        <section class="admin-panel admin-activity-panel">
+            <div class="admin-section-header">
+                <div>
+                    <span class="admin-eyebrow">Live feed</span>
+                    <h2>Recent activity</h2>
+                </div>
+            </div>
+            <ul class="admin-activity-list">
+                {% for item in activity_feed %}
+                <li class="admin-activity-item admin-activity-{{ item.level }}">
+                    <time>{{ item.when.strftime('%H:%M') if item.when else '' }}</time>
+                    <div>
+                        <strong>{{ item.title }}</strong>
+                        <span>{{ item.detail }}</span>
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+        </section>
+        {% endif %}
+    </div>
 
     <section class="admin-panel admin-map-panel">
         <div class="admin-section-header">
@@ -42,23 +98,51 @@
 
         {% set mapped_devices = devices | selectattr('latitude') | list %}
         {% if mapped_devices %}
-        <div id="dashboard-map" style="height:300px; border-radius:12px; overflow:hidden; margin-bottom:1.25rem;"></div>
+        <div id="dashboard-map" class="pw-map-frame pw-map-frame--hero"></div>
         {% endif %}
 
+        <div class="admin-map-legend">
+            <span><i class="admin-legend-dot admin-spot-empty"></i> Empty</span>
+            <span><i class="admin-legend-dot admin-spot-occupied"></i> Occupied</span>
+            <span><i class="admin-legend-dot admin-spot-correct"></i> Correct plate</span>
+            <span><i class="admin-legend-dot admin-spot-violation"></i> Violation</span>
+        </div>
+
+        {% if device_zones is defined and device_zones %}
+        {% for zone, zone_devices in device_zones %}
+        <div class="admin-zone-block">
+            <h3 class="admin-zone-title">{{ zone }} <span class="admin-soft-pill muted">{{ zone_devices|length }} spots</span></h3>
+            <div class="admin-parking-grid">
+                {% for device in zone_devices %}
+                <button class="spot-indicator admin-spot admin-spot-{{ device.current_status }} {% if device.current_status == 'correct' %}pulse-anim{% endif %} {% if device.capture_requested %}admin-spot-capture{% endif %}"
+                        id="spot-{{ device.id }}"
+                        data-status="{{ device.current_status }}"
+                        onclick="window.location='{{ url_for('device_detail', device_id=device.id) }}'"
+                        type="button"
+                        title="{{ device.name }}">
+                    <span class="admin-spot-label">{{ device.spot_label }}</span>
+                    <span class="admin-spot-plate device-plate">{{ device.assigned_plate or 'Unassigned' }}</span>
+                    {% if device.capture_requested %}<span class="admin-spot-flag">Capture</span>{% endif %}
+                </button>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+        {% else %}
         <div class="admin-parking-grid" id="parking-map">
             {% for device in devices %}
-            <button class="spot-indicator admin-spot admin-spot-{{ device.current_status }} {% if device.current_status == 'correct' %}pulse-anim{% endif %}"
+            <button class="spot-indicator admin-spot admin-spot-{{ device.current_status }}"
                     id="spot-{{ device.id }}"
-                    data-status="{{ device.current_status }}"
                     onclick="window.location='{{ url_for('device_detail', device_id=device.id) }}'"
                     type="button">
                 <span class="admin-spot-label">{{ device.spot_label }}</span>
-                <span class="admin-spot-plate device-plate">{{ device.assigned_plate or 'Unassigned' }}</span>
+                <span class="admin-spot-plate">{{ device.assigned_plate or 'Unassigned' }}</span>
             </button>
             {% else %}
             <div class="admin-empty-inline">No devices have checked in yet.</div>
             {% endfor %}
         </div>
+        {% endif %}
     </section>
 
     {% if pending_users is defined and pending_users %}
@@ -66,8 +150,8 @@
         <div class="admin-section-header">
             <div>
                 <span class="admin-eyebrow">Identity review</span>
-                <h2>Plate Verification</h2>
-                <p>Approve drivers only when the uploaded proof matches their name and plate.</p>
+                <h2>Driver verification</h2>
+                <p>New accounts — plates are added in account settings after approval.</p>
             </div>
             <span class="admin-soft-pill warning">{{ pending_users|length }} pending</span>
         </div>
@@ -91,7 +175,7 @@
                         <td><span class="badge pw-plate-badge">{{ user.license_plate }}</span></td>
                         <td>
                             {% if user.verification_document %}
-                            <a href="{{ url_for('serve_upload', filename=user.verification_document) }}" target="_blank" class="btn btn-sm btn-outline-primary">Open proof</a>
+                            <span class="admin-soft-pill">{{ user.verification_document }}</span>
                             {% else %}
                             <span class="text-secondary small">Missing</span>
                             {% endif %}
@@ -132,19 +216,28 @@
                     <span class="admin-device-main">
                         <strong>{{ device.name }}</strong>
                         <small>{{ device.spot_label }} · {{ device.mac_address }}</small>
+                        {% if device.last_wifi is not none or device.last_temp is not none %}
+                        <small class="admin-device-meta">
+                            {% if device.last_wifi is not none %}Wi‑Fi {{ device.last_wifi }}%{% endif %}
+                            {% if device.last_temp is not none %} · {{ device.last_temp }}°C{% endif %}
+                        </small>
+                        {% endif %}
                     </span>
-                    {% if device.assigned_plate %}
-                    <span class="badge pw-plate-badge">{{ device.assigned_plate }}</span>
-                    {% else %}
-                    <span class="admin-soft-pill muted">Unassigned</span>
-                    {% endif %}
+                    <span class="admin-device-badges">
+                        <span class="admin-status-chip admin-status-{{ device.current_status }}">{{ device.current_status }}</span>
+                        {% if device.assigned_plate %}
+                        <span class="badge pw-plate-badge">{{ device.assigned_plate }}</span>
+                        {% else %}
+                        <span class="admin-soft-pill muted">Unassigned</span>
+                        {% endif %}
+                    </span>
                 </button>
                 {% endfor %}
             </div>
             {% else %}
             <div class="admin-empty">
                 <h3>No Devices</h3>
-                <p>Plug in a Pi to automatically register it here.</p>
+                <p>Plug in a Pi and run <code>client/install.sh</code> — it will register automatically.</p>
             </div>
             {% endif %}
         </section>
@@ -155,10 +248,13 @@
                     <span class="admin-eyebrow">Enforcement</span>
                     <h2>{% if show_all_fines is defined and show_all_fines %}All Records{% else %}Recent Alerts{% endif %}</h2>
                 </div>
-                {% if fines|length > 0 %}
-                <span class="admin-soft-pill danger">{{ fines|length }} logs</span>
-                {% endif %}
-                <a href="{{ url_for('export_fines_csv') }}" class="btn btn-sm btn-outline-secondary">Export CSV</a>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    {% if fines|length > 0 %}
+                    <span class="admin-soft-pill danger">{{ active_fines|length }} active</span>
+                    {% endif %}
+                    <a href="{{ url_for('fines_page') }}" class="btn btn-sm btn-outline-secondary">View all</a>
+                    <a href="{{ url_for('export_fines_csv') }}" class="btn btn-sm btn-outline-secondary">Export CSV</a>
+                </div>
             </div>
 
             {% if fines %}
@@ -175,8 +271,8 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {% for fine in fines %}
-                            <tr class="{% if fine.resolved %}pw-resolved{% endif %}">
+                            {% for fine in fines[:12] %}
+                            <tr class="{% if fine.resolved %}pw-resolved{% endif %} {% if fine.appeal_status in ['pending_human', 'pending_ai'] %}admin-row-appeal{% endif %}">
                                 <td>
                                     <span class="fw-semibold d-block">{{ fine.device.spot_label if fine.device else 'Unknown' }}</span>
                                     <small class="text-secondary">{{ fine.device.name if fine.device else '' }}</small>
@@ -184,6 +280,7 @@
                                 <td>
                                     <span class="admin-alert-plate">Detected {{ fine.detected_plate }}</span>
                                     <small class="text-secondary d-block">Expected {{ fine.expected_plate }}</small>
+                                    <small class="text-secondary">OCR {{ fine.confidence_score|round(1) }}%</small>
                                 </td>
                                 <td>
                                     <span class="d-block fw-medium">{{ fine.created_at.strftime('%m/%d %H:%M') if fine.created_at else 'N/A' }}</span>
@@ -195,8 +292,15 @@
                                     {% else %}
                                     <span class="badge bg-warning bg-opacity-10 text-warning-emphasis border border-warning-subtle">Active</span>
                                     {% endif %}
+                                    {% if fine.appeal_status == 'pending_human' %}
+                                    <span class="badge bg-danger bg-opacity-10 text-danger mt-1 d-block w-fit">Human review</span>
+                                    {% elif fine.appeal_status == 'pending_ai' %}
+                                    <span class="badge bg-info bg-opacity-10 text-info mt-1 d-block w-fit">AI review</span>
+                                    {% elif fine.appeal_status == 'approved' %}
+                                    <span class="badge bg-success bg-opacity-10 text-success mt-1 d-block w-fit">Appeal OK</span>
+                                    {% endif %}
                                     {% if fine.photo_requested and not fine.photo_sent_at %}
-                                    <span class="badge bg-info bg-opacity-10 text-info mt-1 d-block w-fit">Photo Req</span>
+                                    <span class="badge bg-info bg-opacity-10 text-info mt-1 d-block w-fit">Photo requested</span>
                                     {% endif %}
                                 </td>
                                 <td class="text-end">
@@ -207,12 +311,12 @@
                                             </button>
                                         </form>
                                         {% if fine.image_filename %}
-                                        <a href="{{ url_for('serve_upload', filename=fine.image_filename) }}" target="_blank" class="btn btn-sm btn-primary">Photo</a>
+                                        <button type="button" class="btn btn-sm btn-primary" disabled title="Demo — no file stored">Evidence</button>
                                         {% endif %}
                                     </div>
                                 </td>
                             </tr>
-                            {% if fine.messages.count() > 0 or fine.appeal_status == 'pending_human' %}
+                            {% if fine.messages.count() > 0 or fine.appeal_status in ['pending_human', 'pending_ai'] %}
                             <tr class="admin-chat-row">
                                 <td colspan="5">
                                     <div class="admin-chat-panel">
@@ -222,9 +326,6 @@
                                             <div class="admin-message {% if msg.sender == 'Admin' %}from-admin{% endif %}">
                                                 <span>{{ msg.sender }}</span>
                                                 <p>{{ msg.content }}</p>
-                                                {% if msg.attachment_filename %}
-                                                <a href="{{ url_for('serve_upload', filename=msg.attachment_filename) }}" target="_blank">View attachment</a>
-                                                {% endif %}
                                             </div>
                                             {% endfor %}
                                         </div>
@@ -251,6 +352,12 @@
                         </tbody>
                     </table>
                 </div>
+                {% if fines|length > 12 %}
+                <p class="admin-table-footer text-secondary small mb-0 px-3 py-2">
+                    Showing 12 of {{ fines|length }} records —
+                    <a href="{{ url_for('fines_page') }}">view all fines</a>
+                </p>
+                {% endif %}
             </div>
             {% else %}
             <div class="admin-empty">
@@ -264,41 +371,57 @@
 {% endblock %}
 
 {% block scripts %}
+{% from "macros/park_map.html" import park_map_assets %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 {% set mapped_devices = devices | selectattr('latitude') | list %}
 {% if mapped_devices %}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+{{ park_map_assets() }}
 <script>
-    const dashMap = L.map('dashboard-map');
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors'
-    }).addTo(dashMap);
-
-    const statusColors = { violation: '#FF3B30', occupied: '#FF9500', empty: '#34C759', correct: '#007AFF' };
-    const bounds = [];
-
-    {% for d in mapped_devices %}
-    (function() {
-        const lat = {{ d.latitude }}, lng = {{ d.longitude }};
-        bounds.push([lat, lng]);
-        const color = statusColors['{{ d.current_status }}'] || '#8E8E93';
-        const icon = L.divIcon({
-            className: '',
-            html: `<div style="background:${color};width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.3)"></div>`,
-            iconSize: [14, 14], iconAnchor: [7, 7]
+    document.addEventListener("DOMContentLoaded", function () {
+        const markers = [
+            {% for d in mapped_devices %}
+            {
+                lat: {{ d.latitude }},
+                lng: {{ d.longitude }},
+                title: {{ d.name | tojson }},
+                subtitle: {{ d.spot_label | tojson }},
+                status: {{ d.current_status | tojson }}
+            }{% if not loop.last %},{% endif %}
+            {% endfor %}
+        ];
+        ParkScanMaps.render("dashboard-map", markers);
+    });
+</script>
+{% endif %}
+{% if chart_labels is defined and chart_data is defined %}
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const ctx = document.getElementById("weekChart");
+        if (!ctx) return;
+        new Chart(ctx, {
+            type: "line",
+            data: {
+                labels: {{ chart_labels | tojson }},
+                datasets: [{
+                    label: "Violations",
+                    data: {{ chart_data | tojson }},
+                    borderColor: "#0a84ff",
+                    backgroundColor: "rgba(10, 132, 255, 0.15)",
+                    fill: true,
+                    tension: 0.35,
+                    pointRadius: 4,
+                    pointBackgroundColor: "#0a84ff",
+                }],
+            },
+            options: {
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: { beginAtZero: true, ticks: { stepSize: 1, color: "#aeaeb2" }, grid: { color: "rgba(255,255,255,0.06)" } },
+                    x: { ticks: { color: "#aeaeb2" }, grid: { display: false } },
+                },
+            },
         });
-        L.marker([lat, lng], { icon })
-            .addTo(dashMap)
-            .bindPopup('<strong>{{ d.name }}</strong><br>{{ d.spot_label }}<br><span style="color:' + color + '">{{ d.current_status }}</span>');
-    })();
-    {% endfor %}
-
-    if (bounds.length === 1) {
-        dashMap.setView(bounds[0], 16);
-    } else {
-        dashMap.fitBounds(bounds, { padding: [30, 30] });
-    }
+    });
 </script>
 {% endif %}
 <script>
