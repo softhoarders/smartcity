@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Spotflow — Verify sign-in{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-12 col-md-6 col-lg-5">
+        <div class="card pw-card border-0 mt-4">
+            <div class="card-body p-4 p-md-5">
+                <h1 class="h4 fw-bold mb-2">Two-step verification</h1>
+                <p class="text-secondary small mb-4">
+                    Simulated 2FA — enter the 6-digit code shown below (or from Account → Security after sign-in).
+                    No real SMS or authenticator app is used.
+                </p>
+
+                {% if simulated_code %}
+                <div class="alert alert-info border-0 py-3 mb-4">
+                    <p class="small mb-1 fw-semibold">Simulated authenticator</p>
+                    <p class="display-6 fw-bold mb-1 tracking-wide" id="sim-code">{{ simulated_code }}</p>
+                    <p class="small text-secondary mb-0">Refreshes in <span id="sim-countdown">{{ seconds_remaining }}</span>s</p>
+                </div>
+                {% endif %}
+
+                <form method="POST" action="{{ url_for('login_2fa') }}">
+                    <div class="mb-3">
+                        <label class="form-label">Verification code</label>
+                        <input type="text" name="code" class="form-control form-control-lg text-center"
+                               inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code"
+                               placeholder="000000" required autofocus>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100 py-2">Continue</button>
+                </form>
+                <p class="text-center mt-3 mb-0">
+                    <a href="{{ url_for('login') }}" class="small text-secondary">Back to sign in</a>
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if simulated_code %}
+<script>
+(function () {
+    let remaining = {{ seconds_remaining }};
+    const countdown = document.getElementById("sim-countdown");
+    const codeEl = document.getElementById("sim-code");
+    setInterval(function () {
+        remaining -= 1;
+        if (remaining <= 0) {
+            remaining = 30;
+            fetch("{{ url_for('login_2fa_code') }}", { credentials: "same-origin" })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (data.code && codeEl) codeEl.textContent = data.code;
+                    if (data.seconds_remaining) remaining = data.seconds_remaining;
+                })
+                .catch(function () {});
+        }
+        if (countdown) countdown.textContent = remaining;
+    }, 1000);
+})();
+</script>
+{% endif %}
+{% endblock %}

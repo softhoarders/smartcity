@@ -17,7 +17,6 @@
     {% block head %}{% endblock %}
 </head>
 <body class="{% block body_class %}{% endblock %}">
-    <!-- Navbar -->
     {% block navbar %}
     <nav class="navbar navbar-expand-lg navbar-light pw-navbar sticky-top blur-bg">
         <div class="container-fluid">
@@ -36,43 +35,21 @@
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
-                <div class="d-flex align-items-center gap-4 ms-auto">
+                <div class="d-flex align-items-center gap-3 gap-lg-4 ms-auto">
                     {% if current_user.is_admin %}
-                    <a href="/admin" class="nav-link {% if request.endpoint == 'dashboard' and not show_all_fines %}active text-primary{% endif %}">Dashboard</a>
-                    <a href="/fines" class="nav-link {% if show_all_fines is defined and show_all_fines %}active text-primary{% endif %}">All Fines</a>
-                    <a href="/analytics" class="nav-link {% if request.endpoint == 'analytics' %}active text-primary{% endif %}">Analytics</a>
-                    <a href="/admin/users" class="nav-link {% if request.endpoint == 'users_page' %}active text-primary{% endif %}">Users</a>
+                    <a href="{{ url_for('dashboard') }}" class="nav-link {% if request.endpoint == 'dashboard' %}active text-primary{% endif %}">Overview</a>
+                    <a href="{{ url_for('users_page') }}" class="nav-link {% if request.endpoint == 'users_page' %}active text-primary{% endif %}">Users</a>
                     {% else %}
-                    <a href="{{ url_for('portal') }}" class="nav-link {% if request.endpoint == 'portal' %}active text-primary{% endif %}">My Activity</a>
+                    <a href="{{ url_for('portal') }}" class="nav-link {% if request.endpoint == 'portal' %}active text-primary{% endif %}">Home</a>
                     <a href="{{ url_for('find_parking') }}" class="nav-link {% if request.endpoint == 'find_parking' %}active text-primary{% endif %}">Find parking</a>
-                    <a href="{{ url_for('my_spots') }}" class="nav-link {% if request.endpoint == 'my_spots' %}active text-primary{% endif %}">My spots</a>
-                    <a href="{{ url_for('wallet') }}" class="nav-link {% if request.endpoint in ('wallet', 'wallet_topup') %}active text-primary{% endif %}">
-                        Wallet{% if nav_spots_balance is defined %} <span class="badge bg-primary bg-opacity-10 text-primary ms-1" style="font-size:0.65rem;">{{ nav_spots_balance }}</span>{% endif %}
+                    <a href="{{ url_for('account_settings') }}" class="nav-link {% if request.endpoint in ('account_settings', 'wallet', 'wallet_topup', 'my_spots') %}active text-primary{% endif %}">
+                        Account{% if nav_spots_balance is defined %} <span class="badge bg-primary bg-opacity-10 text-primary ms-1" style="font-size:0.65rem;">{{ nav_spots_balance }} Spots</span>{% endif %}
                     </a>
-                    <a href="{{ url_for('account_settings') }}" class="nav-link {% if request.endpoint == 'account_settings' %}active text-primary{% endif %}">Account</a>
                     {% endif %}
                     {% if is_demo is defined and is_demo %}
-                    <span class="badge bg-warning text-dark ms-2" style="font-size:0.7rem; letter-spacing:0.05em;">DEMO MODE</span>
+                    <span class="badge bg-warning text-dark" style="font-size:0.7rem;">Demo</span>
                     {% endif %}
-                    <div class="dropdown">
-                        <a href="#" class="d-flex align-items-center text-dark text-decoration-none dropdown-toggle" data-bs-toggle="dropdown">
-                            <div class="avatar bg-primary text-white d-flex justify-content-center align-items-center rounded-circle me-2" style="width: 32px; height: 32px;">
-                                {% if current_user.name %}
-                                    {{ current_user.name[0].upper() }}
-                                {% else %}
-                                    U
-                                {% endif %}
-                            </div>
-                            <small class="fw-medium">{{ current_user.name or 'Admin' }}</small>
-                        </a>
-                        <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0 mt-2">
-                            {% if not current_user.is_admin %}
-                            <li><a class="dropdown-item pw-dropdown-item" href="{{ url_for('account_settings') }}">Account settings</a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            {% endif %}
-                            <li><a class="dropdown-item text-danger pw-dropdown-item" href="/logout">Sign out</a></li>
-                        </ul>
-                    </div>
+                    <a href="{{ url_for('logout') }}" class="nav-link text-secondary small">Sign out</a>
                 </div>
             </div>
             {% endif %}
@@ -80,7 +57,6 @@
     </nav>
     {% endblock %}
 
-    <!-- Flash messages -->
     <div class="container mt-4 {% block flash_class %}{% endblock %}">
         {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
@@ -94,7 +70,6 @@
         {% endwith %}
     </div>
 
-    <!-- Content -->
     <main class="{% block main_class %}container py-4{% endblock %}">
         {% block content %}{% endblock %}
     </main>

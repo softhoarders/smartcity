@@ -5,8 +5,7 @@
 <div class="admin-page">
     {% if is_demo is defined and is_demo %}
     <div class="demo-banner">
-        <strong>Demo Mode</strong> — Sample network with 14 devices and 12 alerts.
-        Sign in with <code>demo</code> / <code>demo123!</code> (Admin tab) to explore. Changes are not saved.
+        <strong>Demo mode</strong> — Sample data only. Use <code>demo / demo123!</code> to explore. Nothing is saved.
     </div>
     {% endif %}
 
@@ -16,9 +15,8 @@
 
     <section class="admin-hero">
         <div>
-            <span class="admin-eyebrow">Operations</span>
-            <h1>{% if show_all_fines is defined and show_all_fines %}Fine Records{% else %}Parking Command Center{% endif %}</h1>
-            <p>Monitor devices and resolve parking events from one focused workspace.</p>
+            <h1>{% if show_all_fines is defined and show_all_fines %}All alerts{% else %}Overview{% endif %}</h1>
+            <p>{% if devices|length %}Monitor spots, devices, and parking alerts.{% else %}Connect a Pi camera to start monitoring — devices appear here automatically.{% endif %}</p>
         </div>
         <div class="admin-hero-metrics">
             <div class="admin-metric">
@@ -53,22 +51,21 @@
     </div>
     {% endif %}
 
+    {% if (is_demo is defined and is_demo) or (chart_data is defined and chart_data|sum > 0) or (activity_feed is defined and activity_feed) %}
     <div class="admin-dashboard-row">
+        {% if (is_demo is defined and is_demo) or (chart_data is defined and chart_data|sum > 0) %}
         <section class="admin-panel admin-chart-panel">
             <div class="admin-section-header">
-                <div>
-                    <span class="admin-eyebrow">Trend</span>
-                    <h2>Violations (7 days)</h2>
-                </div>
+                <div><h2>Violations (7 days)</h2></div>
             </div>
             <canvas id="weekChart" height="120"></canvas>
         </section>
+        {% endif %}
 
         {% if activity_feed is defined and activity_feed %}
         <section class="admin-panel admin-activity-panel">
             <div class="admin-section-header">
                 <div>
-                    <span class="admin-eyebrow">Live feed</span>
                     <h2>Recent activity</h2>
                 </div>
             </div>
@@ -86,12 +83,13 @@
         </section>
         {% endif %}
     </div>
+    {% endif %}
 
+    {% if (is_demo is defined and is_demo) or devices|length > 0 %}
     <section class="admin-panel admin-map-panel">
         <div class="admin-section-header">
             <div>
-                <span class="admin-eyebrow">Live status</span>
-                <h2>Parking Map</h2>
+                <h2>Parking map</h2>
             </div>
             <span class="admin-soft-pill">{{ devices|length }} monitored spots</span>
         </div>
@@ -144,6 +142,7 @@
         </div>
         {% endif %}
     </section>
+    {% endif %}
 
     {% if pending_plates is defined and pending_plates %}
     <section class="admin-panel">
@@ -281,15 +280,20 @@
         <section>
             <div class="admin-section-header outside">
                 <div>
-                    <span class="admin-eyebrow">Enforcement</span>
-                    <h2>{% if show_all_fines is defined and show_all_fines %}All Records{% else %}Recent Alerts{% endif %}</h2>
+                    <h2>{% if show_all_fines is defined and show_all_fines %}All alerts{% else %}Recent alerts{% endif %}</h2>
                 </div>
                 <div class="d-flex align-items-center gap-2 flex-wrap">
                     {% if fines|length > 0 %}
                     <span class="admin-soft-pill danger">{{ active_fines|length }} active</span>
                     {% endif %}
-                    <a href="{{ url_for('fines_page') }}" class="btn btn-sm btn-outline-secondary">View all</a>
-                    <a href="{{ url_for('export_fines_csv') }}" class="btn btn-sm btn-outline-secondary">Export CSV</a>
+                    {% if not (show_all_fines is defined and show_all_fines) and fines|length > 0 %}
+                    <a href="{{ url_for('dashboard', all=1) }}" class="btn btn-sm btn-outline-secondary">View all</a>
+                    {% elif show_all_fines is defined and show_all_fines %}
+                    <a href="{{ url_for('dashboard') }}" class="btn btn-sm btn-outline-secondary">Show recent</a>
+                    {% endif %}
+                    {% if fines|length > 0 %}
+                    <a href="{{ url_for('export_fines_csv') }}" class="btn btn-sm btn-outline-secondary">Export</a>
+                    {% endif %}
                 </div>
             </div>
 
@@ -391,7 +395,7 @@
                 {% if fines|length > 12 %}
                 <p class="admin-table-footer text-secondary small mb-0 px-3 py-2">
                     Showing 12 of {{ fines|length }} records —
-                    <a href="{{ url_for('fines_page') }}">view all fines</a>
+                    <a href="{{ url_for('dashboard', all=1) }}">view all alerts</a>
                 </p>
                 {% endif %}
             </div>
@@ -429,7 +433,7 @@
     });
 </script>
 {% endif %}
-{% if chart_labels is defined and chart_data is defined %}
+{% if (is_demo is defined and is_demo) or (chart_data is defined and chart_data|sum > 0) %}
 <script>
     document.addEventListener("DOMContentLoaded", function () {
         const ctx = document.getElementById("weekChart");

@@ -12,14 +12,12 @@
 
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start mb-4 mt-2 gap-3">
             <div>
-                <h1 class="h3 fw-bold mb-1">Find Parking</h1>
-                <p class="text-secondary mb-0">Book instantly or schedule a reservation. Prices are in Spots (1 Spot = 1 lei, no extra fees).</p>
+                <h1 class="h3 fw-bold mb-1">Find parking</h1>
+                <p class="text-secondary mb-0">Book instantly or schedule. Prices are in Spots (1 Spot = 1 lei).</p>
             </div>
-            <div class="d-flex align-items-center gap-3 flex-wrap">
-                <span class="badge pw-plate-badge">{{ balance }} Spots</span>
-                <a href="{{ url_for('wallet') }}" class="btn btn-sm btn-outline-primary">Buy Spots</a>
-                <a href="{{ url_for('my_spots') }}" class="btn btn-sm btn-outline-secondary">My spots</a>
-            </div>
+            {% if balance is defined %}
+            <span class="badge pw-plate-badge align-self-start">{{ balance }} Spots available</span>
+            {% endif %}
         </div>
 
         {% if mapped %}

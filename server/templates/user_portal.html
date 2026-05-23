@@ -1,33 +1,26 @@
 {% extends "base.html" %}
-{% block title %}Spotflow — My Fines{% endblock %}
+{% block title %}Spotflow — Home{% endblock %}
 
 {% block content %}
 <div class="row justify-content-center mb-4">
     <div class="col-12 col-lg-10">
         {% if is_demo is defined and is_demo %}
         <div class="demo-banner mb-4">
-            <strong>Demo Mode</strong> — You're viewing sample parking activity. No real data is shown.
+            <strong>Demo mode</strong> — Sample parking alerts for plate B123MAB.
         </div>
         {% endif %}
 
-        <div class="d-flex flex-column flex-md-row align-items-md-start justify-content-between mb-4 mt-2 gap-3">
-            <div>
-                <h1 class="h3 fw-bold mb-1">My Parking Activity</h1>
-                <p class="text-secondary mb-2">Plates on your account:</p>
-                <div class="d-flex flex-wrap gap-2">
-                    {% if user_plates %}
-                        {% for plate in user_plates %}
-                        <span class="badge pw-plate-badge">{{ plate }}</span>
-                        {% endfor %}
-                    {% else %}
-                        <span class="text-secondary small">No plates added yet.</span>
-                    {% endif %}
-                </div>
-            </div>
+        <div class="mb-4 mt-2">
+            <h1 class="h3 fw-bold mb-1">Home</h1>
+            <p class="text-secondary mb-2">Your plates:</p>
             <div class="d-flex flex-wrap gap-2">
-                <a href="{{ url_for('find_parking') }}" class="btn btn-primary">Find parking</a>
-                <a href="{{ url_for('wallet') }}" class="btn btn-outline-primary">Wallet</a>
-                <a href="{{ url_for('account_settings') }}" class="btn btn-outline-secondary">Account</a>
+                {% if user_plates %}
+                    {% for plate in user_plates %}
+                    <span class="badge pw-plate-badge">{{ plate }}</span>
+                    {% endfor %}
+                {% else %}
+                    <span class="text-secondary small">None yet — add one in Account.</span>
+                {% endif %}
             </div>
         </div>
 
@@ -35,8 +28,8 @@
         <div class="card pw-card border-0 mb-4">
             <div class="card-body p-4">
                 <h2 class="h5 fw-bold">Add a license plate</h2>
-                <p class="text-secondary mb-3">Add at least one plate in account settings to start receiving parking alerts for your vehicles.</p>
-                <a href="{{ url_for('account_settings') }}" class="btn btn-primary">Go to account settings</a>
+                <p class="text-secondary mb-3">Add a plate under Account with your registration document to receive parking alerts.</p>
+                <a href="{{ url_for('account_settings') }}" class="btn btn-primary">Go to Account</a>
             </div>
         </div>
         {% endif %}
@@ -45,7 +38,7 @@
         {% if portal_mapped %}
         <div class="card pw-card border-0 mb-4">
             <div class="card-body p-3">
-                <p class="fw-semibold mb-2 small text-secondary">YOUR MONITORED SPOTS</p>
+                <p class="fw-semibold mb-2 small text-secondary">Your monitored spots</p>
                 <div id="portal-map" class="pw-map-frame pw-map-frame--md"></div>
             </div>
         </div>
@@ -89,7 +82,7 @@
                                 {% if fine.resolved %}
                                 <div class="d-flex align-items-center gap-2">
                                     <span class="badge bg-success">Resolved</span>
-                                    <a href="{{ url_for('receipt', fine_id=fine.id) }}" target="_blank" class="btn btn-outline-secondary btn-sm rounded-pill"><i class="bi bi-printer"></i> Receipt</a>
+                                    <a href="{{ url_for('receipt', fine_id=fine.id) }}" target="_blank" class="btn btn-outline-secondary btn-sm rounded-pill">Receipt</a>
                                 </div>
                                 {% else %}
                                 <span class="badge bg-warning">Action Required</span>
@@ -161,11 +154,8 @@
         {% elif user_plates %}
         <div class="card pw-card border-0">
             <div class="card-body p-5 text-center">
-                <div class="d-inline-flex justify-content-center align-items-center rounded-circle bg-light mb-3" style="width: 64px; height: 64px;">
-                    <span class="fs-3">🙌</span>
-                </div>
-                <h4 class="fw-bold h5">No Fines Detected</h4>
-                <p class="text-secondary mb-0">Your parking spot clear history is spotless.</p>
+                <h4 class="fw-bold h5 mb-2">No alerts</h4>
+                <p class="text-secondary mb-0">No parking violations for your plates right now.</p>
             </div>
         </div>
         {% endif %}
@@ -204,7 +194,6 @@
 </script>
 {% endif %}
 <script>
-    // Web Push Subscription Logic
     async function subscribeToPush() {
         if ('serviceWorker' in navigator && 'PushManager' in window) {
             try {
@@ -228,7 +217,6 @@
                             'Content-Type': 'application/json'
                         }
                     });
-                    console.log("Push registered successfully!");
                 }
             } catch (err) {
                 console.log("Push reg error", err);
@@ -247,7 +235,6 @@
         return outputArray;
     }
 
-  // Attempt subscription automatically on load if supported
     window.addEventListener('load', () => {
         setTimeout(subscribeToPush, 2000);
     });
@@ -261,4 +248,3 @@
     };
 </script>
 {% endblock %}
-

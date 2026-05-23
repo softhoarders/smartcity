@@ -112,14 +112,28 @@ def effective_assigned_plate(device: Device, at: datetime | None = None) -> str 
 def refresh_booking_statuses():
     """Promote approved bookings to active when their window starts; complete expired ones."""
     now = _utcnow()
+    transitions: list[tuple] = []
     for booking in SpotBooking.query.filter(SpotBooking.status.in_(("approved", "active"))).all():
         starts = _aware(booking.starts_at)
         ends = _aware(booking.ends_at)
+        old_status = booking.status
         if booking.status == "approved" and starts and starts <= now < (ends or now):
             booking.status = "active"
         elif ends and ends <= now:
             booking.status = "completed"
+        if booking.status != old_status:
+            transitions.append((booking.id, old_status, booking.status))
     db.session.commit()
+    if transitions:
+        try:
+            import n8n_events
+
+            for booking_id, _old, new_status in transitions:
+                booking = SpotBooking.query.get(booking_id)
+                if booking:
+                    n8n_events.on_booking_event(booking, new_status)
+        except Exception:
+            pass
 
 
 def _charge_scheduled_remainder(booking: SpotBooking):

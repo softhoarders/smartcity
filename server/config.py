@@ -1,3 +1,4 @@
+import json
 import os
 
 from dotenv import load_dotenv
@@ -72,3 +73,36 @@ PRICING_GEMINI_ENABLED = os.environ.get("PRICING_GEMINI_ENABLED", "true").lower(
 PRICING_REFRESH_INTERVAL_SECONDS = int(os.environ.get("PRICING_REFRESH_INTERVAL", "3600"))
 GEO_CACHE_HOURS = int(os.environ.get("GEO_CACHE_HOURS", "24"))
 NOMINATIM_USER_AGENT = os.environ.get("NOMINATIM_USER_AGENT", "Spotflow/1.0 (local dev)")
+
+# Public URL for photo links in n8n webhooks (e.g. https://park.example.com)
+PUBLIC_BASE_URL = os.environ.get("SPOTFLOW_PUBLIC_URL", "").rstrip("/")
+
+# ---------------------------------------------------------------------------
+# n8n automation
+# ---------------------------------------------------------------------------
+N8N_ENABLED = os.environ.get("N8N_ENABLED", "false").lower() in ("true", "1", "t")
+# Single webhook base, e.g. http://localhost:5678/webhook
+N8N_WEBHOOK_BASE_URL = os.environ.get("N8N_WEBHOOK_BASE_URL", "")
+N8N_WEBHOOK_SECRET = os.environ.get("N8N_WEBHOOK_SECRET", "")
+N8N_WEBHOOK_API_KEY = os.environ.get("N8N_WEBHOOK_API_KEY", "")
+# Inbound API key for n8n → Spotflow calls (header X-Spotflow-Api-Key)
+N8N_API_KEY = os.environ.get("N8N_API_KEY", "")
+# Optional per-event override URLs (JSON object in env)
+_n8n_urls_raw = os.environ.get("N8N_WEBHOOK_URLS", "")
+try:
+    N8N_WEBHOOK_URLS = json.loads(_n8n_urls_raw) if _n8n_urls_raw else {}
+except json.JSONDecodeError:
+    N8N_WEBHOOK_URLS = {}
+
+# Edge device API (Pi) — optional shared secret
+DEVICE_API_KEY = os.environ.get("DEVICE_API_KEY", "")
+
+# Security
+FORCE_HTTPS = os.environ.get("SPOTFLOW_FORCE_HTTPS", "false").lower() in ("true", "1", "t")
+RATE_LIMIT_DEFAULT = int(os.environ.get("RATE_LIMIT_DEFAULT", "120"))
+RATE_LIMIT_WINDOW_SECONDS = int(os.environ.get("RATE_LIMIT_WINDOW_SECONDS", "60"))
+RATE_LIMIT_LOGIN_ATTEMPTS = int(os.environ.get("RATE_LIMIT_LOGIN_ATTEMPTS", "8"))
+RATE_LIMIT_LOGIN_WINDOW = int(os.environ.get("RATE_LIMIT_LOGIN_WINDOW", "900"))
+
+# Simulated 2FA — show current code on verify page (always simulated, never real SMS)
+SIMULATED_2FA_SHOW_CODE = os.environ.get("SIMULATED_2FA_SHOW_CODE", "true").lower() in ("true", "1", "t")

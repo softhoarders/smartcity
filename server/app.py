@@ -36,6 +36,10 @@ import spot_prices
 from mailer import mail, PhotoMailerWorker
 from plate_document_verifier import verify_plate_registration_document, normalize_plate_for_claim
 import json
+import n8n_events
+from n8n_routes import n8n_bp
+import security
+import two_factor
 from pywebpush import webpush, WebPushException
 
 # VAPID Config
@@ -74,15 +78,27 @@ CORS(app)
 db.init_app(app)
 bcrypt = Bcrypt(app)
 mail.init_app(app)
+app.register_blueprint(n8n_bp)
+security.configure_session_cookies(app)
+
+
+@app.after_request
+def _apply_security_headers(response):
+    return security.apply_security_headers(response)
 
 @app.context_processor
 def inject_globals():
     ctx = {"format_spots": spot_prices.format_tenths}
-    if current_user.is_authenticated and not getattr(current_user, "is_admin", False) and current_user.id > 0:
-        try:
-            ctx["nav_spots_balance"] = spots_service.user_balance(current_user)
-        except Exception:
-            ctx["nav_spots_balance"] = 0
+    if current_user.is_authenticated:
+        ctx["is_demo"] = _is_demo()
+        if not getattr(current_user, "is_admin", False) and current_user.id != 0:
+            if _is_demo():
+                ctx["nav_spots_balance"] = 120
+            elif current_user.id > 0:
+                try:
+                    ctx["nav_spots_balance"] = spots_service.user_balance(current_user)
+                except Exception:
+                    ctx["nav_spots_balance"] = 0
     return ctx
 
 login_manager = LoginManager()
@@ -132,6 +148,14 @@ with app.app_context():
         "subscription_next_billing_at": "DATETIME",
     }
     for column_name, column_sql in user_spots_columns.items():
+        if column_name not in user_columns:
+            db.session.execute(text(f"ALTER TABLE users ADD COLUMN {column_name} {column_sql}"))
+
+    twofa_columns = {
+        "twofa_enabled": "BOOLEAN NOT NULL DEFAULT 0",
+        "twofa_secret": "VARCHAR(64)",
+    }
+    for column_name, column_sql in twofa_columns.items():
         if column_name not in user_columns:
             db.session.execute(text(f"ALTER TABLE users ADD COLUMN {column_name} {column_sql}"))
 
@@ -479,7 +503,8 @@ class _FakeMessages:
 
 
 def _is_demo():
-    return session.get("is_demo", False) or (current_user.is_authenticated and current_user.id in (-1, -2))
+    """Demo sample data only when explicitly signed in via demo / demo123!."""
+    return bool(session.get("is_demo", False))
 
 
 def _group_devices_by_zone(devices):
@@ -638,6 +663,130 @@ def _demo_users():
     return users
 
 
+def _demo_plate_rows():
+    from types import SimpleNamespace
+    base = _now()
+    return [
+        SimpleNamespace(
+            id=1,
+            plate="B123MAB",
+            status="approved",
+            notes="Matched registration document (auto-verified).",
+            verified_at=base - timedelta(days=40),
+            verification_document="demo_registration_b123mab.pdf",
+        ),
+    ]
+
+
+def _demo_wallet_transactions():
+    from types import SimpleNamespace
+    base = _now()
+    return [
+        SimpleNamespace(
+            amount=config.SUBSCRIPTION_MONTHLY_SPOTS,
+            description="Monthly subscription credit",
+            created_at=base - timedelta(days=12),
+        ),
+        SimpleNamespace(
+            amount=50,
+            description="Top-up · card ending 4242",
+            created_at=base - timedelta(days=18),
+        ),
+        SimpleNamespace(
+            amount=-16,
+            description="Instant book · P2-04 · 2h",
+            created_at=base - timedelta(days=3),
+        ),
+        SimpleNamespace(
+            amount=-6,
+            description="Schedule deposit · H-22",
+            created_at=base - timedelta(days=1),
+        ),
+    ]
+
+
+def _demo_rental_listings():
+    from types import SimpleNamespace
+    devices = {d.id: d for d in _demo_devices()}
+    specs = [
+        (105, 1, "Covered garage steps from campus.", 12, 10, 5),
+        (109, 2, "Lakeside spot near Herastrau park.", 15, 12, 8),
+        (113, 3, "Rooftop parking with charger nearby.", 18, 14, 6),
+    ]
+    items = []
+    for dev_id, listing_id, description, instant, schedule, deposit in specs:
+        device = devices[dev_id]
+        listing = SimpleNamespace(
+            id=listing_id,
+            is_active=True,
+            approval_mode="auto",
+            pricing_mode="auto",
+            description=description,
+        )
+        items.append({
+            "listing": listing,
+            "device": device,
+            "instant_display": str(instant),
+            "schedule_display": str(schedule),
+            "deposit_display": str(deposit),
+        })
+    return items
+
+
+def _demo_owned_spots():
+    from types import SimpleNamespace
+    devices = {d.id: d for d in _demo_devices()}
+    device = devices[101]
+    listing = SimpleNamespace(
+        id=99,
+        is_active=True,
+        approval_mode="manual",
+        pricing_mode="auto",
+        description="Rent when you're at the office.",
+        location_zone="Calea Victoriei",
+    )
+    pending = SimpleNamespace(
+        id=501,
+        status="pending_approval",
+        renter_plate="IF-22-RST",
+        starts_at=_now() + timedelta(hours=5),
+        ends_at=_now() + timedelta(hours=9),
+        total_spots=24,
+    )
+    return [{
+        "device": device,
+        "listing": listing,
+        "pending": [pending],
+        "instant_display": "8",
+        "schedule_display": "6",
+    }]
+
+
+def _demo_renter_bookings():
+    from types import SimpleNamespace
+    devices = {d.id: d for d in _demo_devices()}
+    listing = SimpleNamespace(device=devices[105])
+    base = _now()
+    return [
+        SimpleNamespace(
+            listing=listing,
+            renter_plate="B123MAB",
+            starts_at=base - timedelta(hours=1),
+            ends_at=base + timedelta(hours=1),
+            booking_type="instant",
+            status="active",
+        ),
+        SimpleNamespace(
+            listing=SimpleNamespace(device=devices[109]),
+            renter_plate="B123MAB",
+            starts_at=base + timedelta(days=2, hours=10),
+            ends_at=base + timedelta(days=2, hours=14),
+            booking_type="scheduled",
+            status="approved",
+        ),
+    ]
+
+
 def _get_device_by_mac(mac):
     return Device.query.filter_by(mac_address=mac).first()
 
@@ -750,6 +899,7 @@ def save_verification_document(file_storage, plate):
 # ---------------------------------------------------------------------------
 
 @app.route("/api/devices/register", methods=["POST"])
+@security.require_device_api_key
 def api_register_device():
     """Register a new device or return existing one."""
     data = request.get_json(force=True)
@@ -774,6 +924,7 @@ def api_register_device():
 
 
 @app.route("/api/devices/<mac>/heartbeat", methods=["POST"])
+@security.require_device_api_key
 def api_heartbeat(mac):
     """Update device last_seen timestamp."""
     device = _get_device_by_mac(mac.upper())
@@ -887,6 +1038,7 @@ def send_web_push(user, title, body):
 # ---------------------------------------------------------------------------
 
 @app.route("/api/fines", methods=["POST"])
+@security.require_device_api_key
 def api_report_fine():
     """Client reports a plate mismatch."""
     mac = request.form.get("mac_address", "").strip().upper()
@@ -947,6 +1099,7 @@ def api_report_fine():
     db.session.add(fine)
     db.session.commit()
     broadcast_sse("new_fine", fine.to_dict())
+    n8n_events.on_violation_created(fine, device)
 
     # Notify user if expected plate matches a registered user using throttling
     if fine.expected_plate:
@@ -974,6 +1127,8 @@ def api_update_fine(fine_id):
     if "resolved" in data:
         fine.resolved = bool(data["resolved"])
     db.session.commit()
+    if fine.resolved:
+        n8n_events.on_violation_resolved(fine)
     return jsonify(fine.to_dict()), 200
 
 
@@ -998,6 +1153,8 @@ def index():
 @app.route("/admin")
 @require_admin
 def dashboard():
+    show_all_fines = request.args.get("all") == "1"
+
     if _is_demo():
         devices = _demo_devices()
         all_fines = _demo_fines()
@@ -1014,11 +1171,13 @@ def dashboard():
             chart_data=chart_data,
             device_zones=_group_devices_by_zone(devices),
             activity_feed=_demo_activity_feed(),
+            show_all_fines=show_all_fines,
             is_demo=True,
         )
 
     devices = Device.query.order_by(Device.created_at.desc()).all()
-    recent_fines = Fine.query.order_by(Fine.created_at.desc()).limit(20).all()
+    fines_query = Fine.query.order_by(Fine.created_at.desc())
+    recent_fines = fines_query.all() if show_all_fines else fines_query.limit(20).all()
     pending_users = []
 
     sevendays_ago = _now() - timedelta(days=6)
@@ -1054,6 +1213,8 @@ def dashboard():
         chart_data=chart_data,
         device_zones=_group_devices_by_zone(devices),
         activity_feed=[],
+        show_all_fines=show_all_fines,
+        is_demo=False,
     )
 
 
@@ -1069,7 +1230,7 @@ def device_detail(device_id):
         return render_template("device_detail.html", device=device, fines=fines, is_demo=True)
     device = Device.query.get_or_404(device_id)
     fines = device.fines.order_by(Fine.created_at.desc()).all()
-    return render_template("device_detail.html", device=device, fines=fines)
+    return render_template("device_detail.html", device=device, fines=fines, is_demo=False)
 
 
 @app.route("/device/<int:device_id>/update", methods=["POST"])
@@ -1176,12 +1337,11 @@ def device_replace_pi(device_id):
 @app.route("/analytics")
 @require_admin
 def analytics():
-    if _is_demo():
-        devices = _demo_devices()
-        fines = _demo_fines()
-    else:
-        devices = Device.query.all()
-        fines = Fine.query.order_by(Fine.created_at.desc()).all()
+    if not _is_demo():
+        return redirect(url_for("dashboard"))
+
+    devices = _demo_devices()
+    fines = _demo_fines()
 
     total_fines = len(fines)
     resolved_fines = sum(1 for f in fines if f.resolved)
@@ -1220,7 +1380,7 @@ def users_page():
         return render_template("users.html", users=_demo_users(), is_demo=True)
 
     users = User.query.order_by(User.created_at.desc()).all()
-    return render_template("users.html", users=users)
+    return render_template("users.html", users=users, is_demo=False)
 
 
 @app.route("/admin/users/<int:user_id>/delete", methods=["POST"])
@@ -1276,15 +1436,7 @@ def export_fines_csv():
 @app.route("/fines")
 @require_admin
 def fines_page():
-    if _is_demo():
-        return render_template("dashboard.html",
-                               devices=_demo_devices(), fines=_demo_fines(),
-                               pending_users=[], show_all_fines=True, is_demo=True)
-    fines = Fine.query.order_by(Fine.created_at.desc()).all()
-    return render_template("dashboard.html",
-                           devices=Device.query.all(),
-                           fines=fines,
-                           show_all_fines=True)
+    return redirect(url_for("dashboard", all=1))
 
 
 @app.route("/fine/<int:fine_id>/resolve", methods=["POST"])
@@ -1296,6 +1448,8 @@ def resolve_fine(fine_id):
     fine = Fine.query.get_or_404(fine_id)
     fine.resolved = not fine.resolved
     db.session.commit()
+    if fine.resolved:
+        n8n_events.on_violation_resolved(fine)
     flash(f"Fine #{fine.id} {'resolved' if fine.resolved else 'reopened'}.", "success")
     return redirect(request.referrer or url_for("dashboard"))
 
@@ -1333,6 +1487,16 @@ def verify_user(user_id, action):
 # ---------------------------------------------------------------------------
 # Auth — Routes
 # ---------------------------------------------------------------------------
+
+def _start_2fa_or_login(user, *, remember=False):
+    if user.id > 0 and getattr(user, "twofa_enabled", False) and user.twofa_secret:
+        session["pending_2fa_user_id"] = user.id
+        session["pending_2fa_remember"] = remember
+        session["pending_2fa_exp"] = (_now() + timedelta(minutes=5)).timestamp()
+        return redirect(url_for("login_2fa"))
+    login_user(user, remember=remember)
+    return redirect(url_for("dashboard") if user.is_admin else "portal")
+
 
 @app.route("/admin/login", methods=["GET", "POST"])
 def admin_login():
@@ -1388,6 +1552,7 @@ def login():
             db.session.add(user)
             db.session.commit()
 
+            session.pop("is_demo", None)
             if user.is_admin:
                 login_user(user)
                 flash("Admin account created.", "success")
@@ -1400,6 +1565,10 @@ def login():
                 "success",
             )
             return redirect(url_for("account_settings"))
+
+        if not security.login_attempt_allowed():
+            flash("Too many sign-in attempts. Please wait a few minutes.", "danger")
+            return redirect(url_for("login"))
 
         user = User.query.filter_by(email=email).first()
 
@@ -1421,6 +1590,8 @@ def login():
                 login_user(demo_user)
                 return redirect(url_for("portal"))
 
+        session.pop("is_demo", None)
+
         is_test_admin = email == "admin" and password == "admin123!"
         is_configured_admin = email == config.ADMIN_USERNAME and bcrypt.check_password_hash(config.ADMIN_PASSWORD_HASH, password)
 
@@ -1436,17 +1607,51 @@ def login():
             elif account_type == "driver" and user.is_admin:
                 flash("Use the admin sign-in option for this account.", "danger")
             else:
-                login_user(user)
-                return redirect(url_for("dashboard" if user.is_admin else "portal"))
+                return _start_2fa_or_login(user)
         else:
+            security.record_failed_login()
             flash("Invalid email or password.", "danger")
 
     return render_template("user_login.html")
+
+
+@app.route("/login/2fa", methods=["GET", "POST"])
+def login_2fa():
+    if current_user.is_authenticated:
+        return redirect(url_for("index"))
+    if not security.pending_2fa_valid():
+        flash("Verification expired. Please sign in again.", "warning")
+        security.clear_pending_2fa()
+        return redirect(url_for("login"))
+
+    user = User.query.get(session.get("pending_2fa_user_id"))
+    if not user or not user.twofa_enabled or not user.twofa_secret:
+        security.clear_pending_2fa()
+        return redirect(url_for("login"))
+
+    simulated_code = two_factor.current_code(user.twofa_secret) if config.SIMULATED_2FA_SHOW_CODE else None
+
+    if request.method == "POST":
+        if two_factor.verify_code(user.twofa_secret, request.form.get("code", "")):
+            remember = bool(session.get("pending_2fa_remember"))
+            security.clear_pending_2fa()
+            login_user(user, remember=remember)
+            flash("Signed in successfully.", "success")
+            return redirect(url_for("dashboard") if user.is_admin else "portal")
+        flash("Invalid verification code.", "danger")
+
+    return render_template(
+        "login_2fa.html",
+        simulated_code=simulated_code,
+        seconds_remaining=two_factor.seconds_remaining(),
+    )
+
 
 @app.route("/logout")
 @login_required
 def logout():
     session.pop("is_demo", None)
+    security.clear_pending_2fa()
     logout_user()
     return redirect(url_for("index"))
 
@@ -1756,7 +1961,7 @@ def portal():
     fines = []
     if user_plates:
         fines = Fine.query.filter(Fine.expected_plate.in_(user_plates)).order_by(Fine.created_at.desc()).all()
-    return render_template("user_portal.html", fines=fines, user_plates=user_plates)
+    return render_template("user_portal.html", fines=fines, user_plates=user_plates, is_demo=False)
 
 @app.route("/portal/settings", methods=["GET", "POST"])
 @login_required
@@ -1765,11 +1970,10 @@ def account_settings():
         return redirect(url_for("dashboard"))
 
     if _is_demo():
-        flash("Demo mode — account settings are read-only.", "info")
         return render_template(
             "account_settings.html",
             user_plates=user_plate_values(current_user),
-            plate_rows=[],
+            plate_rows=_demo_plate_rows(),
             is_demo=True,
         )
 
@@ -1811,6 +2015,7 @@ def account_settings():
                         )
                         sync_user_primary_plate(current_user)
                         db.session.commit()
+                        n8n_events.on_plate_verification(current_user, plate, "approved", reason)
                         flash(f"Plate {plate} verified and added.", "success")
                     else:
                         if proof_path and os.path.exists(proof_path):
@@ -1831,6 +2036,9 @@ def account_settings():
                         )
                         sync_user_primary_plate(current_user)
                         db.session.commit()
+                        n8n_events.on_plate_verification(
+                            current_user, plate, "pending", str(exc)[:500]
+                        )
                         flash(
                             "Document uploaded. Automatic verification is unavailable — an admin will review it.",
                             "warning",
@@ -1858,6 +2066,21 @@ def account_settings():
             else:
                 flash("Username cannot be empty.", "danger")
 
+        elif action == "enable_2fa":
+            if current_user.id <= 0:
+                flash("2FA is not available for this account.", "warning")
+            else:
+                current_user.twofa_secret = two_factor.generate_secret()
+                current_user.twofa_enabled = True
+                db.session.commit()
+                flash("Simulated 2FA enabled. Use the code shown under Account → Security.", "success")
+
+        elif action == "disable_2fa":
+            current_user.twofa_enabled = False
+            current_user.twofa_secret = None
+            db.session.commit()
+            flash("Simulated 2FA disabled.", "info")
+
         return redirect(url_for("account_settings"))
 
     plate_rows = [
@@ -1873,7 +2096,41 @@ def account_settings():
         "account_settings.html",
         user_plates=user_plate_values(current_user),
         plate_rows=plate_rows,
+        twofa_enabled=bool(getattr(current_user, "twofa_enabled", False)),
+        simulated_2fa_code=(
+            two_factor.current_code(current_user.twofa_secret)
+            if getattr(current_user, "twofa_enabled", False) and current_user.twofa_secret
+            else None
+        ),
+        twofa_seconds_remaining=two_factor.seconds_remaining(),
+        is_demo=False,
     )
+
+
+@app.route("/login/2fa/code", methods=["GET"])
+def login_2fa_code():
+    if not security.pending_2fa_valid():
+        return jsonify({"enabled": False}), 403
+    user = User.query.get(session.get("pending_2fa_user_id"))
+    if not user or not user.twofa_secret:
+        return jsonify({"enabled": False}), 403
+    return jsonify({
+        "enabled": True,
+        "code": two_factor.current_code(user.twofa_secret),
+        "seconds_remaining": two_factor.seconds_remaining(),
+    })
+
+
+@app.route("/portal/settings/2fa-code", methods=["GET"])
+@login_required
+def account_2fa_code():
+    if not getattr(current_user, "twofa_enabled", False) or not current_user.twofa_secret:
+        return jsonify({"enabled": False})
+    return jsonify({
+        "enabled": True,
+        "code": two_factor.current_code(current_user.twofa_secret),
+        "seconds_remaining": two_factor.seconds_remaining(),
+    })
 
 
 @app.route("/portal/fine/<int:fine_id>/request-photo", methods=["POST"])
@@ -1938,12 +2195,14 @@ def appeal_fine(fine_id):
             db.session.add(err_msg)
             
         db.session.commit()
+        n8n_events.on_violation_appeal(fine, fine.appeal_status)
         
     elif fine.appeal_status == "rejected_by_ai":
         # Second appeal -> Human admin
         fine.appeal_status = "pending_human"
         fine.appeal_reason = reason
         db.session.commit()
+        n8n_events.on_violation_appeal(fine, "pending_human")
         flash("Your second appeal has been forwarded to a human administrator.", "success")
         
     return redirect(url_for("portal"))
@@ -1971,6 +2230,7 @@ def admin_handle_appeal(fine_id, action):
     admin_msg = FineMessage(fine_id=fine.id, sender="Admin", content=msg)
     db.session.add(admin_msg)
     db.session.commit()
+    n8n_events.on_violation_appeal(fine, fine.appeal_status)
     return redirect(request.referrer or url_for("dashboard"))
 
 
@@ -2050,7 +2310,7 @@ def wallet():
             subscription_next_billing=_now() + timedelta(days=18),
             subscription_monthly_lei=config.SUBSCRIPTION_MONTHLY_LEI,
             subscription_monthly_spots=config.SUBSCRIPTION_MONTHLY_SPOTS,
-            transactions=[],
+            transactions=_demo_wallet_transactions(),
             is_demo=True,
         )
 
@@ -2059,6 +2319,12 @@ def wallet():
     if request.method == "POST" and request.form.get("action") == "subscribe_balance":
         try:
             spots_service.activate_subscription(current_user)
+            n8n_events.on_wallet_event(
+                current_user,
+                "subscription_activated",
+                config.SUBSCRIPTION_MONTHLY_SPOTS,
+                "Monthly subscription activated",
+            )
             flash("Subscription activated. Monthly Spots have been added to your wallet.", "success")
         except ValueError as exc:
             flash(str(exc), "danger")
@@ -2077,6 +2343,7 @@ def wallet():
         subscription_monthly_lei=config.SUBSCRIPTION_MONTHLY_LEI,
         subscription_monthly_spots=config.SUBSCRIPTION_MONTHLY_SPOTS,
         transactions=txs,
+        is_demo=False,
     )
 
 
@@ -2116,6 +2383,12 @@ def wallet_topup():
                     metadata={"spots": config.SUBSCRIPTION_MONTHLY_SPOTS},
                     commit=True,
                 )
+                n8n_events.on_wallet_event(
+                    current_user,
+                    "subscription_card",
+                    config.SUBSCRIPTION_MONTHLY_SPOTS,
+                    "Subscription via mock card",
+                )
                 flash(
                     f"Subscription active. {config.SUBSCRIPTION_MONTHLY_SPOTS} Spots added to your wallet.",
                     "success",
@@ -2133,6 +2406,7 @@ def wallet_topup():
                 metadata={"lei": lei_amount, "spots": added},
                 commit=True,
             )
+            n8n_events.on_wallet_event(current_user, "topup", added, f"Top-up {lei_amount} lei")
             flash(f"Added {added} Spots to your wallet (mock payment).", "success")
         except ValueError as exc:
             flash(str(exc), "danger")
@@ -2154,11 +2428,9 @@ def my_spots():
         return denied
 
     if _is_demo():
-        demo_devices = [d for d in _demo_devices() if d.id in (101, 102)]
-        owned = [{"device": d, "listing": None, "pending": []} for d in demo_devices[:1]]
         return render_template(
             "my_spots.html",
-            owned=owned,
+            owned=_demo_owned_spots(),
             claimable=[],
             my_bookings=[],
             default_instant_hourly=config.DEFAULT_INSTANT_PRICE_PER_HOUR,
@@ -2294,6 +2566,7 @@ def my_spots():
                     booking_id=booking.id,
                     commit=True,
                 )
+                n8n_events.on_booking_event(booking, booking.status)
                 flash("Booking approved. The renter can park during the reserved window.", "success")
             except ValueError as exc:
                 flash(str(exc), "danger")
@@ -2309,6 +2582,7 @@ def my_spots():
                     booking_id=booking.id,
                     commit=True,
                 )
+                n8n_events.on_booking_event(booking, "rejected")
                 flash("Booking rejected and deposit refunded if applicable.", "info")
             except ValueError as exc:
                 flash(str(exc), "danger")
@@ -2369,6 +2643,7 @@ def my_spots():
         default_schedule_hourly=config.DEFAULT_SCHEDULE_PRICE_PER_HOUR,
         pricing_default_min=config.PRICING_DEFAULT_MIN_TENTHS / 10,
         pricing_default_max=config.PRICING_DEFAULT_MAX_TENTHS / 10,
+        is_demo=False,
     )
 
 
@@ -2382,14 +2657,14 @@ def find_parking():
     user_plates = user_plate_values(current_user)
 
     if _is_demo():
-        listings = []
+        listings = _demo_rental_listings()
         return render_template(
             "find_parking.html",
             listings=listings,
             user_plates=user_plates or ["B123MAB"],
             balance=120,
-            renter_bookings=[],
-            mapped=False,
+            renter_bookings=_demo_renter_bookings(),
+            mapped=True,
             is_demo=True,
         )
 
@@ -2434,6 +2709,9 @@ def find_parking():
                     metadata={"status": booking.status, "total_spots": booking.total_spots},
                     commit=True,
                 )
+                n8n_events.on_booking_event(booking, "requested")
+                if booking.status != "pending_approval":
+                    n8n_events.on_booking_event(booking, booking.status)
                 if booking.status == "active":
                     flash("Paid and confirmed. You can park now — your plate is authorized for this spot.", "success")
                 elif booking.status == "pending_approval":
@@ -2472,6 +2750,9 @@ def find_parking():
                     metadata={"status": booking.status, "total_spots": booking.total_spots},
                     commit=True,
                 )
+                n8n_events.on_booking_event(booking, "requested")
+                if booking.status != "pending_approval":
+                    n8n_events.on_booking_event(booking, booking.status)
                 if booking.status == "active":
                     flash("Reservation confirmed. You can park during your scheduled window.", "success")
                 elif booking.status == "approved":

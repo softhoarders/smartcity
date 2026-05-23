@@ -145,6 +145,8 @@ class User(UserMixin, db.Model):
     subscription_active = db.Column(db.Boolean, default=False, nullable=False)
     subscription_started_at = db.Column(db.DateTime, nullable=True)
     subscription_next_billing_at = db.Column(db.DateTime, nullable=True)
+    twofa_enabled = db.Column(db.Boolean, default=False, nullable=False)
+    twofa_secret = db.Column(db.String(64), nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     
     # We use UserMixin which provides is_authenticated, is_active, is_anonymous, get_id()

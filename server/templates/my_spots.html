@@ -7,15 +7,9 @@
         <div class="demo-banner mb-4"><strong>Demo Mode</strong> — Changes are not saved.</div>
         {% endif %}
 
-        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start mb-4 mt-2 gap-3">
-            <div>
-                <h1 class="h3 fw-bold mb-1">My Parking Spots</h1>
-                <p class="text-secondary mb-0">Claim spots, set prices, and use smart pricing based on demand logged in the app.</p>
-            </div>
-            <div class="d-flex gap-2 flex-wrap">
-                <a href="{{ url_for('find_parking') }}" class="btn btn-outline-primary">Find parking</a>
-                <a href="{{ url_for('wallet') }}" class="btn btn-outline-secondary">Wallet</a>
-            </div>
+        <div class="mb-4 mt-2">
+            <h1 class="h3 fw-bold mb-1">My spots</h1>
+            <p class="text-secondary mb-0">Claim monitored spots and offer them for rent.</p>
         </div>
 
         {% if claimable %}

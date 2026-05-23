@@ -1,23 +1,43 @@
 {% extends "base.html" %}
-{% block title %}Spotflow — Account Settings{% endblock %}
+{% block title %}Spotflow — Account{% endblock %}
 {% block content %}
 <div class="row justify-content-center mb-4">
     <div class="col-12 col-lg-8">
         {% if is_demo is defined and is_demo %}
         <div class="demo-banner mb-4">
-            <strong>Demo Mode</strong> — Account settings are read-only in demo mode.
+            <strong>Demo mode</strong> — Read-only sample account.
         </div>
         {% endif %}
 
-        <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between mb-4 mt-2">
-            <div>
-                <h1 class="h3 fw-bold mb-1">Account Settings</h1>
-                <p class="text-secondary mb-0">Manage your profile and verified license plates.</p>
+        <div class="mb-4 mt-2">
+            <h1 class="h3 fw-bold mb-1">Account</h1>
+            <p class="text-secondary mb-0">Profile, plates, wallet, and your parking spots.</p>
+        </div>
+
+        <div class="row g-3 mb-4">
+            <div class="col-md-4">
+                <a href="{{ url_for('wallet') }}" class="card pw-card border-0 text-decoration-none h-100">
+                    <div class="card-body p-3">
+                        <p class="small text-secondary mb-1">Spots wallet</p>
+                        <p class="fw-bold mb-0 text-primary">{% if nav_spots_balance is defined %}{{ nav_spots_balance }}{% else %}0{% endif %} Spots</p>
+                    </div>
+                </a>
             </div>
-            <div class="d-flex flex-wrap gap-2 mt-3 mt-md-0">
-                <a href="{{ url_for('wallet') }}" class="btn btn-outline-primary">Spots wallet</a>
-                <a href="{{ url_for('my_spots') }}" class="btn btn-outline-secondary">My spots</a>
-                <a href="{{ url_for('portal') }}" class="btn btn-outline-secondary">Back to portal</a>
+            <div class="col-md-4">
+                <a href="{{ url_for('my_spots') }}" class="card pw-card border-0 text-decoration-none h-100">
+                    <div class="card-body p-3">
+                        <p class="small text-secondary mb-1">My spots</p>
+                        <p class="fw-bold mb-0">List or claim spots</p>
+                    </div>
+                </a>
+            </div>
+            <div class="col-md-4">
+                <a href="{{ url_for('portal') }}" class="card pw-card border-0 text-decoration-none h-100">
+                    <div class="card-body p-3">
+                        <p class="small text-secondary mb-1">Parking alerts</p>
+                        <p class="fw-bold mb-0">View home</p>
+                    </div>
+                </a>
             </div>
         </div>
 
@@ -43,13 +63,39 @@
             </div>
         </div>
 
+        <div class="card pw-card border-0 mb-4">
+            <div class="card-body p-4">
+                <h2 class="h5 fw-bold mb-1">Security (simulated 2FA)</h2>
+                <p class="text-secondary small mb-3">
+                    Optional extra sign-in step. Codes are generated on this page — not sent by SMS or email.
+                </p>
+                {% if twofa_enabled is defined and twofa_enabled and simulated_2fa_code %}
+                <div class="alert alert-info border-0 py-3 mb-3">
+                    <p class="small mb-1 fw-semibold">Current simulated code</p>
+                    <p class="h3 fw-bold mb-1" id="acct-2fa-code">{{ simulated_2fa_code }}</p>
+                    <p class="small text-secondary mb-0">Next code in <span id="acct-2fa-countdown">{{ twofa_seconds_remaining }}</span>s</p>
+                </div>
+                {% if not (is_demo is defined and is_demo) %}
+                <form method="POST" action="{{ url_for('account_settings') }}" class="m-0">
+                    <input type="hidden" name="action" value="disable_2fa">
+                    <button type="submit" class="btn btn-outline-danger btn-sm">Disable 2FA</button>
+                </form>
+                {% endif %}
+                {% elif not (is_demo is defined and is_demo) %}
+                <form method="POST" action="{{ url_for('account_settings') }}">
+                    <input type="hidden" name="action" value="enable_2fa">
+                    <button type="submit" class="btn btn-outline-primary btn-sm">Enable simulated 2FA</button>
+                </form>
+                {% else %}
+                <p class="text-secondary small mb-0">2FA is off in demo mode.</p>
+                {% endif %}
+            </div>
+        </div>
+
         <div class="card pw-card border-0">
             <div class="card-body p-4">
-                <h2 class="h5 fw-bold mb-1">License Plates</h2>
-                <p class="text-secondary mb-3">
-                    Each plate must be verified with an official document (PDF or DOCX) from city hall,
-                    police, or vehicle registration showing the same plate and your name.
-                </p>
+                <h2 class="h5 fw-bold mb-1">License plates</h2>
+                <p class="text-secondary mb-3">Upload a PDF or DOCX registration document to verify each plate.</p>
 
                 {% if plate_rows %}
                 <ul class="list-group list-group-flush mb-4">
@@ -61,7 +107,7 @@
                                 {% if row.status == 'approved' %}
                                 <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle ms-1">Verified</span>
                                 {% elif row.status == 'pending' %}
-                                <span class="badge bg-warning bg-opacity-10 text-warning-emphasis border border-warning-subtle ms-1">Pending review</span>
+                                <span class="badge bg-warning bg-opacity-10 text-warning-emphasis border border-warning-subtle ms-1">Pending</span>
                                 {% elif row.status == 'rejected' %}
                                 <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle ms-1">Rejected</span>
                                 {% endif %}
@@ -81,7 +127,7 @@
                     {% endfor %}
                 </ul>
                 {% else %}
-                <p class="text-secondary mb-4">No plates yet. Add your first plate and registration document below.</p>
+                <p class="text-secondary mb-4">No plates yet.</p>
                 {% endif %}
 
                 {% if not (is_demo is defined and is_demo) %}
@@ -90,12 +136,10 @@
                     <div class="col-md-6">
                         <label class="form-label">License plate</label>
                         <input type="text" name="license_plate" class="form-control pw-plate-input" placeholder="B123ABC" required autocomplete="off">
-                        <div class="form-text">Must match the plate on your official document.</div>
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Registration document</label>
                         <input type="file" name="registration_document" class="form-control" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required>
-                        <div class="form-text">PDF or DOCX only, max 8 MB.</div>
                     </div>
                     <div class="col-12">
                         <button type="submit" class="btn btn-primary">Verify &amp; add plate</button>
@@ -106,4 +150,30 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+{% if twofa_enabled is defined and twofa_enabled %}
+<script>
+(function () {
+    let remaining = {{ twofa_seconds_remaining|default(30) }};
+    const el = document.getElementById("acct-2fa-countdown");
+    const codeEl = document.getElementById("acct-2fa-code");
+    setInterval(function () {
+        remaining -= 1;
+        if (remaining <= 0) {
+            remaining = 30;
+            fetch("{{ url_for('account_2fa_code') }}", { credentials: "same-origin" })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (d.code && codeEl) codeEl.textContent = d.code;
+                    if (d.seconds_remaining) remaining = d.seconds_remaining;
+                })
+                .catch(function () {});
+        }
+        if (el) el.textContent = remaining;
+    }, 1000);
+})();
+</script>
+{% endif %}
 {% endblock %}
