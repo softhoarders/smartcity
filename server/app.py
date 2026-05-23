@@ -286,8 +286,8 @@ def load_user(user_id):
     if user_id == "-2":
         demo_user = User(email="demo", password_hash="", license_plate="B-123-MAB", role="driver", verification_status="approved")
         demo_user.id = -2
-        demo_user.name = "Demo User"
-        demo_user.plate_list = ["B123MAB"]
+        demo_user.name = _demo_profile_name()
+        demo_user.plate_list = _demo_plate_values()
         return demo_user
     return User.query.get(int(user_id))
 
@@ -706,10 +706,23 @@ def _demo_users():
     return users
 
 
+def _demo_profile_name() -> str:
+    return (session.get("demo_profile") or {}).get("name") or "Demo User"
+
+
+def _demo_plates_state() -> dict:
+    state = session.get("demo_plates")
+    if state is None:
+        state = {"extra": [], "next_id": 100}
+        session["demo_plates"] = state
+    return state
+
+
 def _demo_plate_rows():
     from types import SimpleNamespace
+
     base = _now()
-    return [
+    rows = [
         SimpleNamespace(
             id=1,
             plate="B123MAB",
@@ -719,6 +732,141 @@ def _demo_plate_rows():
             verification_document="demo_registration_b123mab.pdf",
         ),
     ]
+    for raw in _demo_plates_state().get("extra", []):
+        rows.append(
+            SimpleNamespace(
+                id=raw["id"],
+                plate=raw["plate"],
+                status=raw.get("status", "approved"),
+                notes=raw.get("notes", ""),
+                verified_at=datetime.fromisoformat(raw["verified_at"])
+                if raw.get("verified_at")
+                else base,
+                verification_document=raw.get("verification_document"),
+            )
+        )
+    return rows
+
+
+def _demo_plate_values() -> list[str]:
+    plates = []
+    for row in _demo_plate_rows():
+        if row.status == "approved":
+            plates.append(row.plate)
+    return list(dict.fromkeys(plates))
+
+
+def _account_owner_name(user) -> str:
+    if _is_demo() and getattr(user, "id", None) == -2:
+        return _demo_profile_name()
+    return (getattr(user, "name", "") or "").strip()
+
+
+def _process_plate_registration_upload(user, plate_input: str, proof_file, *, demo: bool) -> bool:
+    """Validate document with Gemini and add plate. Sets flash messages; caller should redirect."""
+    plate = normalize_plate(plate_input)
+    owner_name = _account_owner_name(user)
+
+    if not is_valid_plate(plate):
+        flash("Enter a valid license plate with letters and numbers.", "danger")
+        return True
+    if not owner_name or len(owner_name) < 2:
+        flash("Set your full name under Profile before uploading a registration document.", "danger")
+        return True
+
+    if demo:
+        existing = {normalize_plate(r.plate) for r in _demo_plate_rows()}
+    else:
+        existing = {row.plate for row in user.plates}
+    if plate in existing:
+        flash("That license plate is already on your account.", "danger")
+        return True
+    if not demo and UserPlate.query.filter_by(plate=plate).first():
+        flash("That license plate is already registered to an account.", "danger")
+        return True
+
+    if not proof_file or not proof_file.filename:
+        flash(
+            "Upload a PDF or Word document (city hall, police, or vehicle registration).",
+            "danger",
+        )
+        return True
+
+    proof_rel = None
+    proof_path = None
+    try:
+        proof_rel, mime = save_plate_proof_upload(proof_file)
+        proof_path = os.path.join(app.config["UPLOAD_FOLDER"], proof_rel)
+        result = verify_plate_registration_document(proof_path, mime, plate, owner_name)
+
+        if result.verified:
+            if demo:
+                state = _demo_plates_state()
+                state["extra"].insert(
+                    0,
+                    {
+                        "id": state.get("next_id", 100),
+                        "plate": plate,
+                        "status": "approved",
+                        "notes": result.reason[:500],
+                        "verified_at": _now().isoformat(),
+                        "verification_document": proof_rel,
+                    },
+                )
+                state["next_id"] = state.get("next_id", 100) + 1
+                session["demo_plates"] = state
+                session.modified = True
+            else:
+                db.session.add(
+                    UserPlate(
+                        user_id=user.id,
+                        plate=plate,
+                        verification_status="approved",
+                        verification_document=proof_rel,
+                        verification_notes=result.reason[:500],
+                        verified_at=_now(),
+                    )
+                )
+                sync_user_primary_plate(user)
+                db.session.commit()
+                n8n_events.on_plate_verification(user, plate, "approved", result.reason)
+            flash(f"Plate {plate} verified and added.", "success")
+            return True
+
+        if proof_path and os.path.exists(proof_path):
+            os.remove(proof_path)
+        flash(f"Document did not match your details: {result.reason}", "danger")
+        return True
+
+    except ValueError as exc:
+        flash(str(exc), "danger")
+        return True
+    except RuntimeError as exc:
+        if not demo and proof_path and proof_rel:
+            db.session.add(
+                UserPlate(
+                    user_id=user.id,
+                    plate=plate,
+                    verification_status="pending",
+                    verification_document=proof_rel,
+                    verification_notes=str(exc)[:500],
+                )
+            )
+            sync_user_primary_plate(user)
+            db.session.commit()
+            n8n_events.on_plate_verification(user, plate, "pending", str(exc)[:500])
+            flash(
+                "Document uploaded. Automatic verification is unavailable — an admin will review it.",
+                "warning",
+            )
+        else:
+            if proof_path and os.path.exists(proof_path):
+                os.remove(proof_path)
+            flash(
+                f"Could not verify the document automatically: {exc}",
+                "danger",
+            )
+        return True
 
 
 def _demo_wallet_transactions():
@@ -922,6 +1070,8 @@ def is_valid_plate(plate):
 
 
 def user_plate_values(user):
+    if _is_demo() and getattr(user, "id", None) == -2:
+        return _demo_plate_values()
     if hasattr(user, "plate_list"):
         return list(user.plate_list)
     if hasattr(user, "plates") and hasattr(user.plates, "all"):
@@ -952,7 +1102,7 @@ def save_plate_proof_upload(file_storage) -> tuple[str, str]:
 
     ext = file_storage.filename.rsplit(".", 1)[-1].lower()
     if ext not in config.PLATE_PROOF_EXTENSIONS:
-        raise ValueError("Upload a PDF or DOCX from city hall, police, or vehicle registration.")
+        raise ValueError("Upload a PDF or Word document (.pdf, .doc, .docx) from city hall, police, or vehicle registration.")
 
     file_storage.stream.seek(0, os.SEEK_END)
     size = file_storage.stream.tell()
@@ -1800,6 +1950,8 @@ def login_2fa():
 def logout():
     session.pop("is_demo", None)
     session.pop("demo_wallet", None)
+    session.pop("demo_plates", None)
+    session.pop("demo_profile", None)
     security.clear_pending_2fa()
     logout_user()
     return redirect(url_for("index"))
@@ -2141,10 +2293,42 @@ def account_settings():
         return redirect(url_for("dashboard"))
 
     if _is_demo():
+        if request.method == "POST":
+            action = request.form.get("action", "")
+            if action == "add_plate":
+                _process_plate_registration_upload(
+                    current_user,
+                    request.form.get("license_plate", ""),
+                    request.files.get("registration_document"),
+                    demo=True,
+                )
+            elif action == "update_profile":
+                name = request.form.get("name", "").strip()
+                if name:
+                    session["demo_profile"] = {"name": name}
+                    session.modified = True
+                    flash("Profile updated.", "success")
+                else:
+                    flash("Username cannot be empty.", "danger")
+            elif action == "remove_plate":
+                plate_id = request.form.get("plate_id", type=int)
+                state = _demo_plates_state()
+                before = len(state.get("extra", []))
+                state["extra"] = [r for r in state.get("extra", []) if r.get("id") != plate_id]
+                if len(state["extra"]) < before:
+                    session["demo_plates"] = state
+                    session.modified = True
+                    flash("License plate removed.", "success")
+                else:
+                    flash("Plate not found.", "danger")
+            return redirect(url_for("account_settings"))
+
         return render_template(
             "account_settings.html",
             user_plates=user_plate_values(current_user),
             plate_rows=_demo_plate_rows(),
+            account_owner_name=_account_owner_name(current_user),
+            gemini_configured=bool(config.GEMINI_API_KEY),
             is_demo=True,
         )
 
@@ -2152,70 +2336,12 @@ def account_settings():
         action = request.form.get("action", "")
 
         if action == "add_plate":
-            plate = normalize_plate(request.form.get("license_plate", ""))
-            proof_file = request.files.get("registration_document")
-
-            if not is_valid_plate(plate):
-                flash("Enter a valid license plate with letters and numbers.", "danger")
-            elif UserPlate.query.filter_by(plate=plate).first():
-                flash("That license plate is already registered to an account.", "danger")
-            elif not proof_file or not proof_file.filename:
-                flash("Upload a PDF or DOCX registration document from city hall, police, or vehicle registration.", "danger")
-            else:
-                proof_rel = None
-                proof_path = None
-                try:
-                    proof_rel, mime = save_plate_proof_upload(proof_file)
-                    proof_path = os.path.join(app.config["UPLOAD_FOLDER"], proof_rel)
-                    verified, reason = verify_plate_registration_document(
-                        proof_path,
-                        mime,
-                        plate,
-                        current_user.name,
-                    )
-                    if verified:
-                        db.session.add(
-                            UserPlate(
-                                user_id=current_user.id,
-                                plate=plate,
-                                verification_status="approved",
-                                verification_document=proof_rel,
-                                verification_notes=reason,
-                                verified_at=_now(),
-                            )
-                        )
-                        sync_user_primary_plate(current_user)
-                        db.session.commit()
-                        n8n_events.on_plate_verification(current_user, plate, "approved", reason)
-                        flash(f"Plate {plate} verified and added.", "success")
-                    else:
-                        if proof_path and os.path.exists(proof_path):
-                            os.remove(proof_path)
-                        flash(f"Document did not match your details: {reason}", "danger")
-                except ValueError as exc:
-                    flash(str(exc), "danger")
-                except RuntimeError as exc:
-                    if proof_path and os.path.exists(proof_path):
-                        db.session.add(
-                            UserPlate(
-                                user_id=current_user.id,
-                                plate=plate,
-                                verification_status="pending",
-                                verification_document=proof_rel if proof_path else None,
-                                verification_notes=str(exc)[:500],
-                            )
-                        )
-                        sync_user_primary_plate(current_user)
-                        db.session.commit()
-                        n8n_events.on_plate_verification(
-                            current_user, plate, "pending", str(exc)[:500]
-                        )
-                        flash(
-                            "Document uploaded. Automatic verification is unavailable — an admin will review it.",
-                            "warning",
-                        )
-                    else:
-                        flash(str(exc), "danger")
+            _process_plate_registration_upload(
+                current_user,
+                request.form.get("license_plate", ""),
+                request.files.get("registration_document"),
+                demo=False,
+            )
 
         elif action == "remove_plate":
             plate_id = request.form.get("plate_id", type=int)
@@ -2267,6 +2393,8 @@ def account_settings():
         "account_settings.html",
         user_plates=user_plate_values(current_user),
         plate_rows=plate_rows,
+        account_owner_name=_account_owner_name(current_user),
+        gemini_configured=bool(config.GEMINI_API_KEY),
         twofa_enabled=bool(getattr(current_user, "twofa_enabled", False)),
         simulated_2fa_code=(
             two_factor.current_code(current_user.twofa_secret)

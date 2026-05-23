@@ -25,12 +25,28 @@
 
     function popupHtml(marker) {
         const color = marker.color || STATUS_COLORS[marker.status] || STATUS_COLORS.unknown;
-        const statusLine = marker.status
-            ? `<div class="pw-map-popup-status" style="color:${color}">${marker.status}</div>`
+        const statusLine = marker.statusLabel
+            ? `<div class="pw-map-popup-status" style="color:${color}">${marker.statusLabel}</div>`
+            : marker.status
+              ? `<div class="pw-map-popup-status" style="color:${color}">${marker.status}</div>`
+              : "";
+        const meta = marker.meta
+            ? `<div class="pw-map-popup-meta">${marker.meta}</div>`
             : "";
+        const action = marker.actionHtml || "";
         return `<div class="pw-map-popup-title">${marker.title || ""}</div>
                 <div class="pw-map-popup-sub">${marker.subtitle || ""}</div>
-                ${statusLine}`;
+                ${meta}
+                ${statusLine}
+                ${action}`;
+    }
+
+    function pinHtml(marker, color) {
+        const count =
+            marker.count > 1
+                ? `<span class="pw-map-pin-count" aria-label="${marker.count} alerts">${marker.count}</span>`
+                : "";
+        return `<div class="pw-map-pin" style="--pin-color:${color}"><span class="pw-map-pin-core"></span>${count}</div>`;
     }
 
     async function render(containerId, markers, options) {
@@ -80,6 +96,7 @@
 
             const safeMarkers = (markers || []).filter((m) => m.lat != null && m.lng != null);
             const bounds = [];
+            const markerRefs = [];
 
             safeMarkers.forEach((marker) => {
                 const lat = marker.lat;
@@ -88,21 +105,32 @@
                 const color = marker.color || STATUS_COLORS[marker.status] || STATUS_COLORS.unknown;
                 const icon = L.divIcon({
                     className: "pw-map-marker-wrap",
-                    html: `<div class="pw-map-pin" style="--pin-color:${color}"><span class="pw-map-pin-core"></span></div>`,
-                    iconSize: [28, 28],
-                    iconAnchor: [14, 14],
+                    html: pinHtml(marker, color),
+                    iconSize: [32, 32],
+                    iconAnchor: [16, 16],
                 });
-                L.marker([lat, lng], { icon }).addTo(map).bindPopup(popupHtml(marker), {
+                const leafletMarker = L.marker([lat, lng], { icon }).addTo(map).bindPopup(popupHtml(marker), {
                     className: "pw-map-popup",
-                    maxWidth: 260,
+                    maxWidth: 280,
                 });
+                if (marker.id != null) {
+                    leafletMarker._spotflowId = marker.id;
+                }
+                if (typeof options?.onMarkerClick === "function") {
+                    leafletMarker.on("click", function () {
+                        options.onMarkerClick(marker, leafletMarker);
+                    });
+                }
+                markerRefs.push({ data: marker, leaflet: leafletMarker });
             });
 
+            const fitPadding = options?.padding || [52, 52];
+            const maxZoom = options?.maxZoom ?? 16;
             if (bounds.length === 1) {
                 map.setView(bounds[0], options?.zoom || 16);
-            } else if (bounds.length > 1) {
-                map.fitBounds(bounds, { padding: [48, 48] });
-            } else {
+            } else if (bounds.length > 1 && options?.fitBounds !== false) {
+                map.fitBounds(bounds, { padding: fitPadding, maxZoom: maxZoom });
+            } else if (!bounds.length) {
                 map.setView([44.4268, 26.1025], 12);
             }
 
@@ -115,7 +143,10 @@
                 ro.observe(container);
                 container._spotflowMapResize = ro;
             }
-            return map;
+            if (typeof options?.onReady === "function") {
+                options.onReady({ map, markers: markerRefs });
+            }
+            return { map, markers: markerRefs };
         } catch (error) {
             console.error("[SpotflowMaps]", error);
             container.innerHTML =

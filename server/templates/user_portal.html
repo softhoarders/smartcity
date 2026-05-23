@@ -62,14 +62,42 @@
 </div>
 {% else %}
 
-<div class="portal-layout {% if portal_mapped %}portal-layout--map{% endif %}">
+<div class="portal-layout">
     {% if portal_mapped %}
-    <section class="portal-map-card pw-card border-0" aria-label="Alert locations">
-        <div class="portal-map-head">
-            <span class="fw-semibold small">Map</span>
-            <span class="text-secondary small">{{ portal_mapped | length }} location{{ 's' if portal_mapped | length != 1 else '' }}</span>
+    <section class="portal-map-hero pw-card border-0" aria-label="Alert locations map">
+        <div class="portal-map-hero-head">
+            <div class="portal-map-hero-copy">
+                <p class="portal-map-eyebrow">Live locations</p>
+                <h2 class="portal-map-title">Where alerts happened</h2>
+                <p class="portal-map-sub">Tap a pin or spot below to jump to the matching alert in your list.</p>
+            </div>
+            <div class="portal-map-hero-actions">
+                <button type="button" class="portal-map-fit-btn" id="portal-map-fit" disabled title="Fit all pins in view">
+                    <span class="portal-map-fit-icon" aria-hidden="true">⌖</span>
+                    Fit view
+                </button>
+            </div>
         </div>
-        <div id="portal-map" class="pw-map-frame portal-map-frame"></div>
+
+        <div class="portal-map-stage">
+            <div id="portal-map" class="pw-map-frame portal-map-frame" role="application" aria-label="Interactive map of alert locations">
+                <div class="portal-map-loading" id="portal-map-loading">
+                    <span class="portal-map-loading-pulse" aria-hidden="true"></span>
+                    <span>Loading map…</span>
+                </div>
+            </div>
+            <div class="portal-map-legend" aria-hidden="false">
+                <span class="portal-map-legend-item"><i class="portal-map-legend-dot portal-map-legend-dot--danger"></i> Needs action</span>
+                <span class="portal-map-legend-item"><i class="portal-map-legend-dot portal-map-legend-dot--pending"></i> In review</span>
+                <span class="portal-map-legend-item"><i class="portal-map-legend-dot portal-map-legend-dot--open"></i> Open</span>
+                <span class="portal-map-legend-item"><i class="portal-map-legend-dot portal-map-legend-dot--resolved"></i> Resolved</span>
+            </div>
+        </div>
+
+        <div class="portal-map-rail-wrap">
+            <p class="portal-map-rail-label">Jump to spot</p>
+            <div class="portal-map-rail" id="portal-map-spots" role="list"></div>
+        </div>
     </section>
     {% endif %}
 
@@ -83,7 +111,7 @@
         <ul class="portal-alert-list list-unstyled mb-0">
             {% for fine in fines %}
             {% set is_mismatch = fine.detected_plate and user_plates and fine.detected_plate not in user_plates %}
-            <li class="portal-alert pw-card border-0 {% if fine.resolved %}portal-alert--resolved{% endif %}">
+            <li class="portal-alert pw-card border-0 {% if fine.resolved %}portal-alert--resolved{% endif %}" id="alert-{{ fine.id }}" data-fine-id="{{ fine.id }}"{% if fine.device and fine.device.latitude %} data-spot-lat="{{ fine.device.latitude }}" data-spot-lng="{{ fine.device.longitude }}"{% endif %}>
                 <div class="portal-alert-accent {% if fine.resolved %}is-resolved{% elif fine.appeal_status in ['pending_human', 'pending_ai'] %}is-pending{% elif is_mismatch %}is-alert{% else %}is-watch{% endif %}" aria-hidden="true"></div>
                 <div class="portal-alert-body">
                     <div class="portal-alert-top">
@@ -190,30 +218,48 @@
 {% from "macros/park_map.html" import park_map_assets %}
 {% if portal_mapped %}
 {{ park_map_assets() }}
+<script src="{{ url_for('static', filename='portal-map.js') }}"></script>
 <script>
     document.addEventListener("DOMContentLoaded", function () {
-        const seen = new Set();
-        const markers = [
+        const portalAlerts = [
             {% for f in portal_mapped %}
             {% if f.device and f.device.latitude %}
+            {% set is_mismatch = f.detected_plate and user_plates and f.detected_plate not in user_plates %}
+            {% if f.resolved %}
+            {% set alert_tone = 'resolved' %}
+            {% set alert_label = 'Resolved' %}
+            {% elif f.appeal_status in ['pending_human', 'pending_ai'] %}
+            {% set alert_tone = 'pending' %}
+            {% set alert_label = 'In review' %}
+            {% elif is_mismatch %}
+            {% set alert_tone = 'danger' %}
+            {% set alert_label = 'Mismatch' %}
+            {% else %}
+            {% set alert_tone = 'open' %}
+            {% set alert_label = 'Open' %}
+            {% endif %}
             {
+                fineId: {{ f.id }},
                 lat: {{ f.device.latitude }},
                 lng: {{ f.device.longitude }},
-                title: {{ f.device.spot_label | tojson }},
-                subtitle: {{ f.device.name | tojson }},
-                status: {{ f.device.current_status | tojson }}
+                spot: {{ f.device.spot_label | tojson }},
+                place: {{ f.device.name | tojson }},
+                tone: {{ alert_tone | tojson }},
+                statusLabel: {{ alert_label | tojson }},
+                when: {{ (f.first_seen.strftime('%b %d · %H:%M') if f.first_seen else '') | tojson }}
             },
             {% endif %}
             {% endfor %}
-        ].filter(function (marker) {
-            const key = marker.lat + "," + marker.lng;
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-        });
-        SpotflowMaps.render("portal-map", markers).catch(function (err) {
-            console.error("[portal-map]", err);
-        });
+        ];
+        if (window.SpotflowPortalMap) {
+            SpotflowPortalMap.init({
+                mapId: "portal-map",
+                loadingId: "portal-map-loading",
+                spotsId: "portal-map-spots",
+                fitId: "portal-map-fit",
+                alerts: portalAlerts
+            });
+        }
     });
 </script>
 {% endif %}

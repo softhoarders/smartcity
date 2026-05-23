@@ -27,9 +27,10 @@ ADMIN_SIGNUP_CODE = os.environ.get("PARKWATCH_ADMIN_SIGNUP_CODE", "softhoardersc
 ALLOWED_PROOF_EXTENSIONS = {"png", "jpg", "jpeg", "pdf", "webp"}
 
 # Plate registration documents (city hall / police / ownership certificate)
-PLATE_PROOF_EXTENSIONS = {"pdf", "docx"}
+PLATE_PROOF_EXTENSIONS = {"pdf", "doc", "docx"}
 PLATE_PROOF_MIME_TYPES = {
     "pdf": "application/pdf",
+    "doc": "application/msword",
     "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 }
 MAX_PLATE_PROOF_BYTES = 8 * 1024 * 1024

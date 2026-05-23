@@ -41,18 +41,17 @@
                 <form method="POST" action="{{ url_for('account_settings') }}" class="row g-3">
                     <input type="hidden" name="action" value="update_profile">
                     <div class="col-md-6">
-                        <label class="form-label">Username</label>
-                        <input type="text" name="name" class="form-control" value="{{ current_user.name }}" required {% if is_demo is defined and is_demo %}disabled{% endif %}>
+                        <label class="form-label">Full name</label>
+                        <input type="text" name="name" class="form-control" value="{{ account_owner_name|default(current_user.name, true) }}" required autocomplete="name">
+                        <p class="form-text mb-0">Must match the registered owner name on your vehicle document.</p>
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Email</label>
                         <input type="email" class="form-control" value="{{ current_user.email }}" disabled>
                     </div>
-                    {% if not (is_demo is defined and is_demo) %}
                     <div class="col-12">
                         <button type="submit" class="btn btn-primary">Save profile</button>
                     </div>
-                    {% endif %}
                 </form>
             </div>
         </div>
@@ -89,7 +88,16 @@
         <div class="card pw-card border-0">
             <div class="card-body p-4">
                 <h2 class="h5 fw-bold mb-1">License plates</h2>
-                <p class="text-secondary mb-3">Upload a PDF or DOCX registration document to verify each plate.</p>
+                <p class="text-secondary mb-2">
+                    Upload a PDF or Word registration document. We extract the plate and owner with Gemini and
+                    confirm they match what you entered and your profile name
+                    (<strong>{{ account_owner_name|default(current_user.name, true) }}</strong>).
+                </p>
+                {% if gemini_configured is defined and not gemini_configured %}
+                <div class="alert alert-warning border-0 py-2 small mb-3">
+                    Automatic verification is not configured on this server (missing <code>GEMINI_API_KEY</code>).
+                </div>
+                {% endif %}
 
                 {% if plate_rows %}
                 <ul class="list-group list-group-flush mb-4">
@@ -109,7 +117,7 @@
                                 <p class="small text-secondary mb-0 mt-2">{{ row.notes }}</p>
                                 {% endif %}
                             </div>
-                            {% if not (is_demo is defined and is_demo) and row.status == 'approved' %}
+                            {% if row.status == 'approved' and (not (is_demo is defined and is_demo) or row.id >= 100) %}
                             <form method="POST" action="{{ url_for('account_settings') }}" class="m-0" data-confirm="Remove plate {{ row.plate }}?">
                                 <input type="hidden" name="action" value="remove_plate">
                                 <input type="hidden" name="plate_id" value="{{ row.id }}">
@@ -124,22 +132,24 @@
                 <p class="text-secondary mb-4">No plates yet.</p>
                 {% endif %}
 
-                {% if not (is_demo is defined and is_demo) %}
-                <form method="POST" action="{{ url_for('account_settings') }}" enctype="multipart/form-data" class="row g-3">
+                <form method="POST" action="{{ url_for('account_settings') }}" enctype="multipart/form-data" class="row g-3" id="plate-upload-form">
                     <input type="hidden" name="action" value="add_plate">
                     <div class="col-md-6">
                         <label class="form-label">License plate</label>
-                        <input type="text" name="license_plate" class="form-control pw-plate-input" placeholder="B123ABC" required autocomplete="off">
+                        <input type="text" name="license_plate" class="form-control pw-plate-input" placeholder="B123ABC" required autocomplete="off" maxlength="12">
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Registration document</label>
-                        <input type="file" name="registration_document" class="form-control" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required>
+                        <input type="file" name="registration_document" class="form-control" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required>
+                        <p class="form-text mb-0">PDF, DOC, or DOCX · max 8 MB</p>
                     </div>
                     <div class="col-12">
-                        <button type="submit" class="btn btn-primary">Verify &amp; add plate</button>
+                        <p class="small text-secondary mb-2" id="plate-upload-status" aria-live="polite"></p>
+                        <button type="submit" class="btn btn-primary" {% if gemini_configured is defined and not gemini_configured %}disabled{% endif %}>
+                            Verify &amp; add plate
+                        </button>
                     </div>
                 </form>
-                {% endif %}
             </div>
         </div>
     </div>
@@ -147,6 +157,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='account-plates.js') }}"></script>
 {% if twofa_enabled is defined and twofa_enabled %}
 <script>
 (function () {

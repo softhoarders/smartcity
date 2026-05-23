@@ -1304,6 +1304,31 @@ h1, h2, h3, h4, h5, h6, .fw-bold {
     animation: pw-map-pulse 2.4s ease-out infinite;
 }
 
+.pw-map-pin-count {
+    position: absolute;
+    top: -2px;
+    right: -4px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: #f5f5f7;
+    color: #0a0c12;
+    font-size: 0.65rem;
+    font-weight: 800;
+    line-height: 18px;
+    text-align: center;
+    border: 2px solid rgba(12, 14, 22, 0.9);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+    z-index: 2;
+}
+
+.pw-map-popup-meta {
+    font-size: 0.75rem;
+    color: #8e8e93;
+    margin-top: 4px;
+}
+
 .pw-map-pin-core {
     position: relative;
     width: 16px;
@@ -2639,50 +2664,289 @@ body:not(.has-bottom-nav) .pw-update-toast {
 .portal-layout {
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
+    gap: 1rem;
 }
 
-.portal-layout--map {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
+.portal-page:has(.portal-map-hero) {
+    max-width: 1040px;
 }
 
-@media (min-width: 768px) {
-    .portal-layout--map {
-        grid-template-columns: minmax(200px, 280px) minmax(0, 1fr);
-        align-items: start;
-    }
-}
-
-.portal-map-card {
-    padding: 0.65rem;
+.portal-map-hero {
+    padding: 0;
     overflow: hidden;
     background:
-        linear-gradient(145deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
-        rgba(22, 24, 32, 0.72);
-    backdrop-filter: blur(20px) saturate(1.3);
-    -webkit-backdrop-filter: blur(20px) saturate(1.3);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+        linear-gradient(165deg, rgba(10, 132, 255, 0.12) 0%, rgba(255, 255, 255, 0.04) 38%, rgba(22, 24, 32, 0.88) 100%),
+        rgba(18, 20, 28, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    box-shadow:
+        0 1px 0 rgba(255, 255, 255, 0.1) inset,
+        0 28px 64px rgba(0, 0, 0, 0.45);
 }
 
-.portal-map-head {
+.portal-map-hero-head {
     display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
     justify-content: space-between;
+    gap: 0.75rem 1rem;
+    padding: 1rem 1rem 0.65rem;
+}
+
+.portal-map-eyebrow {
+    margin: 0 0 0.2rem;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #64d2ff;
+}
+
+.portal-map-title {
+    margin: 0;
+    font-size: 1.15rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+}
+
+.portal-map-sub {
+    margin: 0.35rem 0 0;
+    font-size: 0.8rem;
+    color: var(--pw-text-secondary);
+    max-width: 36rem;
+    line-height: 1.45;
+}
+
+.portal-map-fit-btn {
+    display: inline-flex;
     align-items: center;
-    margin-bottom: 0.4rem;
+    gap: 0.35rem;
+    padding: 0.4rem 0.75rem;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.08);
+    color: #f5f5f7;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+}
+
+.portal-map-fit-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.portal-map-fit-btn:not(:disabled):hover {
+    background: rgba(10, 132, 255, 0.28);
+    border-color: rgba(10, 132, 255, 0.45);
+}
+
+.portal-map-fit-icon {
+    font-size: 1rem;
+    line-height: 1;
+    opacity: 0.9;
+}
+
+.portal-map-stage {
+    position: relative;
+    padding: 0 0.65rem;
 }
 
 .portal-map-frame {
-    height: 180px;
-    min-height: 180px;
-    border-radius: 14px;
+    height: min(52vh, 380px);
+    min-height: 240px;
+    border-radius: 18px;
 }
 
 @media (min-width: 768px) {
     .portal-map-frame {
-        height: 260px;
-        min-height: 260px;
+        height: min(44vh, 420px);
+        min-height: 320px;
     }
+}
+
+.portal-map-loading {
+    position: absolute;
+    inset: 0;
+    z-index: 600;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.65rem;
+    color: var(--pw-text-secondary);
+    font-size: 0.85rem;
+    background:
+        linear-gradient(160deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.01)),
+        rgba(10, 12, 18, 0.94);
+    border-radius: inherit;
+}
+
+.portal-map-loading--error {
+    color: #ff9f96;
+}
+
+.portal-map-loading-pulse {
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 50%;
+    border: 2px solid rgba(100, 210, 255, 0.25);
+    border-top-color: #64d2ff;
+    animation: portal-map-spin 0.85s linear infinite;
+}
+
+@keyframes portal-map-spin {
+    to { transform: rotate(360deg); }
+}
+
+.portal-map-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.65rem;
+    margin-top: 0.55rem;
+    padding: 0 0.15rem 0.65rem;
+}
+
+.portal-map-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.68rem;
+    color: var(--pw-text-secondary);
+    white-space: nowrap;
+}
+
+.portal-map-legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    box-shadow: 0 0 10px currentColor;
+}
+
+.portal-map-legend-dot--danger { background: #ff453a; color: #ff453a; }
+.portal-map-legend-dot--pending { background: #ff9f0a; color: #ff9f0a; }
+.portal-map-legend-dot--open { background: #ffcc00; color: #ffcc00; }
+.portal-map-legend-dot--resolved { background: #30d158; color: #30d158; }
+
+.portal-map-rail-wrap {
+    padding: 0.5rem 0.65rem 0.85rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(0, 0, 0, 0.18);
+}
+
+.portal-map-rail-label {
+    margin: 0 0 0.45rem;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--pw-text-secondary);
+}
+
+.portal-map-rail {
+    display: flex;
+    gap: 0.45rem;
+    overflow-x: auto;
+    padding-bottom: 0.15rem;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+}
+
+.portal-map-spot {
+    flex: 0 0 auto;
+    scroll-snap-align: start;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    max-width: min(280px, 82vw);
+    padding: 0.5rem 0.65rem;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.06);
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.portal-map-spot:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.22);
+}
+
+.portal-map-spot.is-active {
+    border-color: rgba(10, 132, 255, 0.55);
+    background: rgba(10, 132, 255, 0.16);
+    box-shadow: 0 0 0 1px rgba(10, 132, 255, 0.25);
+    transform: translateY(-1px);
+}
+
+.portal-map-spot-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--spot-tone, #ffcc00);
+    box-shadow: 0 0 12px var(--spot-tone, #ffcc00);
+}
+
+.portal-map-spot--danger { --spot-tone: #ff453a; }
+.portal-map-spot--pending { --spot-tone: #ff9f0a; }
+.portal-map-spot--open { --spot-tone: #ffcc00; }
+.portal-map-spot--resolved { --spot-tone: #30d158; }
+
+.portal-map-spot-text {
+    min-width: 0;
+    flex: 1;
+}
+
+.portal-map-spot-label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.portal-map-spot-meta {
+    display: block;
+    font-size: 0.68rem;
+    color: var(--pw-text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.portal-map-spot-badge {
+    flex-shrink: 0;
+    font-size: 0.62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 0.2rem 0.4rem;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--pw-text-secondary);
+}
+
+.portal-map-spot--danger .portal-map-spot-badge { color: #ff9f96; background: rgba(255, 69, 58, 0.18); }
+.portal-map-spot--pending .portal-map-spot-badge { color: #ffc46b; background: rgba(255, 159, 10, 0.18); }
+.portal-map-spot--open .portal-map-spot-badge { color: #ffe566; background: rgba(255, 204, 0, 0.16); }
+.portal-map-spot--resolved .portal-map-spot-badge { color: #7dffb0; background: rgba(48, 209, 88, 0.18); }
+
+.portal-alert--focus {
+    outline: 2px solid rgba(10, 132, 255, 0.65);
+    outline-offset: 2px;
+    animation: portal-alert-pulse 2.2s ease-out;
+}
+
+@keyframes portal-alert-pulse {
+    0%, 100% { box-shadow: none; }
+    15% { box-shadow: 0 0 0 4px rgba(10, 132, 255, 0.2); }
 }
 
 .portal-alerts-head {
