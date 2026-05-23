@@ -12,7 +12,7 @@
         <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between mb-4 mt-2">
             <div>
                 <h1 class="h3 fw-bold mb-1">Account Settings</h1>
-                <p class="text-secondary mb-0">Manage your profile and license plates.</p>
+                <p class="text-secondary mb-0">Manage your profile and verified license plates.</p>
             </div>
             <a href="{{ url_for('portal') }}" class="btn btn-outline-secondary mt-3 mt-md-0">Back to portal</a>
         </div>
@@ -42,42 +42,59 @@
         <div class="card pw-card border-0">
             <div class="card-body p-4">
                 <h2 class="h5 fw-bold mb-1">License Plates</h2>
-                <p class="text-secondary mb-4">Add the plates you want to monitor. No review is required.</p>
+                <p class="text-secondary mb-3">
+                    Each plate must be verified with an official document (PDF or DOCX) from city hall,
+                    police, or vehicle registration showing the same plate and your name.
+                </p>
 
                 {% if plate_rows %}
                 <ul class="list-group list-group-flush mb-4">
                     {% for row in plate_rows %}
-                    <li class="list-group-item d-flex justify-content-between align-items-center px-0">
-                        <span class="badge pw-plate-badge">{{ row.plate }}</span>
-                        {% if not (is_demo is defined and is_demo) %}
-                        <form method="POST" action="{{ url_for('account_settings') }}" class="m-0" data-confirm="Remove plate {{ row.plate }}?">
-                            <input type="hidden" name="action" value="remove_plate">
-                            <input type="hidden" name="plate_id" value="{{ row.id }}">
-                            <button type="submit" class="btn btn-sm btn-outline-danger">Remove</button>
-                        </form>
-                        {% endif %}
+                    <li class="list-group-item px-0">
+                        <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
+                            <div>
+                                <span class="badge pw-plate-badge">{{ row.plate }}</span>
+                                {% if row.status == 'approved' %}
+                                <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle ms-1">Verified</span>
+                                {% elif row.status == 'pending' %}
+                                <span class="badge bg-warning bg-opacity-10 text-warning-emphasis border border-warning-subtle ms-1">Pending review</span>
+                                {% elif row.status == 'rejected' %}
+                                <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle ms-1">Rejected</span>
+                                {% endif %}
+                                {% if row.notes %}
+                                <p class="small text-secondary mb-0 mt-2">{{ row.notes }}</p>
+                                {% endif %}
+                            </div>
+                            {% if not (is_demo is defined and is_demo) and row.status == 'approved' %}
+                            <form method="POST" action="{{ url_for('account_settings') }}" class="m-0" data-confirm="Remove plate {{ row.plate }}?">
+                                <input type="hidden" name="action" value="remove_plate">
+                                <input type="hidden" name="plate_id" value="{{ row.id }}">
+                                <button type="submit" class="btn btn-sm btn-outline-danger">Remove</button>
+                            </form>
+                            {% endif %}
+                        </div>
                     </li>
                     {% endfor %}
                 </ul>
-                {% elif user_plates %}
-                <div class="d-flex flex-wrap gap-2 mb-4">
-                    {% for plate in user_plates %}
-                    <span class="badge pw-plate-badge">{{ plate }}</span>
-                    {% endfor %}
-                </div>
                 {% else %}
-                <p class="text-secondary mb-4">No plates added yet. Add one below to start receiving parking alerts.</p>
+                <p class="text-secondary mb-4">No plates yet. Add your first plate and registration document below.</p>
                 {% endif %}
 
                 {% if not (is_demo is defined and is_demo) %}
-                <form method="POST" action="{{ url_for('account_settings') }}" class="row g-3 align-items-end">
+                <form method="POST" action="{{ url_for('account_settings') }}" enctype="multipart/form-data" class="row g-3">
                     <input type="hidden" name="action" value="add_plate">
-                    <div class="col-md-8">
-                        <label class="form-label">New license plate</label>
+                    <div class="col-md-6">
+                        <label class="form-label">License plate</label>
                         <input type="text" name="license_plate" class="form-control pw-plate-input" placeholder="B123ABC" required autocomplete="off">
+                        <div class="form-text">Must match the plate on your official document.</div>
                     </div>
-                    <div class="col-md-4">
-                        <button type="submit" class="btn btn-primary w-100">Add plate</button>
+                    <div class="col-md-6">
+                        <label class="form-label">Registration document</label>
+                        <input type="file" name="registration_document" class="form-control" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required>
+                        <div class="form-text">PDF or DOCX only, max 8 MB.</div>
+                    </div>
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-primary">Verify &amp; add plate</button>
                     </div>
                 </form>
                 {% endif %}

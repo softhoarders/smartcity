@@ -145,13 +145,49 @@
         {% endif %}
     </section>
 
+    {% if pending_plates is defined and pending_plates %}
+    <section class="admin-panel">
+        <div class="admin-section-header">
+            <div>
+                <span class="admin-eyebrow">Plate verification</span>
+                <h2>Documents awaiting review</h2>
+                <p>Automatic Gemini verification was unavailable for these uploads.</p>
+            </div>
+            <span class="admin-soft-pill warning">{{ pending_plates|length }} pending</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table pw-table admin-table mb-0">
+                <thead>
+                    <tr>
+                        <th>Driver</th>
+                        <th>Plate</th>
+                        <th>Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in pending_plates %}
+                    <tr>
+                        <td>
+                            <span class="fw-semibold d-block">{{ row.user.name if row.user else '—' }}</span>
+                            <small class="text-secondary">{{ row.user.email if row.user else '' }}</small>
+                        </td>
+                        <td><span class="badge pw-plate-badge">{{ row.plate }}</span></td>
+                        <td><small class="text-secondary">{{ row.verification_notes or '—' }}</small></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+    {% endif %}
+
     {% if pending_users is defined and pending_users %}
     <section class="admin-panel">
         <div class="admin-section-header">
             <div>
                 <span class="admin-eyebrow">Identity review</span>
                 <h2>Driver verification</h2>
-                <p>New accounts — plates are added in account settings after approval.</p>
+                <p>Legacy account sign-ups awaiting manual review.</p>
             </div>
             <span class="admin-soft-pill warning">{{ pending_users|length }} pending</span>
         </div>

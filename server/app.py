@@ -27,6 +27,7 @@ load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 import config
 from models import db, Device, Fine, User, UserPlate, PushSubscription, FineMessage
 from mailer import mail, PhotoMailerWorker
+from plate_document_verifier import verify_plate_registration_document, normalize_plate_for_claim
 import json
 from pywebpush import webpush, WebPushException
 
@@ -99,6 +100,18 @@ with app.app_context():
     for column_name, column_sql in device_column_defaults.items():
         if column_name not in device_columns:
             db.session.execute(text(f"ALTER TABLE devices ADD COLUMN {column_name} {column_sql}"))
+
+    plate_columns = {column["name"] for column in inspector.get_columns("user_plates")}
+    plate_column_defaults = {
+        "verification_status": "VARCHAR(20) NOT NULL DEFAULT 'approved'",
+        "verification_document": "VARCHAR(255)",
+        "verification_notes": "VARCHAR(500)",
+        "verified_at": "DATETIME",
+    }
+    for column_name, column_sql in plate_column_defaults.items():
+        if column_name not in plate_columns:
+            db.session.execute(text(f"ALTER TABLE user_plates ADD COLUMN {column_name} {column_sql}"))
+
     db.session.commit()
 
 # Start background mailer worker
@@ -552,10 +565,33 @@ def find_user_by_plate(plate):
     normalized = normalize_plate(plate)
     if not normalized:
         return None
-    row = UserPlate.query.filter_by(plate=normalized).first()
+    row = UserPlate.query.filter_by(plate=normalized, verification_status="approved").first()
     if row:
         return row.user
     return User.query.filter_by(license_plate=normalized).first()
+
+
+def save_plate_proof_upload(file_storage) -> tuple[str, str]:
+    """Save PDF/DOCX proof; returns (stored_filename relative to uploads, mime_type)."""
+    if not file_storage or not file_storage.filename:
+        raise ValueError("No document uploaded")
+
+    ext = file_storage.filename.rsplit(".", 1)[-1].lower()
+    if ext not in config.PLATE_PROOF_EXTENSIONS:
+        raise ValueError("Upload a PDF or DOCX from city hall, police, or vehicle registration.")
+
+    file_storage.stream.seek(0, os.SEEK_END)
+    size = file_storage.stream.tell()
+    file_storage.stream.seek(0)
+    if size > config.MAX_PLATE_PROOF_BYTES:
+        raise ValueError("Document must be 8 MB or smaller.")
+
+    proof_dir = os.path.join(app.config["UPLOAD_FOLDER"], "plate_proofs")
+    os.makedirs(proof_dir, exist_ok=True)
+    stored = f"plate_{uuid.uuid4().hex[:12]}_{secure_filename(file_storage.filename)}"
+    file_storage.save(os.path.join(proof_dir, stored))
+    mime = config.PLATE_PROOF_MIME_TYPES.get(ext, "application/octet-stream")
+    return f"plate_proofs/{stored}", mime
 
 
 def sync_user_primary_plate(user):
@@ -567,9 +603,21 @@ def migrate_legacy_user_plates():
     for user in User.query.filter(User.role == "driver").all():
         legacy_plate = normalize_plate(user.license_plate)
         if legacy_plate and not UserPlate.query.filter_by(plate=legacy_plate).first():
-            db.session.add(UserPlate(user_id=user.id, plate=legacy_plate))
+            db.session.add(
+                UserPlate(
+                    user_id=user.id,
+                    plate=legacy_plate,
+                    verification_status="approved",
+                    verified_at=_now(),
+                )
+            )
         if user.verification_status != "approved":
             user.verification_status = "approved"
+    for row in UserPlate.query.all():
+        if not row.verification_status:
+            row.verification_status = "approved"
+        if row.verification_status == "approved" and not row.verified_at:
+            row.verified_at = _now()
     db.session.commit()
 
 
@@ -849,6 +897,7 @@ def dashboard():
             devices=devices,
             fines=all_fines,
             pending_users=pending_users,
+            pending_plates=[],
             chart_labels=chart_labels,
             chart_data=chart_data,
             device_zones=_group_devices_by_zone(devices),
@@ -877,11 +926,18 @@ def dashboard():
     chart_labels = list(reversed(list(day_counts.keys())))
     chart_data = [day_counts[l] for l in chart_labels]
 
+    pending_plates = (
+        UserPlate.query.filter_by(verification_status="pending")
+        .order_by(UserPlate.created_at.desc())
+        .limit(20)
+        .all()
+    )
     return render_template(
         "dashboard.html",
         devices=devices,
         fines=recent_fines,
         pending_users=pending_users,
+        pending_plates=pending_plates,
         chart_labels=chart_labels,
         chart_data=chart_data,
         device_zones=_group_devices_by_zone(devices),
@@ -1226,7 +1282,11 @@ def login():
                 return redirect(url_for("dashboard"))
 
             login_user(user)
-            flash("Account created. Add your license plates in account settings.", "success")
+            flash(
+                "Account created. Add each license plate in settings with a PDF or DOCX "
+                "registration document from city hall or police — we verify it automatically.",
+                "success",
+            )
             return redirect(url_for("account_settings"))
 
         user = User.query.filter_by(email=email).first()
@@ -1598,15 +1658,65 @@ def account_settings():
 
         if action == "add_plate":
             plate = normalize_plate(request.form.get("license_plate", ""))
+            proof_file = request.files.get("registration_document")
+
             if not is_valid_plate(plate):
                 flash("Enter a valid license plate with letters and numbers.", "danger")
             elif UserPlate.query.filter_by(plate=plate).first():
                 flash("That license plate is already registered to an account.", "danger")
+            elif not proof_file or not proof_file.filename:
+                flash("Upload a PDF or DOCX registration document from city hall, police, or vehicle registration.", "danger")
             else:
-                db.session.add(UserPlate(user_id=current_user.id, plate=plate))
-                sync_user_primary_plate(current_user)
-                db.session.commit()
-                flash(f"Added plate {plate}.", "success")
+                proof_rel = None
+                proof_path = None
+                try:
+                    proof_rel, mime = save_plate_proof_upload(proof_file)
+                    proof_path = os.path.join(app.config["UPLOAD_FOLDER"], proof_rel)
+                    verified, reason = verify_plate_registration_document(
+                        proof_path,
+                        mime,
+                        plate,
+                        current_user.name,
+                    )
+                    if verified:
+                        db.session.add(
+                            UserPlate(
+                                user_id=current_user.id,
+                                plate=plate,
+                                verification_status="approved",
+                                verification_document=proof_rel,
+                                verification_notes=reason,
+                                verified_at=_now(),
+                            )
+                        )
+                        sync_user_primary_plate(current_user)
+                        db.session.commit()
+                        flash(f"Plate {plate} verified and added.", "success")
+                    else:
+                        if proof_path and os.path.exists(proof_path):
+                            os.remove(proof_path)
+                        flash(f"Document did not match your details: {reason}", "danger")
+                except ValueError as exc:
+                    flash(str(exc), "danger")
+                except RuntimeError as exc:
+                    if proof_path and os.path.exists(proof_path):
+                        db.session.add(
+                            UserPlate(
+                                user_id=current_user.id,
+                                plate=plate,
+                                verification_status="pending",
+                                verification_document=proof_rel if proof_path else None,
+                                verification_notes=str(exc)[:500],
+                            )
+                        )
+                        sync_user_primary_plate(current_user)
+                        db.session.commit()
+                        flash(
+                            "Document uploaded. Automatic verification is unavailable — an admin will review it.",
+                            "warning",
+                        )
+                    else:
+                        flash(str(exc), "danger")
 
         elif action == "remove_plate":
             plate_id = request.form.get("plate_id", type=int)
@@ -1630,8 +1740,20 @@ def account_settings():
 
         return redirect(url_for("account_settings"))
 
-    plate_rows = [{"id": row.id, "plate": row.plate} for row in current_user.plates]
-    return render_template("account_settings.html", user_plates=user_plate_values(current_user), plate_rows=plate_rows)
+    plate_rows = [
+        {
+            "id": row.id,
+            "plate": row.plate,
+            "status": row.verification_status,
+            "notes": row.verification_notes,
+        }
+        for row in current_user.plates.order_by(UserPlate.created_at.desc())
+    ]
+    return render_template(
+        "account_settings.html",
+        user_plates=user_plate_values(current_user),
+        plate_rows=plate_rows,
+    )
 
 
 @app.route("/portal/fine/<int:fine_id>/request-photo", methods=["POST"])

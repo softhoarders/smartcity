@@ -1,6 +1,9 @@
 import os
 
+from dotenv import load_dotenv
+
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+load_dotenv(os.path.join(BASE_DIR, ".env"))
 
 PORT = 2026
 SECRET_KEY = os.environ.get("PARKWATCH_SECRET", "parkwatch-dev-key-change-in-production")
@@ -24,6 +27,19 @@ ADMIN_SIGNUP_CODE = os.environ.get("PARKWATCH_ADMIN_SIGNUP_CODE", "softhoardersc
 
 # Uploaded registration certificates, insurance cards, or vehicle ownership proof.
 ALLOWED_PROOF_EXTENSIONS = {"png", "jpg", "jpeg", "pdf", "webp"}
+
+# Plate registration documents (city hall / police / ownership certificate)
+PLATE_PROOF_EXTENSIONS = {"pdf", "docx"}
+PLATE_PROOF_MIME_TYPES = {
+    "pdf": "application/pdf",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
+MAX_PLATE_PROOF_BYTES = 8 * 1024 * 1024
+
+# Google Gemini — document verification for new plates
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+# Google AI Studio model ID (e.g. gemini-2.5-flash). Override with GEMINI_MODEL if you use another flash variant.
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 
 # Mail configuration
 MAIL_SERVER = os.environ.get("MAIL_SERVER", "localhost")

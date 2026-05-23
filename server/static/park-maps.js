@@ -1,16 +1,16 @@
 (function () {
     const STATUS_COLORS = {
-        violation: "#FF3B30",
-        occupied: "#FF9500",
-        empty: "#34C759",
-        correct: "#007AFF",
-        illegal: "#FF3B30",
+        violation: "#FF453A",
+        occupied: "#FF9F0A",
+        empty: "#30D158",
+        correct: "#0A84FF",
+        illegal: "#FF453A",
         unknown: "#8E8E93",
     };
 
     const LEAFLET_CSS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
     const LEAFLET_JS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
-    const TILE_URL = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
+    const TILE_URL = "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
     const TILE_ATTR =
         '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>';
 
@@ -47,9 +47,11 @@
     function popupHtml(marker) {
         const color = marker.color || STATUS_COLORS[marker.status] || STATUS_COLORS.unknown;
         const statusLine = marker.status
-            ? `<br><span style="color:${color};font-weight:600;text-transform:capitalize">${marker.status}</span>`
+            ? `<div class="pw-map-popup-status" style="color:${color}">${marker.status}</div>`
             : "";
-        return `<strong>${marker.title || ""}</strong><br>${marker.subtitle || ""}${statusLine}`;
+        return `<div class="pw-map-popup-title">${marker.title || ""}</div>
+                <div class="pw-map-popup-sub">${marker.subtitle || ""}</div>
+                ${statusLine}`;
     }
 
     async function render(containerId, markers, options) {
@@ -60,7 +62,7 @@
 
         try {
             const L = await loadLeaflet();
-            container.classList.add("pw-map-host");
+            container.classList.add("pw-map-host", "pw-map-surface");
 
             if (container._parkscanMap) {
                 container._parkscanMap.remove();
@@ -75,6 +77,7 @@
             L.tileLayer(TILE_URL, {
                 attribution: TILE_ATTR,
                 maxZoom: 20,
+                subdomains: "abcd",
             }).addTo(map);
 
             container._parkscanMap = map;
@@ -89,17 +92,20 @@
                 const color = marker.color || STATUS_COLORS[marker.status] || STATUS_COLORS.unknown;
                 const icon = L.divIcon({
                     className: "pw-map-marker-wrap",
-                    html: `<div class="pw-map-marker" style="--marker-color:${color}"></div>`,
-                    iconSize: [20, 20],
-                    iconAnchor: [10, 10],
+                    html: `<div class="pw-map-pin" style="--pin-color:${color}"><span class="pw-map-pin-core"></span></div>`,
+                    iconSize: [28, 28],
+                    iconAnchor: [14, 14],
                 });
-                L.marker([lat, lng], { icon }).addTo(map).bindPopup(popupHtml(marker));
+                L.marker([lat, lng], { icon }).addTo(map).bindPopup(popupHtml(marker), {
+                    className: "pw-map-popup",
+                    maxWidth: 260,
+                });
             });
 
             if (bounds.length === 1) {
                 map.setView(bounds[0], options?.zoom || 16);
             } else if (bounds.length > 1) {
-                map.fitBounds(bounds, { padding: [40, 40] });
+                map.fitBounds(bounds, { padding: [48, 48] });
             } else {
                 map.setView([44.4268, 26.1025], 12);
             }

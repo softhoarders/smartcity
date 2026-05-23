@@ -41,7 +41,7 @@ class PhotoMailerWorker(threading.Thread):
             # Since this is a simple system, we just send to the user associated with that spot/plate
             from models import User, UserPlate
             normalized = _normalize_plate(fine.expected_plate)
-            row = UserPlate.query.filter_by(plate=normalized).first()
+            row = UserPlate.query.filter_by(plate=normalized, verification_status="approved").first()
             user = row.user if row else User.query.filter_by(license_plate=normalized).first()
             
             if not user:

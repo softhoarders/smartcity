@@ -105,9 +105,17 @@ class UserPlate(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
     plate = db.Column(db.String(20), nullable=False, unique=True, index=True)
+    verification_status = db.Column(db.String(20), default="pending", nullable=False)
+    verification_document = db.Column(db.String(255), nullable=True)
+    verification_notes = db.Column(db.String(500), nullable=True)
+    verified_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     user = db.relationship("User", backref=db.backref("plates", lazy="dynamic", cascade="all, delete-orphan"))
+
+    @property
+    def is_approved(self):
+        return self.verification_status == "approved"
 
 
 class User(UserMixin, db.Model):
@@ -135,9 +143,12 @@ class User(UserMixin, db.Model):
     def is_verified_driver(self):
         return self.role == "driver"
 
-    def plate_values(self):
-        """Normalized plates for this account (UserPlate rows + legacy column)."""
-        values = [row.plate for row in self.plates]
+    def plate_values(self, approved_only=True):
+        """Normalized plates for this account (approved UserPlate rows + legacy column)."""
+        rows = self.plates
+        if approved_only:
+            rows = rows.filter_by(verification_status="approved")
+        values = [row.plate for row in rows]
         legacy = (self.license_plate or "").strip().upper()
         legacy = "".join(ch for ch in legacy if ch.isalnum())
         if legacy and legacy not in values:
