@@ -1,0 +1,51 @@
+/* Leaflet overrides — load after leaflet.css (see macros/park_map.html) */
+
+.pw-map-host .leaflet-control-zoom {
+    border: 1px solid rgba(255, 255, 255, 0.16) !important;
+    border-radius: 14px !important;
+    overflow: hidden;
+    margin: 0 14px 14px 0 !important;
+    backdrop-filter: blur(22px) saturate(1.4);
+    -webkit-backdrop-filter: blur(22px) saturate(1.4);
+    background: rgba(28, 30, 38, 0.82) !important;
+    box-shadow:
+        0 1px 0 rgba(255, 255, 255, 0.12) inset,
+        0 12px 32px rgba(0, 0, 0, 0.45) !important;
+}
+
+.pw-map-host .leaflet-control-zoom a {
+    background: rgba(36, 38, 48, 0.95) !important;
+    color: #f5f5f7 !important;
+    border: none !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+    width: 36px !important;
+    height: 36px !important;
+    line-height: 36px !important;
+    font-size: 18px !important;
+    font-weight: 600 !important;
+}
+
+.pw-map-host .leaflet-control-zoom a:last-child {
+    border-bottom: none !important;
+}
+
+.pw-map-host .leaflet-control-zoom a:hover {
+    background: rgba(10, 132, 255, 0.45) !important;
+    color: #fff !important;
+}
+
+.pw-map-host .leaflet-control-attribution {
+    background: rgba(18, 20, 28, 0.88) !important;
+    color: #c7c7cc !important;
+    border-radius: 10px 0 0 0 !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.12) !important;
+    border-left: 1px solid rgba(255, 255, 255, 0.1) !important;
+    font-size: 10px !important;
+    padding: 3px 10px !important;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+}
+
+.pw-map-host .leaflet-control-attribution a {
+    color: #64d2ff !important;
+}

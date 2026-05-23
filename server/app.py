@@ -553,7 +553,15 @@ def _portal_stats(fines):
 
 
 def _sort_demo_fines(fines):
-    appeal_rank = {"pending_human": 0, "pending_ai": 1, "none": 2, "approved": 3, "rejected": 4}
+    appeal_rank = {
+        "pending_human": 0,
+        "pending_ai": 1,
+        "rejected_by_ai": 2,
+        "none": 3,
+        "rejected_human": 4,
+        "approved": 5,
+        "rejected": 6,
+    }
 
     def key(f):
         return (
@@ -636,6 +644,23 @@ def _demo_fines():
         make_fine(10, 102, "CJ-99-ZZZ", "CJ-45-PQR", 55, appeal="pending_ai", confidence=76.5, hours_ago=5),
         make_fine(11, 113, "B-808-DLV", "B-212-GLS", 31, confidence=90.1, hours_ago=2.5),
         make_fine(12, 106, "AB-12-CDE", "AB-12-CDE", 18, resolved=True, confidence=98.0, hours_ago=12),
+        # Demo driver (B-123-MAB) — rich alert variety for portal showcase
+        make_fine(13, 101, "B-777-THF", "B-123-MAB", 8, confidence=96.4, hours_ago=0.25),
+        make_fine(14, 101, "B-123-MAB", "B-123-MAB", 14, confidence=99.1, hours_ago=0.75),
+        make_fine(15, 101, "B-450-RVN", "B-123-MAB", 33, confidence=91.0, photo_sent=True, hours_ago=1.5),
+        make_fine(16, 101, "B-331-KIO", "B-123-MAB", 72, appeal="pending_ai", confidence=88.3, photo_sent=True, hours_ago=3.5),
+        make_fine(17, 101, "B-902-LUX", "B-123-MAB", 120, appeal="rejected_by_ai", confidence=85.7, photo_sent=True, hours_ago=7),
+        make_fine(18, 101, "B-144-NXT", "B-123-MAB", 56, appeal="rejected_human", confidence=90.5, photo_sent=True, hours_ago=9),
+        make_fine(19, 101, "B-515-OLD", "B-123-MAB", 240, resolved=True, appeal="approved", confidence=87.2, photo_sent=True, hours_ago=36),
+        make_fine(20, 101, "B-220-SFT", "B-123-MAB", 19, resolved=True, confidence=97.8, hours_ago=14),
+        make_fine(21, 113, "B-888-STR", "B-123-MAB", 27, confidence=92.4, photo_requested=True, hours_ago=2.2),
+        make_fine(22, 113, "B-123-MAB", "B-123-MAB", 6, confidence=98.6, hours_ago=0.4),
+        make_fine(23, 105, "B-123-MAB", "B-441-PKR", 11, confidence=93.0, hours_ago=1.1),
+        make_fine(24, 101, "B-642-FST", "B-123-MAB", 4, confidence=82.1, hours_ago=0.15),
+        make_fine(25, 101, "B-190-ZEN", "B-123-MAB", 98, appeal="pending_human", confidence=89.9, photo_sent=True, hours_ago=5.5),
+        make_fine(26, 101, "B-505-MID", "B-123-MAB", 41, confidence=86.2, hours_ago=4.2),
+        make_fine(27, 101, "B-760-MAX", "B-123-MAB", 156, resolved=True, confidence=94.0, hours_ago=52),
+        make_fine(28, 113, "B-404-NTF", "B-123-MAB", 17, confidence=88.8, photo_sent=True, hours_ago=2.8),
     ]
 
     return _sort_demo_fines(fines)
@@ -740,6 +765,13 @@ def _demo_rental_listings():
             approval_mode="auto",
             pricing_mode="auto",
             description=description,
+            owner_min_tenths=50,
+            owner_max_tenths=300,
+            instant_price_tenths=instant * 10,
+            schedule_price_tenths=schedule * 10,
+            instant_price_per_hour=instant,
+            schedule_price_per_hour=schedule,
+            schedule_deposit_spots=deposit,
         )
         items.append({
             "listing": listing,
@@ -762,6 +794,13 @@ def _demo_owned_spots():
         pricing_mode="auto",
         description="Rent when you're at the office.",
         location_zone="Calea Victoriei",
+        owner_min_tenths=50,
+        owner_max_tenths=300,
+        instant_price_tenths=80,
+        schedule_price_tenths=60,
+        instant_price_per_hour=8,
+        schedule_price_per_hour=6,
+        schedule_deposit_spots=5,
     )
     pending = SimpleNamespace(
         id=501,

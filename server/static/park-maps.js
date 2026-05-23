@@ -8,9 +8,11 @@
         unknown: "#8E8E93",
     };
 
-    const TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+    const TILE_URL =
+        "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
     const TILE_ATTR =
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> ' +
+        '&copy; <a href="https://carto.com/attributions">CARTO</a>';
 
     function ensureLeaflet() {
         if (window.L) {
@@ -39,23 +41,40 @@
 
         try {
             const L = await ensureLeaflet();
-            container.classList.add("pw-map-host", "pw-map-surface");
+            container.classList.add("pw-map-host", "pw-map-surface", "pw-map-glass");
             container.innerHTML = "";
 
             if (container._spotflowMap) {
                 container._spotflowMap.remove();
                 container._spotflowMap = null;
             }
+            if (container._spotflowMapOverlay) {
+                container._spotflowMapOverlay.remove();
+                container._spotflowMapOverlay = null;
+            }
 
             const map = L.map(container, {
-                zoomControl: true,
+                zoomControl: false,
                 attributionControl: true,
+                fadeAnimation: true,
+                zoomAnimation: true,
             });
 
             L.tileLayer(TILE_URL, {
                 attribution: TILE_ATTR,
-                maxZoom: 19,
+                subdomains: "abcd",
+                maxZoom: 20,
             }).addTo(map);
+
+            L.control
+                .zoom({ position: "bottomright" })
+                .addTo(map);
+
+            const overlay = document.createElement("div");
+            overlay.className = "pw-map-glass-overlay";
+            overlay.setAttribute("aria-hidden", "true");
+            container.appendChild(overlay);
+            container._spotflowMapOverlay = overlay;
 
             container._spotflowMap = map;
 
