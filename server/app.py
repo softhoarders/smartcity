@@ -71,7 +71,13 @@ PROTECTED_PATHS = (
 # App factory
 # ---------------------------------------------------------------------------
 
-app = Flask(__name__)
+_SERVER_DIR = os.path.dirname(os.path.abspath(__file__))
+
+app = Flask(
+    __name__,
+    template_folder=os.path.join(_SERVER_DIR, "templates"),
+    static_folder=os.path.join(_SERVER_DIR, "static"),
+)
 app.config["SECRET_KEY"] = config.SECRET_KEY
 app.config["SQLALCHEMY_DATABASE_URI"] = config.DATABASE_URI
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
@@ -148,170 +154,179 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = "login"
 
-with app.app_context():
-    db.create_all()
+def _init_db_schema() -> None:
+    with app.app_context():
+        db.create_all()
 
-    inspector = inspect(db.engine)
-    user_columns = {column["name"] for column in inspector.get_columns("users")}
-    user_column_defaults = {
-        "role": "VARCHAR(20) NOT NULL DEFAULT 'driver'",
-        "verification_status": "VARCHAR(20) NOT NULL DEFAULT 'approved'",
-        "verification_document": "VARCHAR(255)",
-        "verification_notes": "VARCHAR(500)",
-    }
-    for column_name, column_sql in user_column_defaults.items():
-        if column_name not in user_columns:
-            db.session.execute(text(f"ALTER TABLE users ADD COLUMN {column_name} {column_sql}"))
+        inspector = inspect(db.engine)
+        user_columns = {column["name"] for column in inspector.get_columns("users")}
+        user_column_defaults = {
+            "role": "VARCHAR(20) NOT NULL DEFAULT 'driver'",
+            "verification_status": "VARCHAR(20) NOT NULL DEFAULT 'approved'",
+            "verification_document": "VARCHAR(255)",
+            "verification_notes": "VARCHAR(500)",
+        }
+        for column_name, column_sql in user_column_defaults.items():
+            if column_name not in user_columns:
+                db.session.execute(text(f"ALTER TABLE users ADD COLUMN {column_name} {column_sql}"))
 
-    device_columns = {column["name"] for column in inspector.get_columns("devices")}
-    device_column_defaults = {
-        "latitude": "FLOAT",
-        "longitude": "FLOAT",
-        "notes": "TEXT",
-    }
-    for column_name, column_sql in device_column_defaults.items():
-        if column_name not in device_columns:
-            db.session.execute(text(f"ALTER TABLE devices ADD COLUMN {column_name} {column_sql}"))
+        device_columns = {column["name"] for column in inspector.get_columns("devices")}
+        device_column_defaults = {
+            "latitude": "FLOAT",
+            "longitude": "FLOAT",
+            "notes": "TEXT",
+        }
+        for column_name, column_sql in device_column_defaults.items():
+            if column_name not in device_columns:
+                db.session.execute(text(f"ALTER TABLE devices ADD COLUMN {column_name} {column_sql}"))
 
-    plate_columns = {column["name"] for column in inspector.get_columns("user_plates")}
-    plate_column_defaults = {
-        "verification_status": "VARCHAR(20) NOT NULL DEFAULT 'approved'",
-        "verification_document": "VARCHAR(255)",
-        "verification_notes": "VARCHAR(500)",
-        "verified_at": "DATETIME",
-    }
-    for column_name, column_sql in plate_column_defaults.items():
-        if column_name not in plate_columns:
-            db.session.execute(text(f"ALTER TABLE user_plates ADD COLUMN {column_name} {column_sql}"))
+        plate_columns = {column["name"] for column in inspector.get_columns("user_plates")}
+        plate_column_defaults = {
+            "verification_status": "VARCHAR(20) NOT NULL DEFAULT 'approved'",
+            "verification_document": "VARCHAR(255)",
+            "verification_notes": "VARCHAR(500)",
+            "verified_at": "DATETIME",
+        }
+        for column_name, column_sql in plate_column_defaults.items():
+            if column_name not in plate_columns:
+                db.session.execute(text(f"ALTER TABLE user_plates ADD COLUMN {column_name} {column_sql}"))
 
-    user_spots_columns = {
-        "spots_balance": "INTEGER NOT NULL DEFAULT 0",
-        "subscription_active": "BOOLEAN NOT NULL DEFAULT 0",
-        "subscription_started_at": "DATETIME",
-        "subscription_next_billing_at": "DATETIME",
-    }
-    for column_name, column_sql in user_spots_columns.items():
-        if column_name not in user_columns:
-            db.session.execute(text(f"ALTER TABLE users ADD COLUMN {column_name} {column_sql}"))
+        user_spots_columns = {
+            "spots_balance": "INTEGER NOT NULL DEFAULT 0",
+            "subscription_active": "BOOLEAN NOT NULL DEFAULT 0",
+            "subscription_started_at": "DATETIME",
+            "subscription_next_billing_at": "DATETIME",
+        }
+        for column_name, column_sql in user_spots_columns.items():
+            if column_name not in user_columns:
+                db.session.execute(text(f"ALTER TABLE users ADD COLUMN {column_name} {column_sql}"))
 
-    twofa_columns = {
-        "twofa_enabled": "BOOLEAN NOT NULL DEFAULT 0",
-        "twofa_secret": "VARCHAR(64)",
-    }
-    for column_name, column_sql in twofa_columns.items():
-        if column_name not in user_columns:
-            db.session.execute(text(f"ALTER TABLE users ADD COLUMN {column_name} {column_sql}"))
+        twofa_columns = {
+            "twofa_enabled": "BOOLEAN NOT NULL DEFAULT 0",
+            "twofa_secret": "VARCHAR(64)",
+        }
+        for column_name, column_sql in twofa_columns.items():
+            if column_name not in user_columns:
+                db.session.execute(text(f"ALTER TABLE users ADD COLUMN {column_name} {column_sql}"))
 
-    payout_columns = {
-        "payout_account_holder": "VARCHAR(120)",
-        "payout_iban": "VARCHAR(34)",
-        "payout_bank_name": "VARCHAR(120)",
-        "referred_by_code": "VARCHAR(32)",
-    }
-    for column_name, column_sql in payout_columns.items():
-        if column_name not in user_columns:
-            db.session.execute(text(f"ALTER TABLE users ADD COLUMN {column_name} {column_sql}"))
+        payout_columns = {
+            "payout_account_holder": "VARCHAR(120)",
+            "payout_iban": "VARCHAR(34)",
+            "payout_bank_name": "VARCHAR(120)",
+            "referred_by_code": "VARCHAR(32)",
+        }
+        for column_name, column_sql in payout_columns.items():
+            if column_name not in user_columns:
+                db.session.execute(text(f"ALTER TABLE users ADD COLUMN {column_name} {column_sql}"))
 
-    if "owner_user_id" not in device_columns:
-        db.session.execute(text("ALTER TABLE devices ADD COLUMN owner_user_id INTEGER"))
+        if "owner_user_id" not in device_columns:
+            db.session.execute(text("ALTER TABLE devices ADD COLUMN owner_user_id INTEGER"))
 
-    db.session.commit()
-    db.create_all()
-    _migrate_wallet_hundredths()
-    inspector = inspect(db.engine)
+        db.session.commit()
+        db.create_all()
+        _migrate_wallet_hundredths()
+        inspector = inspect(db.engine)
 
-    listing_columns = set()
-    if inspector.has_table("spot_listings"):
-        listing_columns = {c["name"] for c in inspector.get_columns("spot_listings")}
-    listing_migrations = {
-        "instant_price_tenths": "INTEGER",
-        "schedule_price_tenths": "INTEGER",
-        "schedule_deposit_tenths": "INTEGER",
-        "pricing_mode": "VARCHAR(20) NOT NULL DEFAULT 'manual'",
-        "owner_min_tenths": f"INTEGER NOT NULL DEFAULT {config.PRICING_DEFAULT_MIN_TENTHS}",
-        "owner_max_tenths": f"INTEGER NOT NULL DEFAULT {config.PRICING_DEFAULT_MAX_TENTHS}",
-        "suggested_instant_tenths": "INTEGER",
-        "suggested_schedule_tenths": "INTEGER",
-        "dynamic_instant_tenths": "INTEGER",
-        "dynamic_schedule_tenths": "INTEGER",
-        "location_zone": "VARCHAR(30)",
-        "pricing_reason": "VARCHAR(500)",
-        "last_priced_at": "DATETIME",
-    }
-    for col, sql in listing_migrations.items():
-        if col not in listing_columns:
-            db.session.execute(text(f"ALTER TABLE spot_listings ADD COLUMN {col} {sql}"))
+        listing_columns = set()
+        if inspector.has_table("spot_listings"):
+            listing_columns = {c["name"] for c in inspector.get_columns("spot_listings")}
+        listing_migrations = {
+            "instant_price_tenths": "INTEGER",
+            "schedule_price_tenths": "INTEGER",
+            "schedule_deposit_tenths": "INTEGER",
+            "pricing_mode": "VARCHAR(20) NOT NULL DEFAULT 'manual'",
+            "owner_min_tenths": f"INTEGER NOT NULL DEFAULT {config.PRICING_DEFAULT_MIN_TENTHS}",
+            "owner_max_tenths": f"INTEGER NOT NULL DEFAULT {config.PRICING_DEFAULT_MAX_TENTHS}",
+            "suggested_instant_tenths": "INTEGER",
+            "suggested_schedule_tenths": "INTEGER",
+            "dynamic_instant_tenths": "INTEGER",
+            "dynamic_schedule_tenths": "INTEGER",
+            "location_zone": "VARCHAR(30)",
+            "pricing_reason": "VARCHAR(500)",
+            "last_priced_at": "DATETIME",
+        }
+        for col, sql in listing_migrations.items():
+            if col not in listing_columns:
+                db.session.execute(text(f"ALTER TABLE spot_listings ADD COLUMN {col} {sql}"))
 
-    promo_columns = set()
-    if inspector.has_table("promo_codes"):
-        promo_columns = {c["name"] for c in inspector.get_columns("promo_codes")}
-    for col, sql in {
-        "owner_user_id": "INTEGER",
-        "listing_id": "INTEGER",
-        "label": "VARCHAR(120)",
-    }.items():
-        if col not in promo_columns:
-            db.session.execute(text(f"ALTER TABLE promo_codes ADD COLUMN {col} {sql}"))
-    db.session.commit()
+        promo_columns = set()
+        if inspector.has_table("promo_codes"):
+            promo_columns = {c["name"] for c in inspector.get_columns("promo_codes")}
+        for col, sql in {
+            "owner_user_id": "INTEGER",
+            "listing_id": "INTEGER",
+            "label": "VARCHAR(120)",
+        }.items():
+            if col not in promo_columns:
+                db.session.execute(text(f"ALTER TABLE promo_codes ADD COLUMN {col} {sql}"))
+        db.session.commit()
 
-    cap = config.MAX_LISTING_PRICE_HUNDREDTHS
-    for listing in SpotListing.query.all():
-        if not listing.instant_price_tenths:
-            listing.instant_price_tenths = (listing.instant_price_per_hour or config.DEFAULT_INSTANT_PRICE_PER_HOUR) * 100
-        elif listing.instant_price_tenths < 1000:
-            listing.instant_price_tenths *= 10
-        if not listing.schedule_price_tenths:
-            listing.schedule_price_tenths = (listing.schedule_price_per_hour or config.DEFAULT_SCHEDULE_PRICE_PER_HOUR) * 100
-        elif listing.schedule_price_tenths < 1000:
-            listing.schedule_price_tenths *= 10
-        if not listing.schedule_deposit_tenths:
-            listing.schedule_deposit_tenths = (listing.schedule_deposit_spots or config.DEFAULT_SCHEDULE_DEPOSIT) * 100
-        elif listing.schedule_deposit_tenths < 1000:
-            listing.schedule_deposit_tenths *= 10
-        if not listing.owner_min_tenths:
-            listing.owner_min_tenths = config.PRICING_DEFAULT_MIN_TENTHS * 10
-        elif listing.owner_min_tenths < 1000:
-            listing.owner_min_tenths *= 10
-        if not listing.owner_max_tenths:
-            listing.owner_max_tenths = config.PRICING_DEFAULT_MAX_TENTHS * 10
-        elif listing.owner_max_tenths < 1000:
-            listing.owner_max_tenths *= 10
-        for field in (
-            "instant_price_tenths",
-            "schedule_price_tenths",
-            "schedule_deposit_tenths",
-            "dynamic_instant_tenths",
-            "dynamic_schedule_tenths",
-            "suggested_instant_tenths",
-            "suggested_schedule_tenths",
-        ):
-            val = getattr(listing, field, None)
-            if val and int(val) > cap:
-                setattr(listing, field, cap)
-        listing.owner_min_tenths = min(listing.owner_min_tenths or cap, cap)
-        listing.owner_max_tenths = min(listing.owner_max_tenths or cap, cap)
-    db.session.commit()
+        cap = config.MAX_LISTING_PRICE_HUNDREDTHS
+        for listing in SpotListing.query.all():
+            if not listing.instant_price_tenths:
+                listing.instant_price_tenths = (listing.instant_price_per_hour or config.DEFAULT_INSTANT_PRICE_PER_HOUR) * 100
+            elif listing.instant_price_tenths < 1000:
+                listing.instant_price_tenths *= 10
+            if not listing.schedule_price_tenths:
+                listing.schedule_price_tenths = (listing.schedule_price_per_hour or config.DEFAULT_SCHEDULE_PRICE_PER_HOUR) * 100
+            elif listing.schedule_price_tenths < 1000:
+                listing.schedule_price_tenths *= 10
+            if not listing.schedule_deposit_tenths:
+                listing.schedule_deposit_tenths = (listing.schedule_deposit_spots or config.DEFAULT_SCHEDULE_DEPOSIT) * 100
+            elif listing.schedule_deposit_tenths < 1000:
+                listing.schedule_deposit_tenths *= 10
+            if not listing.owner_min_tenths:
+                listing.owner_min_tenths = config.PRICING_DEFAULT_MIN_TENTHS * 10
+            elif listing.owner_min_tenths < 1000:
+                listing.owner_min_tenths *= 10
+            if not listing.owner_max_tenths:
+                listing.owner_max_tenths = config.PRICING_DEFAULT_MAX_TENTHS * 10
+            elif listing.owner_max_tenths < 1000:
+                listing.owner_max_tenths *= 10
+            for field in (
+                "instant_price_tenths",
+                "schedule_price_tenths",
+                "schedule_deposit_tenths",
+                "dynamic_instant_tenths",
+                "dynamic_schedule_tenths",
+                "suggested_instant_tenths",
+                "suggested_schedule_tenths",
+            ):
+                val = getattr(listing, field, None)
+                if val and int(val) > cap:
+                    setattr(listing, field, cap)
+            listing.owner_min_tenths = min(listing.owner_min_tenths or cap, cap)
+            listing.owner_max_tenths = min(listing.owner_max_tenths or cap, cap)
+        db.session.commit()
 
-    tx_columns = set()
-    if inspector.has_table("spot_transactions"):
-        tx_columns = {c["name"] for c in inspector.get_columns("spot_transactions")}
-    if "receipt_token" not in tx_columns:
-        db.session.execute(text("ALTER TABLE spot_transactions ADD COLUMN receipt_token VARCHAR(64)"))
-    user_columns = {column["name"] for column in inspector.get_columns("users")}
-    for col, sql in {
-        "payout_account_holder": "VARCHAR(120)",
-        "payout_iban": "VARCHAR(34)",
-        "payout_bank_name": "VARCHAR(120)",
-        "referred_by_code": "VARCHAR(32)",
-    }.items():
-        if col not in user_columns:
-            db.session.execute(text(f"ALTER TABLE users ADD COLUMN {col} {sql}"))
-    db.session.commit()
-    db.create_all()
-    try:
-        promo_service.ensure_default_promos()
-    except Exception:
-        pass
+        tx_columns = set()
+        if inspector.has_table("spot_transactions"):
+            tx_columns = {c["name"] for c in inspector.get_columns("spot_transactions")}
+        if "receipt_token" not in tx_columns:
+            db.session.execute(text("ALTER TABLE spot_transactions ADD COLUMN receipt_token VARCHAR(64)"))
+        user_columns = {column["name"] for column in inspector.get_columns("users")}
+        for col, sql in {
+            "payout_account_holder": "VARCHAR(120)",
+            "payout_iban": "VARCHAR(34)",
+            "payout_bank_name": "VARCHAR(120)",
+            "referred_by_code": "VARCHAR(32)",
+        }.items():
+            if col not in user_columns:
+                db.session.execute(text(f"ALTER TABLE users ADD COLUMN {col} {sql}"))
+        db.session.commit()
+        db.create_all()
+        try:
+            promo_service.ensure_default_promos()
+        except Exception:
+            pass
+
+
+try:
+    _init_db_schema()
+except Exception as exc:
+    import traceback
+    print(f"[startup] DB schema init failed: {exc}", flush=True)
+    traceback.print_exc()
 
 # Start background mailer worker (local/server only — not on Vercel serverless)
 if not config.IS_VERCEL:

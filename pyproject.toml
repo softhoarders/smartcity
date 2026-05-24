@@ -20,4 +20,4 @@ dependencies = [
 ]
 
 [tool.vercel]
-entrypoint = "server.app:app"
+entrypoint = "app:app"
