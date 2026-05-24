@@ -20,4 +20,4 @@ dependencies = [
 ]
 
 [tool.vercel]
-entrypoint = "wsgi:app"
+entrypoint = "server.app:app"
