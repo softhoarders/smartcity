@@ -1,4 +1,13 @@
 (function () {
+    function escapeHtml(value) {
+        return String(value ?? "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+    }
+
     const debounce = (fn, ms) => {
         let t;
         return (...args) => {
@@ -277,7 +286,7 @@
         else if (data.hours) rows.push(["Duration", `${data.hours} hour(s)`]);
 
         details.innerHTML = rows
-            .map(([k, v]) => `<li><span class="text-secondary">${k}</span> <strong>${v}</strong></li>`)
+            .map(([k, v]) => `<li><span class="text-secondary">${escapeHtml(k)}</span> <strong>${escapeHtml(v)}</strong></li>`)
             .join("");
 
         modal.hidden = false;
@@ -333,7 +342,7 @@
                 btn.className = "fp-suggestion-item";
                 btn.setAttribute("role", "option");
                 btn.id = `fp-sug-${idx}`;
-                btn.innerHTML = `<span class="fp-suggestion-pin" aria-hidden="true"></span><span>${row.label}</span>`;
+                btn.innerHTML = `<span class="fp-suggestion-pin" aria-hidden="true"></span><span>${escapeHtml(row.label)}</span>`;
                 btn.addEventListener("mousedown", (e) => {
                     e.preventDefault();
                     navigateSearch(row);

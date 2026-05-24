@@ -150,7 +150,6 @@ Gemini verification still runs in Spotflow; n8n handles human queue + notificati
 
 - **Login rate limiting** — 8 attempts per 15 minutes per IP (configurable).
 - **Security headers** — `X-Content-Type-Options`, `X-Frame-Options`, etc.
-- **Optional device API key** — set `DEVICE_API_KEY`; Pi sends `X-Device-Api-Key` on `/api/fines` and heartbeat.
 - **Webhook HMAC** — `N8N_WEBHOOK_SECRET` signs outbound events.
 - **Inbound n8n API key** — `N8N_API_KEY` required for automation endpoints.
 - **Simulated 2FA** — optional per-user; see below.

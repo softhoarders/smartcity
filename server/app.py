@@ -17,7 +17,7 @@ from flask_cors import CORS
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_bcrypt import Bcrypt
 from werkzeug.utils import secure_filename
-from sqlalchemy import inspect, text
+from sqlalchemy import inspect, or_, text
 from functools import wraps
 import queue
 import threading
@@ -127,6 +127,29 @@ def _migrate_wallet_hundredths() -> None:
 def _apply_security_headers(response):
     return security.apply_security_headers(response)
 
+
+_CSRF_EXEMPT_PREFIXES = (
+    "/api/devices",
+    "/api/fines",
+    "/api/n8n",
+    "/api/push",
+    "/api/users/register",
+    "/terminal",
+)
+
+
+@app.before_request
+def _csrf_protect():
+    if request.method in ("GET", "HEAD", "OPTIONS", "TRACE"):
+        return
+    path = request.path
+    for prefix in _CSRF_EXEMPT_PREFIXES:
+        if path.startswith(prefix):
+            return
+    security.ensure_csrf_token()
+    if not security.validate_csrf():
+        abort(400, description="Invalid or missing CSRF token.")
+
 @app.context_processor
 def inject_globals():
     ctx = {
@@ -135,6 +158,7 @@ def inject_globals():
         "format_credits_delta": spot_prices.format_credits_delta,
         "currency_name": config.WALLET_CURRENCY_NAME,
         "currency_singular": config.WALLET_CURRENCY_SINGULAR,
+        "csrf_token": security.ensure_csrf_token(),
     }
     if current_user.is_authenticated:
         ctx["is_demo"] = _is_demo()
@@ -1913,7 +1937,6 @@ def save_verification_document(file_storage, plate):
 # ---------------------------------------------------------------------------
 
 @app.route("/api/devices/register", methods=["POST"])
-@security.require_device_api_key
 def api_register_device():
     """Register a new device or return existing one."""
     data = request.get_json(force=True)
@@ -1938,7 +1961,6 @@ def api_register_device():
 
 
 @app.route("/api/devices/<mac>/heartbeat", methods=["POST"])
-@security.require_device_api_key
 def api_heartbeat(mac):
     """Update device last_seen timestamp."""
     device = _get_device_by_mac(mac.upper())
@@ -2027,7 +2049,6 @@ def send_web_push(user, title, body, *, url=None):
 # ---------------------------------------------------------------------------
 
 @app.route("/api/fines", methods=["POST"])
-@security.require_device_api_key
 def api_report_fine():
     """Client reports a plate mismatch."""
     mac = request.form.get("mac_address", "").strip().upper()
@@ -2470,10 +2491,98 @@ def _register_root_favicon_assets() -> None:
 _register_root_favicon_assets()
 
 
+def _upload_path_safe(filename: str) -> str | None:
+    """Resolve path under UPLOAD_FOLDER; None if it escapes the upload root."""
+    upload_root = os.path.abspath(app.config["UPLOAD_FOLDER"])
+    candidate = os.path.abspath(os.path.join(upload_root, filename))
+    if candidate != upload_root and not candidate.startswith(upload_root + os.sep):
+        return None
+    if not os.path.isfile(candidate):
+        return None
+    return candidate
+
+
+def _user_can_access_upload(filename: str) -> bool:
+    if getattr(current_user, "is_admin", False):
+        return True
+    if _is_demo():
+        return False
+
+    rel = filename.replace("\\", "/").lstrip("/")
+    basename = os.path.basename(rel)
+
+    fine = Fine.query.filter(
+        or_(Fine.image_filename == rel, Fine.image_filename == basename)
+    ).first()
+    if fine:
+        plates = user_plate_values(current_user)
+        norm_expected = normalize_plate(fine.expected_plate)
+        norm_detected = normalize_plate(fine.detected_plate)
+        if norm_expected in plates or norm_detected in plates:
+            return True
+        device = fine.device
+        if device and device.owner_user_id == current_user.id:
+            return True
+        return False
+
+    if rel.startswith("plate_proofs/"):
+        row = UserPlate.query.filter_by(verification_document=rel, user_id=current_user.id).first()
+        return row is not None
+
+    plate_row = UserPlate.query.filter(
+        or_(UserPlate.verification_document == rel, UserPlate.verification_document == basename),
+        UserPlate.user_id == current_user.id,
+    ).first()
+    if plate_row:
+        return True
+
+    msg = FineMessage.query.filter_by(attachment_filename=basename).first()
+    if msg and msg.fine and user_owns_plate(current_user, msg.fine.expected_plate):
+        return True
+
+    if current_user.verification_document in (rel, basename):
+        return True
+
+    return False
+
+
+def _user_can_access_receipt(token: str) -> bool:
+    if not token:
+        return False
+    safe = "".join(c for c in token if c.isalnum() or c in "-_")
+    if safe != token:
+        return False
+
+    if _is_demo():
+        for tx in _demo_wallet_transactions_merged():
+            if getattr(tx, "receipt_token", None) == token:
+                return True
+        for withdrawal in _demo_wallet_state().get("withdrawals", []):
+            if withdrawal.get("receipt_token") == token:
+                return True
+        return False
+
+    if not current_user.id or current_user.id <= 0:
+        return False
+
+    if SpotTransaction.query.filter_by(user_id=current_user.id, receipt_token=token).first():
+        return True
+    if WalletWithdrawal.query.filter_by(user_id=current_user.id, receipt_token=token).first():
+        return True
+    return False
+
+
 @app.route("/uploads/<path:filename>")
 @login_required
 def serve_upload(filename):
-    return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
+    if not _user_can_access_upload(filename):
+        abort(403)
+    safe_path = _upload_path_safe(filename)
+    if not safe_path:
+        abort(404)
+    directory = os.path.dirname(safe_path)
+    basename = os.path.basename(safe_path)
+    return send_from_directory(directory, basename)
 
 
 @app.route("/admin/users/<int:user_id>/verify/<action>", methods=["POST"])
@@ -4068,6 +4177,8 @@ def wallet_receipt(token):
     denied = _require_driver_portal()
     if denied:
         return denied
+    if not _user_can_access_receipt(token):
+        abort(404)
     data = receipt_pdf.load_receipt_bytes(token)
     if not data:
         abort(404)

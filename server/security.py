@@ -82,18 +82,25 @@ def require_n8n_api_key(fn):
     return wrapper
 
 
-def require_device_api_key(fn):
-    @wraps(fn)
-    def wrapper(*args, **kwargs):
-        expected = config.DEVICE_API_KEY
-        if not expected:
-            return fn(*args, **kwargs)
-        provided = request.headers.get("X-Device-Api-Key", "")
-        if not _constant_time_eq(provided, expected):
-            abort(401, description="Invalid device API key.")
-        return fn(*args, **kwargs)
+def ensure_csrf_token() -> str:
+    import secrets
 
-    return wrapper
+    token = session.get("csrf_token")
+    if not token:
+        token = secrets.token_urlsafe(32)
+        session["csrf_token"] = token
+    return token
+
+
+def validate_csrf() -> bool:
+    """Validate CSRF token from form field or X-CSRF-Token header."""
+    expected = session.get("csrf_token", "")
+    if not expected:
+        return False
+    provided = request.headers.get("X-CSRF-Token") or request.form.get("csrf_token", "")
+    if not provided:
+        return False
+    return _constant_time_eq(provided, expected)
 
 
 def _constant_time_eq(a: str, b: str) -> bool:

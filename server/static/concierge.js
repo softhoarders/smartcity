@@ -28,6 +28,13 @@
             .join("");
     }
 
+    function csrfHeaders() {
+        const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute("content") || "";
+        const headers = { "Content-Type": "application/json" };
+        if (token) headers["X-CSRF-Token"] = token;
+        return headers;
+    }
+
     function init(cfg) {
         const form = document.getElementById("fp-concierge-form");
         const input = document.getElementById("fp-concierge-input");
@@ -46,7 +53,7 @@
             try {
                 const res = await fetch("/portal/api/concierge", {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    headers: csrfHeaders(),
                     credentials: "same-origin",
                     body: JSON.stringify({ message }),
                 });
@@ -113,7 +120,7 @@
             try {
                 const res = await fetch("/portal/api/concierge/book", {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    headers: csrfHeaders(),
                     credentials: "same-origin",
                     body: JSON.stringify({ listing_id: listingId, intent, renter_plate: plate }),
                 });

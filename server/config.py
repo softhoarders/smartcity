@@ -128,9 +128,6 @@ try:
 except json.JSONDecodeError:
     N8N_WEBHOOK_URLS = {}
 
-# Edge device API (Pi) — optional shared secret
-DEVICE_API_KEY = os.environ.get("DEVICE_API_KEY", "")
-
 # Security
 FORCE_HTTPS = IS_VERCEL or os.environ.get("SPOTFLOW_FORCE_HTTPS", "false").lower() in (
     "true",
