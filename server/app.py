@@ -92,6 +92,29 @@ app.register_blueprint(n8n_bp)
 security.configure_session_cookies(app)
 
 
+def _migrate_wallet_hundredths() -> None:
+    """One-time migration: legacy whole-credit wallet values → hundredths."""
+    try:
+        version = db.session.execute(text("PRAGMA user_version")).scalar() or 0
+        if version >= 2:
+            return
+        for user in User.query.all():
+            user.spots_balance = int(user.spots_balance or 0) * 100
+        for tx in SpotTransaction.query.all():
+            tx.amount = int(tx.amount or 0) * 100
+        for booking in SpotBooking.query.all():
+            booking.total_spots = int(booking.total_spots or 0) * 100
+            booking.paid_spots = int(booking.paid_spots or 0) * 100
+            if booking.deposit_spots:
+                booking.deposit_spots = int(booking.deposit_spots) * 100
+        for withdrawal in WalletWithdrawal.query.all():
+            withdrawal.credits_amount = int(withdrawal.credits_amount or 0) * 100
+        db.session.execute(text("PRAGMA user_version = 2"))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+
 @app.after_request
 def _apply_security_headers(response):
     return security.apply_security_headers(response)
@@ -119,9 +142,6 @@ def inject_globals():
                 except Exception:
                     bal = 0
                     ctx["nav_spots_balance"] = 0
-            if bal < config.LOW_BALANCE_THRESHOLD:
-                ctx["low_balance_warning"] = True
-                ctx["low_balance_threshold"] = config.LOW_BALANCE_THRESHOLD
     return ctx
 
 login_manager = LoginManager()
@@ -197,6 +217,7 @@ with app.app_context():
 
     db.session.commit()
     db.create_all()
+    _migrate_wallet_hundredths()
     inspector = inspect(db.engine)
 
     listing_columns = set()
@@ -311,7 +332,8 @@ def periodic_cleanup():
         import time
         time.sleep(86400) # Once a day
 
-threading.Thread(target=periodic_cleanup, daemon=True).start()
+if not config.IS_VERCEL:
+    threading.Thread(target=periodic_cleanup, daemon=True).start()
 
 
 def _periodic_pricing_refresh():
@@ -327,7 +349,8 @@ def _periodic_pricing_refresh():
             print(f"[pricing] refresh error: {exc}")
 
 
-threading.Thread(target=_periodic_pricing_refresh, daemon=True).start()
+if not config.IS_VERCEL:
+    threading.Thread(target=_periodic_pricing_refresh, daemon=True).start()
 
 
 def _periodic_waitlist_refresh():
@@ -347,7 +370,8 @@ def _periodic_waitlist_refresh():
             print(f"[waitlist] refresh error: {exc}")
 
 
-threading.Thread(target=_periodic_waitlist_refresh, daemon=True).start()
+if not config.IS_VERCEL:
+    threading.Thread(target=_periodic_waitlist_refresh, daemon=True).start()
 
 
 @app.after_request
@@ -944,27 +968,27 @@ def _demo_wallet_transactions():
     base = _now()
     return [
         SimpleNamespace(
-            amount=-6,
+            amount=-600,
             description="Schedule deposit · H-22",
             created_at=base - timedelta(days=1),
         ),
         SimpleNamespace(
-            amount=-16,
+            amount=-1600,
             description="Instant book · P2-04 · 2h",
             created_at=base - timedelta(days=3),
         ),
         SimpleNamespace(
-            amount=50,
+            amount=5000,
             description="Top-up · card ending 4242",
             created_at=base - timedelta(days=18),
         ),
         SimpleNamespace(
-            amount=config.SUBSCRIPTION_MONTHLY_SPOTS,
+            amount=spot_prices.credits_to_hundredths(config.SUBSCRIPTION_MONTHLY_SPOTS),
             description="Monthly subscription credit",
             created_at=base - timedelta(days=12),
         ),
         SimpleNamespace(
-            amount=1000,
+            amount=100000,
             description="Demo welcome balance",
             created_at=base - timedelta(days=45),
         ),
@@ -974,16 +998,22 @@ def _demo_wallet_transactions():
 def _demo_wallet_state():
     state = session.get("demo_wallet")
     if state is None:
-        state = {"balance": 1000, "extra_txs": [], "subscription_active": True}
+        state = {"balance": 100000, "extra_txs": [], "subscription_active": True, "wallet_hundredths": True}
         session["demo_wallet"] = state
-    elif int(state.get("balance", 0)) == 120:
-        state["balance"] = 1000
+    elif not state.get("wallet_hundredths"):
+        state["balance"] = int(state.get("balance", 0)) * 100
+        for tx in state.get("extra_txs", []):
+            tx["amount"] = int(tx.get("amount", 0)) * 100
+        state["wallet_hundredths"] = True
+        session["demo_wallet"] = state
+    elif int(state.get("balance", 0)) == 12000:
+        state["balance"] = 100000
         session["demo_wallet"] = state
     return state
 
 
 def _demo_wallet_balance():
-    return int(_demo_wallet_state().get("balance", 1000))
+    return int(_demo_wallet_state().get("balance", 100000))
 
 
 def _demo_wallet_transactions_merged():
@@ -1006,7 +1036,7 @@ def _demo_wallet_transactions_merged():
 
 def _demo_wallet_credit(amount: int, description: str, *, receipt_token: str | None = None) -> None:
     state = _demo_wallet_state()
-    state["balance"] = int(state.get("balance", 1000)) + amount
+    state["balance"] = int(state.get("balance", 100000)) + amount
     tx = {
         "amount": amount,
         "description": description,
@@ -1021,7 +1051,7 @@ def _demo_wallet_credit(amount: int, description: str, *, receipt_token: str | N
 
 def _demo_wallet_debit(amount: int, description: str, *, receipt_token: str | None = None) -> None:
     state = _demo_wallet_state()
-    bal = int(state.get("balance", 1000))
+    bal = int(state.get("balance", 100000))
     if bal < amount:
         raise ValueError(f"Insufficient {config.WALLET_CURRENCY_NAME.lower()} balance")
     state["balance"] = bal - amount
@@ -1077,12 +1107,12 @@ def _is_low_balance(balance: int) -> bool:
     return int(balance) < config.LOW_BALANCE_THRESHOLD
 
 
-def _demo_apply_promo_bonus(base_spots: int, code: str) -> int:
+def _demo_apply_promo_bonus(base_hundredths: int, code: str) -> int:
     norm = promo_service.normalize_code(code)
     demo_promos = {
-        "WELCOME10": max(1, base_spots // 10),
-        "SPOTFLOW15": max(1, (base_spots * 15) // 100),
-        "PARK20": 20,
+        "WELCOME10": max(100, base_hundredths // 10),
+        "SPOTFLOW15": max(100, (base_hundredths * 15) // 100),
+        "PARK20": spot_prices.credits_to_hundredths(20),
     }
     if norm not in demo_promos:
         raise ValueError("Promo code not found or inactive.")
@@ -1262,7 +1292,7 @@ def _default_demo_spot(device_id: int, base: datetime) -> dict:
                     "renter_plate": "B-212-GLS",
                     "starts_at": (base - timedelta(days=1)).isoformat(),
                     "ends_at": (base - timedelta(days=1) + timedelta(hours=4)).isoformat(),
-                    "total_spots": 18,
+                    "total_spots": 1800,
                 },
             ],
         }
@@ -1289,7 +1319,7 @@ def _default_demo_spot(device_id: int, base: datetime) -> dict:
                     "renter_plate": "B-777-XYZ",
                     "starts_at": (base + timedelta(hours=2)).isoformat(),
                     "ends_at": (base + timedelta(hours=5)).isoformat(),
-                    "total_spots": 18,
+                    "total_spots": 1800,
                 },
             ],
             "history": [],
@@ -2781,7 +2811,7 @@ def api_register_user():
     if config.NEW_USER_WELCOME_SPOTS > 0:
         spots_service.credit_spots(
             user,
-            config.NEW_USER_WELCOME_SPOTS,
+            spot_prices.credits_to_hundredths(config.NEW_USER_WELCOME_SPOTS),
             "welcome",
             f"Welcome bonus ({config.NEW_USER_WELCOME_SPOTS} {config.WALLET_CURRENCY_NAME})",
         )
@@ -3241,14 +3271,14 @@ def wallet():
         if request.method == "POST":
             action = request.form.get("action")
             if action == "subscribe_balance":
-                cost = config.SUBSCRIPTION_MONTHLY_LEI
+                cost = spot_prices.credits_to_hundredths(config.SUBSCRIPTION_MONTHLY_LEI)
                 if _demo_wallet_balance() < cost:
-                    flash(f"Need at least {cost} {config.WALLET_CURRENCY_NAME.lower()} on balance.", "danger")
+                    flash(f"Need at least {config.SUBSCRIPTION_MONTHLY_LEI} {config.WALLET_CURRENCY_NAME.lower()} on balance.", "danger")
                 else:
                     state["balance"] = _demo_wallet_balance() - cost
                     state["subscription_active"] = True
                     _demo_wallet_credit(
-                        config.SUBSCRIPTION_MONTHLY_SPOTS,
+                        spot_prices.credits_to_hundredths(config.SUBSCRIPTION_MONTHLY_SPOTS),
                         "Monthly subscription (balance)",
                     )
                     flash(
@@ -3262,14 +3292,14 @@ def wallet():
                     holder = request.form.get("account_holder", "").strip()
                     iban = request.form.get("iban", "")
                     bank = request.form.get("bank_name", "")
-                    if _demo_wallet_balance() < config.WITHDRAWAL_CREDITS:
+                    if _demo_wallet_balance() < spot_prices.credits_to_hundredths(config.WITHDRAWAL_CREDITS):
                         raise ValueError(
                             f"You need at least {config.WITHDRAWAL_CREDITS} "
                             f"{config.WALLET_CURRENCY_NAME.lower()} to withdraw."
                         )
                     token = receipt_pdf.new_receipt_token()
                     _demo_wallet_debit(
-                        config.WITHDRAWAL_CREDITS,
+                        spot_prices.credits_to_hundredths(config.WITHDRAWAL_CREDITS),
                         f"Bank withdrawal — {config.WITHDRAWAL_LEI} lei (pending)",
                         receipt_token=token,
                     )
