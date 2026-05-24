@@ -91,14 +91,16 @@ def legacy_deposit_hundredths(listing: SpotListing) -> int:
 
 
 def effective_instant_hundredths(listing: SpotListing) -> int:
-    if listing.pricing_mode == "auto" and listing.dynamic_instant_tenths:
-        return _normalize_hundredths(listing.dynamic_instant_tenths, listing.instant_price_per_hour)
+    dynamic = getattr(listing, "dynamic_instant_tenths", None)
+    if listing.pricing_mode == "auto" and dynamic:
+        return _normalize_hundredths(dynamic, listing.instant_price_per_hour)
     return legacy_instant_hundredths(listing)
 
 
 def effective_schedule_hundredths(listing: SpotListing) -> int:
-    if listing.pricing_mode == "auto" and listing.dynamic_schedule_tenths:
-        return _normalize_hundredths(listing.dynamic_schedule_tenths, listing.schedule_price_per_hour)
+    dynamic = getattr(listing, "dynamic_schedule_tenths", None)
+    if listing.pricing_mode == "auto" and dynamic:
+        return _normalize_hundredths(dynamic, listing.schedule_price_per_hour)
     return legacy_schedule_hundredths(listing)
 
 

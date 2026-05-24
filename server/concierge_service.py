@@ -206,18 +206,25 @@ def _listing_result_payload(item: dict[str, Any], intent: ConciergeIntent) -> di
     listing = item["listing"]
     device = item["device"]
     ends = intent.arrive_at + timedelta(hours=intent.duration_hours)
+    hours = max(1, int(intent.duration_hours))
     total_est = 0
     try:
         if intent.booking_type == "instant" or intent.booking_type == "either":
-            total_est = spots_service.calculate_instant_total(listing, intent.duration_hours)
+            total_est = spots_service.calculate_instant_total(listing, hours)
         else:
             total_est, _, _ = spots_service.calculate_scheduled_total(
                 listing, intent.arrive_at, ends
             )
     except Exception:
-        total_est = 0
+        inst_h = item.get("instant_hundredths")
+        if inst_h is not None:
+            total_est = spot_prices.hundredths_to_billable_spots(int(inst_h) * hours)
+        else:
+            total_est = 0
 
-    inst = spot_prices.effective_instant_hundredths(listing)
+    inst = item.get("instant_hundredths")
+    if inst is None:
+        inst = spot_prices.effective_instant_hundredths(listing)
     return {
         "listing_id": listing.id,
         "spot_label": device.spot_label,

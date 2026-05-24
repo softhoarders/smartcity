@@ -1,4 +1,6 @@
 (function () {
+    const LOADING_KEY = "spotflow_concierge_loading";
+
     function appendMessage(log, role, html) {
         const row = document.createElement("div");
         row.className = `fp-concierge-msg fp-concierge-msg--${role}`;
@@ -35,11 +37,80 @@
         return headers;
     }
 
+    function getLoadingEls() {
+        return {
+            panel: document.getElementById("concierge"),
+            overlay: document.getElementById("fp-concierge-loading"),
+            title: document.getElementById("fp-concierge-loading-title"),
+            hint: document.getElementById("fp-concierge-loading-hint"),
+            form: document.getElementById("fp-concierge-form"),
+            input: document.getElementById("fp-concierge-input"),
+            submit: document.getElementById("fp-concierge-send"),
+        };
+    }
+
+    function showLoading(title, hint) {
+        const { panel, overlay, title: titleEl, hint: hintEl, form, input, submit } = getLoadingEls();
+        if (!panel || !overlay) return;
+
+        if (titleEl && title) titleEl.textContent = title;
+        if (hintEl && hint) hintEl.textContent = hint;
+
+        panel.classList.add("is-loading");
+        overlay.hidden = false;
+        overlay.setAttribute("aria-hidden", "false");
+        if (form) form.setAttribute("aria-busy", "true");
+        if (input) input.disabled = true;
+        if (submit) submit.disabled = true;
+    }
+
+    function hideLoading() {
+        const { panel, overlay, form, input, submit } = getLoadingEls();
+        if (!panel || !overlay) return;
+
+        panel.classList.remove("is-loading");
+        overlay.hidden = true;
+        overlay.setAttribute("aria-hidden", "true");
+        if (form) form.removeAttribute("aria-busy");
+        if (input) input.disabled = false;
+        if (submit) submit.disabled = false;
+        try {
+            sessionStorage.removeItem(LOADING_KEY);
+        } catch (_e) {
+            /* ignore */
+        }
+    }
+
+    function resumeLoadingAfterNavigation() {
+        try {
+            if (sessionStorage.getItem(LOADING_KEY) !== "1") return false;
+        } catch (_e) {
+            return false;
+        }
+        showLoading("Updating map with matching spots", "Loading spots near your search…");
+        window.setTimeout(hideLoading, 1200);
+        return true;
+    }
+
+    async function parseJsonResponse(res) {
+        const ct = res.headers.get("content-type") || "";
+        if (!ct.includes("application/json")) {
+            const text = await res.text();
+            if (res.status === 400 && text.includes("CSRF")) {
+                return { error: "Session expired. Refresh the page and try again." };
+            }
+            return { error: res.ok ? "Unexpected server response." : `Request failed (${res.status}).` };
+        }
+        return res.json();
+    }
+
     function init(cfg) {
         const form = document.getElementById("fp-concierge-form");
         const input = document.getElementById("fp-concierge-input");
         const log = document.getElementById("fp-concierge-log");
         if (!form || !input || !log) return;
+
+        resumeLoadingAfterNavigation();
 
         form.addEventListener("submit", async (e) => {
             e.preventDefault();
@@ -48,7 +119,7 @@
 
             appendMessage(log, "user", `<p class="small mb-0">${message.replace(/</g, "&lt;")}</p>`);
             input.value = "";
-            appendMessage(log, "assistant", `<p class="small mb-0 text-secondary">Searching…</p>`);
+            showLoading("Searching for parking", "Understanding your request and finding nearby spots…");
 
             try {
                 const res = await fetch("/portal/api/concierge", {
@@ -57,10 +128,10 @@
                     credentials: "same-origin",
                     body: JSON.stringify({ message }),
                 });
-                const data = await res.json();
-                log.lastChild?.remove();
+                const data = await parseJsonResponse(res);
 
                 if (!res.ok || data.error) {
+                    hideLoading();
                     appendMessage(
                         log,
                         "assistant",
@@ -70,11 +141,12 @@
                 }
 
                 if (data.search_center && data.search_center.lat) {
-                    appendMessage(
-                        log,
-                        "assistant",
-                        `<p class="small mb-0">${(data.reply_text || "Updating map with matching spots…").replace(/</g, "&lt;")}</p>`
-                    );
+                    showLoading("Updating map", "Showing matching spots on the map…");
+                    try {
+                        sessionStorage.setItem(LOADING_KEY, "1");
+                    } catch (_e) {
+                        /* ignore */
+                    }
                     const url = new URL(window.location.pathname, window.location.origin);
                     url.searchParams.set("q", data.search_center.label || "");
                     url.searchParams.set("lat", data.search_center.lat);
@@ -90,16 +162,18 @@
                         }
                     }
                     window.location.href = url.pathname + url.search + "#concierge";
-                } else {
-                    const cards = buildResultCards(data.results || [], cfg, data.intent || {});
-                    appendMessage(
-                        log,
-                        "assistant",
-                        `<p class="small mb-2">${(data.reply_text || "Here are some options.").replace(/</g, "&lt;")}</p>${cards}`
-                    );
+                    return;
                 }
+
+                hideLoading();
+                const cards = buildResultCards(data.results || [], cfg, data.intent || {});
+                appendMessage(
+                    log,
+                    "assistant",
+                    `<p class="small mb-2">${(data.reply_text || "Here are some options.").replace(/</g, "&lt;")}</p>${cards}`
+                );
             } catch (_err) {
-                log.lastChild?.remove();
+                hideLoading();
                 appendMessage(log, "assistant", `<p class="small mb-0 text-danger">Something went wrong. Try again.</p>`);
             }
         });
@@ -117,6 +191,7 @@
             if (!confirm("Confirm this booking? Your wallet will be charged if approved.")) return;
 
             const plate = (cfg.userPlates && cfg.userPlates[0]) || "";
+            showLoading("Booking spot", "Confirming your reservation…");
             try {
                 const res = await fetch("/portal/api/concierge/book", {
                     method: "POST",
@@ -124,13 +199,20 @@
                     credentials: "same-origin",
                     body: JSON.stringify({ listing_id: listingId, intent, renter_plate: plate }),
                 });
-                const data = await res.json();
+                const data = await parseJsonResponse(res);
                 if (data.ok && data.redirect_url) {
+                    try {
+                        sessionStorage.setItem(LOADING_KEY, "1");
+                    } catch (_e) {
+                        /* ignore */
+                    }
                     window.location.href = data.redirect_url;
                 } else {
+                    hideLoading();
                     alert(data.error || "Booking failed.");
                 }
             } catch (_err) {
+                hideLoading();
                 alert("Booking request failed.");
             }
         });
