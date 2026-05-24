@@ -14,8 +14,6 @@ dependencies = [
     "requests==2.34.2",
     "pypdf==5.4.0",
     "python-docx==1.1.2",
-    "opencv-python-headless==4.13.0.92",
-    "numpy==2.2.6",
     "ecdsa==0.19.2",
     "holidays>=0.60",
     "fpdf2>=2.8.0",

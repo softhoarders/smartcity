@@ -50,7 +50,7 @@ import n8n_events
 from n8n_routes import n8n_bp
 import security
 import two_factor
-from pywebpush import webpush, WebPushException
+import push_notify
 
 # VAPID Config
 VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY")
@@ -1226,41 +1226,289 @@ def _render_find_parking_page(listings, user_plates, balance, renter_bookings, *
     )
 
 
+def _listing_hundredths_form_value(raw: int | None, default_hundredths: int) -> str:
+    val = int(raw if raw else default_hundredths)
+    whole, frac = divmod(val, 100)
+    if frac == 0:
+        return str(whole)
+    return f"{whole}.{frac:02d}"
+
+
+DEMO_OWNED_DEVICE_IDS = (101, 105, 113)
+
+
+def _default_demo_spot(device_id: int, base: datetime) -> dict:
+    if device_id == 105:
+        return {
+            "listing": {
+                "is_active": True,
+                "approval_mode": "auto",
+                "pricing_mode": "suggest",
+                "owner_min_tenths": 350,
+                "owner_max_tenths": 650,
+                "instant_price_tenths": 475,
+                "schedule_price_tenths": 425,
+                "schedule_deposit_tenths": 350,
+                "instant_price_per_hour": 5,
+                "schedule_price_per_hour": 4,
+                "schedule_deposit_spots": 3,
+            },
+            "pending": [],
+            "history": [
+                {
+                    "id": 510,
+                    "status": "completed",
+                    "booking_type": "scheduled",
+                    "renter_plate": "B-212-GLS",
+                    "starts_at": (base - timedelta(days=1)).isoformat(),
+                    "ends_at": (base - timedelta(days=1) + timedelta(hours=4)).isoformat(),
+                    "total_spots": 18,
+                },
+            ],
+        }
+    if device_id == 113:
+        return {
+            "listing": {
+                "is_active": True,
+                "approval_mode": "manual",
+                "pricing_mode": "manual",
+                "owner_min_tenths": 400,
+                "owner_max_tenths": 800,
+                "instant_price_tenths": 550,
+                "schedule_price_tenths": 490,
+                "schedule_deposit_tenths": 400,
+                "instant_price_per_hour": 6,
+                "schedule_price_per_hour": 5,
+                "schedule_deposit_spots": 4,
+            },
+            "pending": [
+                {
+                    "id": 502,
+                    "status": "pending_approval",
+                    "booking_type": "instant",
+                    "renter_plate": "B-777-XYZ",
+                    "starts_at": (base + timedelta(hours=2)).isoformat(),
+                    "ends_at": (base + timedelta(hours=5)).isoformat(),
+                    "total_spots": 18,
+                },
+            ],
+            "history": [],
+        }
+    return {
+        "listing": {
+            "is_active": True,
+            "approval_mode": "manual",
+            "pricing_mode": "auto",
+            "owner_min_tenths": 300,
+            "owner_max_tenths": 500,
+            "instant_price_tenths": 400,
+            "schedule_price_tenths": 350,
+            "schedule_deposit_tenths": 300,
+            "instant_price_per_hour": 4,
+            "schedule_price_per_hour": 3,
+            "schedule_deposit_spots": 3,
+        },
+        "pending": [
+            {
+                "id": 501,
+                "status": "pending_approval",
+                "booking_type": "scheduled",
+                "renter_plate": "IF-22-RST",
+                "starts_at": (base + timedelta(hours=5)).isoformat(),
+                "ends_at": (base + timedelta(hours=9)).isoformat(),
+                "total_spots": 24,
+            },
+        ],
+        "history": [
+            {
+                "id": 500,
+                "status": "completed",
+                "booking_type": "instant",
+                "renter_plate": "B-441-PKR",
+                "starts_at": (base - timedelta(days=3)).isoformat(),
+                "ends_at": (base - timedelta(days=3) + timedelta(hours=2)).isoformat(),
+                "total_spots": 12,
+            },
+            {
+                "id": 499,
+                "status": "rejected",
+                "booking_type": "instant",
+                "renter_plate": "B-900-ZAB",
+                "starts_at": (base - timedelta(days=5)).isoformat(),
+                "ends_at": (base - timedelta(days=5) + timedelta(hours=1)).isoformat(),
+                "total_spots": 8,
+            },
+        ],
+    }
+
+
+def _demo_my_spots_state():
+    state = session.get("demo_my_spots")
+    base = _now()
+    if state is None:
+        state = {
+            "spots": {
+                str(device_id): _default_demo_spot(device_id, base)
+                for device_id in DEMO_OWNED_DEVICE_IDS
+            }
+        }
+        session["demo_my_spots"] = state
+        return state
+
+    if "spots" not in state:
+        legacy = {
+            "listing": state.get("listing") or _default_demo_spot(101, base)["listing"],
+            "pending": state.get("pending") or [],
+            "history": state.get("history") or [],
+        }
+        state = {
+            "spots": {
+                "101": legacy,
+                **{
+                    str(device_id): _default_demo_spot(device_id, base)
+                    for device_id in DEMO_OWNED_DEVICE_IDS
+                    if device_id != 101
+                },
+            }
+        }
+        session["demo_my_spots"] = state
+
+    for device_id in DEMO_OWNED_DEVICE_IDS:
+        key = str(device_id)
+        if key not in state["spots"]:
+            state["spots"][key] = _default_demo_spot(device_id, base)
+    session["demo_my_spots"] = state
+    return state
+
+
+def _demo_spot_bucket(state: dict, device_id: int) -> dict:
+    return state.setdefault("spots", {}).setdefault(str(device_id), _default_demo_spot(device_id, _now()))
+
+
+def _demo_find_pending(state: dict, booking_id: int) -> tuple[dict | None, dict | None]:
+    for spot in state.get("spots", {}).values():
+        for row in spot.get("pending") or []:
+            if row.get("id") == booking_id:
+                return spot, row
+    return None, None
+
+
+def _demo_my_spots_post():
+    state = _demo_my_spots_state()
+    action = request.form.get("action")
+    device_id = request.form.get("device_id", type=int) or 101
+    redirect_anchor = f"#spot-{device_id}"
+
+    if action == "save_listing":
+        bucket = _demo_spot_bucket(state, device_id)
+        listing = bucket["listing"]
+        listing["is_active"] = request.form.get("is_active") == "1"
+        listing["approval_mode"] = request.form.get("approval_mode", "auto")
+        listing["pricing_mode"] = request.form.get("pricing_mode", "manual")
+        listing["owner_min_tenths"] = spot_prices.parse_decimal_to_hundredths(
+            request.form.get("owner_min_price"), listing["owner_min_tenths"]
+        )
+        listing["owner_max_tenths"] = spot_prices.parse_decimal_to_hundredths(
+            request.form.get("owner_max_price"), listing["owner_max_tenths"]
+        )
+        if listing["owner_min_tenths"] > listing["owner_max_tenths"]:
+            listing["owner_max_tenths"] = listing["owner_min_tenths"]
+        listing["instant_price_tenths"] = spot_prices.parse_decimal_to_hundredths(
+            request.form.get("instant_price"), listing["instant_price_tenths"]
+        )
+        listing["schedule_price_tenths"] = spot_prices.parse_decimal_to_hundredths(
+            request.form.get("schedule_price"), listing["schedule_price_tenths"]
+        )
+        listing["schedule_deposit_tenths"] = spot_prices.parse_decimal_to_hundredths(
+            request.form.get("schedule_deposit"), listing["schedule_deposit_tenths"]
+        )
+        listing["instant_price_per_hour"] = (listing["instant_price_tenths"] + 99) // 100
+        listing["schedule_price_per_hour"] = (listing["schedule_price_tenths"] + 99) // 100
+        listing["schedule_deposit_spots"] = (listing["schedule_deposit_tenths"] + 99) // 100
+        flash("Listing saved.", "success")
+
+    elif action == "approve_booking":
+        bid = request.form.get("booking_id", type=int)
+        spot, row = _demo_find_pending(state, bid)
+        if spot and row:
+            spot["pending"].remove(row)
+            row["status"] = "approved"
+            spot.setdefault("history", []).insert(0, row)
+            flash("Booking approved.", "success")
+
+    elif action == "reject_booking":
+        bid = request.form.get("booking_id", type=int)
+        spot, row = _demo_find_pending(state, bid)
+        if spot and row:
+            spot["pending"].remove(row)
+            row["status"] = "rejected"
+            spot.setdefault("history", []).insert(0, row)
+            flash("Booking rejected.", "info")
+
+    session["demo_my_spots"] = state
+    session.modified = True
+    return redirect(url_for("my_spots") + redirect_anchor)
+
+
 def _demo_owned_spots():
     from types import SimpleNamespace
+
     devices = {d.id: d for d in _demo_devices()}
-    device = devices[101]
-    listing = SimpleNamespace(
-        id=99,
-        is_active=True,
-        approval_mode="manual",
-        pricing_mode="auto",
-        description="Rent when you're at the office.",
-        location_zone="Calea Victoriei",
-        owner_min_tenths=300,
-        owner_max_tenths=500,
-        instant_price_tenths=400,
-        schedule_price_tenths=350,
-        instant_price_per_hour=4,
-        schedule_price_per_hour=3,
-        schedule_deposit_spots=3,
-    )
-    pending = SimpleNamespace(
-        id=501,
-        status="pending_approval",
-        renter_plate="IF-22-RST",
-        starts_at=_now() + timedelta(hours=5),
-        ends_at=_now() + timedelta(hours=9),
-        total_spots=24,
-    )
-    return [{
-        "device": device,
-        "listing": listing,
-        "pending": [pending],
-        "promos": [],
-        "instant_display": "4",
-        "schedule_display": "3.5",
-    }]
+    state = _demo_my_spots_state()
+    listing_ids = {101: 99, 105: 100, 113: 101}
+    zones = {
+        101: "Calea Victoriei",
+        105: "Piata Universitatii",
+        113: "Calea Victoriei",
+    }
+
+    def _booking_row(raw_b):
+        return SimpleNamespace(
+            id=raw_b["id"],
+            status=raw_b["status"],
+            booking_type=raw_b["booking_type"],
+            renter_plate=raw_b["renter_plate"],
+            starts_at=datetime.fromisoformat(raw_b["starts_at"]),
+            ends_at=datetime.fromisoformat(raw_b["ends_at"]),
+            total_spots=raw_b["total_spots"],
+        )
+
+    owned = []
+    for device_id in DEMO_OWNED_DEVICE_IDS:
+        device = devices.get(device_id)
+        if not device:
+            continue
+        bucket = state["spots"][str(device_id)]
+        raw = bucket["listing"]
+        listing = SimpleNamespace(
+            id=listing_ids[device_id],
+            is_active=raw["is_active"],
+            approval_mode=raw["approval_mode"],
+            pricing_mode=raw["pricing_mode"],
+            owner_min_tenths=raw["owner_min_tenths"],
+            owner_max_tenths=raw["owner_max_tenths"],
+            instant_price_tenths=raw["instant_price_tenths"],
+            schedule_price_tenths=raw["schedule_price_tenths"],
+            schedule_deposit_tenths=raw.get("schedule_deposit_tenths", 300),
+            schedule_deposit_spots=raw.get("schedule_deposit_spots", 3),
+            instant_price_per_hour=raw["instant_price_per_hour"],
+            schedule_price_per_hour=raw["schedule_price_per_hour"],
+            location_zone=zones.get(device_id),
+            suggested_instant_tenths=475 if device_id == 105 else None,
+            suggested_schedule_tenths=425 if device_id == 105 else None,
+            pricing_reason="Higher weekend demand near Universitate." if device_id == 105 else None,
+            last_priced_at=_now() if device_id == 105 else None,
+        )
+        owned.append({
+            "device": device,
+            "listing": listing,
+            "pending": [_booking_row(b) for b in bucket.get("pending") or []],
+            "history": [_booking_row(b) for b in bucket.get("history") or []],
+            "promos": [],
+            "instant_display": spot_prices.format_hundredths(listing.instant_price_tenths),
+            "schedule_display": spot_prices.format_hundredths(listing.schedule_price_tenths),
+        })
+    return owned
 
 
 def _demo_renter_bookings():
@@ -1657,7 +1905,7 @@ def api_list_devices():
 
 @app.route("/api/push/public-key", methods=["GET"])
 def push_public_key():
-    return jsonify({"publicKey": VAPID_PUBLIC_KEY})
+    return jsonify({"publicKey": push_notify.VAPID_PUBLIC_KEY})
 
 @app.route("/api/push/subscribe", methods=["POST"])
 @login_required
@@ -1681,33 +1929,8 @@ def push_subscribe():
         
     return jsonify({"status": "ok"}), 201
 
-def send_web_push(user, title, body):
-    if not VAPID_PRIVATE_KEY:
-        return
-        
-    subs = PushSubscription.query.filter_by(user_id=user.id).all()
-    message = json.dumps({"title": title, "body": body})
-    
-    for sub in subs:
-        try:
-            sub_info = json.loads(sub.subscription_info)
-            webpush(
-                subscription_info=sub_info,
-                data=message,
-                vapid_private_key=VAPID_PRIVATE_KEY,
-                vapid_claims=VAPID_CLAIMS
-            )
-        except WebPushException as ex:
-            # Often means subscription expired or revoked
-            if ex.response and ex.response.status_code in [404, 410]:
-                db.session.delete(sub)
-        except Exception as e:
-            print(f"Error sending push: {e}")
-            
-    try:
-        db.session.commit()
-    except Exception:
-        pass
+def send_web_push(user, title, body, *, url=None):
+    push_notify.send_web_push(user, title, body, url=url)
 
 # ---------------------------------------------------------------------------
 # API — Fines
@@ -2572,10 +2795,14 @@ def api_register_user():
 
 import base64
 import requests
-import cv2
-import numpy as np
 
 def enhance_image_for_night(filepath):
+    try:
+        import cv2
+        import numpy as np
+    except ImportError:
+        return
+
     try:
         img = cv2.imread(filepath)
         if img is None:
@@ -3307,6 +3534,8 @@ def my_spots():
         return denied
 
     if _is_demo():
+        if request.method == "POST":
+            return _demo_my_spots_post()
         return render_template(
             "my_spots.html",
             owned=_demo_owned_spots(),
@@ -3315,9 +3544,10 @@ def my_spots():
             default_instant_hourly=config.DEFAULT_INSTANT_PRICE_PER_HOUR,
             default_schedule_deposit=config.DEFAULT_SCHEDULE_DEPOSIT,
             default_schedule_hourly=config.DEFAULT_SCHEDULE_PRICE_PER_HOUR,
-            pricing_default_min=config.PRICING_DEFAULT_MIN_TENTHS / 10,
-            pricing_default_max=config.PRICING_DEFAULT_MAX_TENTHS / 10,
+            pricing_default_min=config.PRICING_DEFAULT_MIN_TENTHS / 100,
+            pricing_default_max=config.PRICING_DEFAULT_MAX_TENTHS / 100,
             is_demo=True,
+            listing_hundredths_form=_listing_hundredths_form_value,
         )
 
     plates = user_plate_values(current_user)
@@ -3357,28 +3587,28 @@ def my_spots():
                 listing.is_active = request.form.get("is_active") == "1"
                 listing.approval_mode = request.form.get("approval_mode", "auto")
                 listing.pricing_mode = request.form.get("pricing_mode", "manual")
-                listing.owner_min_tenths = spot_prices.parse_decimal_to_tenths(
+                listing.owner_min_tenths = spot_prices.parse_decimal_to_hundredths(
                     request.form.get("owner_min_price"),
                     config.PRICING_DEFAULT_MIN_TENTHS,
                 )
-                listing.owner_max_tenths = spot_prices.parse_decimal_to_tenths(
+                listing.owner_max_tenths = spot_prices.parse_decimal_to_hundredths(
                     request.form.get("owner_max_price"),
                     config.PRICING_DEFAULT_MAX_TENTHS,
                 )
                 if listing.owner_min_tenths > listing.owner_max_tenths:
                     listing.owner_max_tenths = listing.owner_min_tenths
 
-                instant_tenths = spot_prices.parse_decimal_to_tenths(
+                instant_tenths = spot_prices.parse_decimal_to_hundredths(
                     request.form.get("instant_price"),
-                    (listing.instant_price_per_hour or 10) * 10,
+                    (listing.instant_price_per_hour or 10) * 100,
                 )
-                schedule_tenths = spot_prices.parse_decimal_to_tenths(
+                schedule_tenths = spot_prices.parse_decimal_to_hundredths(
                     request.form.get("schedule_price"),
-                    (listing.schedule_price_per_hour or 8) * 10,
+                    (listing.schedule_price_per_hour or 8) * 100,
                 )
-                deposit_tenths = spot_prices.parse_decimal_to_tenths(
+                deposit_tenths = spot_prices.parse_decimal_to_hundredths(
                     request.form.get("schedule_deposit"),
-                    (listing.schedule_deposit_spots or 5) * 10,
+                    (listing.schedule_deposit_spots or 5) * 100,
                 )
                 listing.instant_price_tenths = max(listing.owner_min_tenths, min(listing.owner_max_tenths, instant_tenths))
                 listing.schedule_price_tenths = max(listing.owner_min_tenths, min(listing.owner_max_tenths, schedule_tenths))
@@ -3386,7 +3616,6 @@ def my_spots():
                 listing.instant_price_per_hour = (listing.instant_price_tenths + 99) // 100
                 listing.schedule_price_per_hour = (listing.schedule_price_tenths + 99) // 100
                 listing.schedule_deposit_spots = (deposit_tenths + 99) // 100
-                listing.description = (request.form.get("description") or "").strip() or None
                 listing.updated_at = _now()
                 db.session.commit()
                 activity_log.log_activity(
@@ -3493,10 +3722,18 @@ def my_spots():
     for device in owned_devices:
         listing = SpotListing.query.filter_by(device_id=device.id).first()
         pending = []
+        history = []
         if listing:
             pending = (
                 SpotBooking.query.filter_by(listing_id=listing.id, status="pending_approval")
                 .order_by(SpotBooking.starts_at.asc())
+                .all()
+            )
+            history = (
+                SpotBooking.query.filter_by(listing_id=listing.id)
+                .filter(SpotBooking.status != "pending_approval")
+                .order_by(SpotBooking.created_at.desc())
+                .limit(30)
                 .all()
             )
         if listing and listing.pricing_mode in ("auto", "suggest"):
@@ -3506,6 +3743,7 @@ def my_spots():
             "device": device,
             "listing": listing,
             "pending": pending,
+            "history": history,
             "promos": promos,
             "instant_display": spot_prices.format_tenths(
                 spot_prices.effective_instant_tenths(listing) if listing else None
@@ -3526,13 +3764,6 @@ def my_spots():
 
     listing_ids = [item["listing"].id for item in owned if item["listing"]]
     my_bookings = []
-    if listing_ids:
-        my_bookings = (
-            SpotBooking.query.filter(SpotBooking.listing_id.in_(listing_ids))
-            .order_by(SpotBooking.created_at.desc())
-            .limit(20)
-            .all()
-        )
 
     return render_template(
         "my_spots.html",
@@ -3542,9 +3773,10 @@ def my_spots():
         default_instant_hourly=config.DEFAULT_INSTANT_PRICE_PER_HOUR,
         default_schedule_deposit=config.DEFAULT_SCHEDULE_DEPOSIT,
         default_schedule_hourly=config.DEFAULT_SCHEDULE_PRICE_PER_HOUR,
-        pricing_default_min=config.PRICING_DEFAULT_MIN_TENTHS / 10,
-        pricing_default_max=config.PRICING_DEFAULT_MAX_TENTHS / 10,
+        pricing_default_min=config.PRICING_DEFAULT_MIN_TENTHS / 100,
+        pricing_default_max=config.PRICING_DEFAULT_MAX_TENTHS / 100,
         is_demo=False,
+        listing_hundredths_form=_listing_hundredths_form_value,
     )
 
 
@@ -3834,6 +4066,8 @@ def find_parking():
                     commit=True,
                 )
                 n8n_events.on_booking_event(booking, "requested")
+                if booking.status == "pending_approval":
+                    push_notify.notify_owner_booking_request(booking)
                 if booking.status != "pending_approval":
                     n8n_events.on_booking_event(booking, booking.status)
                 confirm = {
@@ -3886,6 +4120,8 @@ def find_parking():
                     commit=True,
                 )
                 n8n_events.on_booking_event(booking, "requested")
+                if booking.status == "pending_approval":
+                    push_notify.notify_owner_booking_request(booking)
                 if booking.status != "pending_approval":
                     n8n_events.on_booking_event(booking, booking.status)
                 confirm = {
