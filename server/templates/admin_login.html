@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from 'macros/logo.html' import logo_img %}
 {% block title %}Spotflow — Admin Sign In{% endblock %}
 
 {% block content %}
@@ -6,12 +7,7 @@
     <div class="col-12 col-md-6 col-lg-4">
         
         <div class="text-center mb-4">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="mb-3">
-                <rect x="2" y="3" width="20" height="18" rx="4" stroke="#007AFF" stroke-width="2"/>
-                <path d="M9 8H13.5C14.8807 8 16 9.11929 16 10.5C16 11.8807 14.8807 13 13.5 13H9V16" stroke="#007AFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                <line x1="9" y1="13" x2="13.5" y2="13" stroke="#007AFF" stroke-width="2"/>
-                <rect x="2" y="10" width="20" height="4" fill="#007AFF" opacity="0.1"/>
-            </svg>
+            <div class="mb-3 d-flex justify-content-center">{{ logo_img(48) }}</div>
             <h2 class="fw-bold fs-3">Admin Sign In</h2>
             <p class="text-secondary small">Sign in to manage devices and fines.</p>
         </div>

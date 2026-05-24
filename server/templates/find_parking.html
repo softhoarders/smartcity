@@ -15,7 +15,14 @@
                 <h1 class="h3 fw-bold mb-1">Find parking</h1>
                 <p class="text-secondary mb-0">Search a destination, pick a spot on the map or below, and pay in {{ currency_name }}.</p>
             </div>
-            <span class="badge pw-plate-badge align-self-start">{{ format_credits(balance) }} {{ currency_name }}</span>
+            <div class="d-flex flex-wrap gap-2 align-self-start">
+                <span class="badge pw-plate-badge">{{ format_credits(balance) }} {{ currency_name }}</span>
+                {% if parking_passport %}
+                <span class="badge fp-trust-badge fp-trust-badge--{{ parking_passport.tier }}" title="Parking trust passport">
+                    Trust {{ parking_passport.trust_score }} · {{ parking_passport.tier_label }}
+                </span>
+                {% endif %}
+            </div>
         </div>
 
         {% if concierge_enabled %}
@@ -49,8 +56,16 @@
                             <button type="button" class="fp-search-icon-btn fp-filter-toggle" id="fp-filter-toggle"
                                     aria-label="Show filters" aria-expanded="false" aria-controls="fp-filters-panel"
                                     {% if not search_center %}disabled{% endif %}>
-                                <svg class="fp-filter-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                                    <path class="fp-filter-line fp-filter-line-1" d="M4 6h16M7 12h10M10 18h4"/>
+                                <svg class="fp-filter-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                                    <g class="fp-filter-bars">
+                                        <path d="M4 6h16"/>
+                                        <path d="M7 12h10"/>
+                                        <path d="M10 18h4"/>
+                                    </g>
+                                    <g class="fp-filter-close">
+                                        <path d="M6 6l12 12"/>
+                                        <path d="M18 6L6 18"/>
+                                    </g>
                                 </svg>
                             </button>
                             <button type="submit" class="fp-search-icon-btn" aria-label="Search this place">
@@ -92,6 +107,7 @@
                                     <option value="relevance" {% if filters.sort == 'relevance' %}selected{% endif %}>Relevance</option>
                                     <option value="availability" {% if filters.sort == 'availability' %}selected{% endif %}>Availability</option>
                                     <option value="distance" {% if filters.sort == 'distance' %}selected{% endif %}>Distance</option>
+                                    <option value="walk" {% if filters.sort == 'walk' %}selected{% endif %}>Shortest walk</option>
                                     <option value="price_asc" {% if filters.sort == 'price_asc' %}selected{% endif %}>Price ↑</option>
                                     <option value="price_desc" {% if filters.sort == 'price_desc' %}selected{% endif %}>Price ↓</option>
                                 </select>
@@ -124,7 +140,27 @@
         </div>
 
         <div id="fp-results-section" class="{% if not search_center %}d-none{% endif %}">
-            {% if recommended %}
+            {% if recommended_direct %}
+            <h2 class="h5 fw-bold mb-2">At your destination</h2>
+            <p class="small text-secondary mb-3">Spots within a short walk of where you searched.</p>
+            <div class="row g-3 mb-4">
+                {% for item in recommended_direct %}
+                {% include "partials/find_parking_card.html" %}
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            {% if recommended_flow %}
+            <h2 class="h5 fw-bold mb-2">Park nearby · walk in</h2>
+            <p class="small text-secondary mb-3">Often easier to find space — walk a few minutes to your destination.</p>
+            <div class="row g-3 mb-4">
+                {% for item in recommended_flow %}
+                {% include "partials/find_parking_card.html" %}
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            {% if recommended and not recommended_direct and not recommended_flow %}
             <h2 class="h5 fw-bold mb-3">Top picks for you</h2>
             <div class="row g-3 mb-4">
                 {% for item in recommended %}
@@ -326,7 +362,10 @@ window.SPOTFLOW_FIND_PARKING = {
             statusLabel: {{ item.status_label | tojson }},
             availableNow: {{ item.available_now | tojson }},
             predictionLabel: {{ item.prediction_label | tojson }},
-            confidencePct: {{ item.confidence_pct | tojson }}
+            confidencePct: {{ item.confidence_pct | tojson }},
+            routeKind: {{ item.route_kind | tojson }},
+            routeLabel: {{ item.route_label | tojson }},
+            walkMinutes: {{ item.walk_minutes | tojson }}
         }{% if not loop.last %},{% endif %}
         {% endfor %}
     ]

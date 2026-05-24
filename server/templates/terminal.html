@@ -1,8 +1,10 @@
+{% from 'macros/logo.html' import logo_img %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {% include "partials/favicon.html" %}
     <title>Terminal</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css">
     <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet">
@@ -10,9 +12,12 @@
 <body class="terminal-body">
     <main class="terminal-shell">
         <header class="terminal-topbar">
-            <div>
-                <strong>Terminal</strong>
-                <span>{{ cwd }}</span>
+            <div class="terminal-topbar-brand">
+                {{ logo_img(28) }}
+                <div>
+                    <strong>Terminal</strong>
+                    <span>{{ cwd }}</span>
+                </div>
             </div>
             <form method="POST" action="{{ url_for('terminal_logout') }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

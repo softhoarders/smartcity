@@ -1,3 +1,4 @@
+{% from 'macros/logo.html' import logo_brand, logo_img %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -10,10 +11,8 @@
     <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet">
     <meta name="view-transition" content="same-origin">
     
-    <!-- PWA Setup -->
-    <link rel="manifest" href="/static/manifest.json">
+    {% include "partials/favicon.html" %}
     <meta name="theme-color" content="#0a0c12">
-    <link rel="apple-touch-icon" href="/static/icon-192x192.png">
     
     {% block head %}{% endblock %}
 </head>
@@ -24,15 +23,7 @@
     {% block navbar %}
     <nav class="navbar navbar-expand-lg navbar-light pw-navbar sticky-top blur-bg">
         <div class="container-fluid">
-            <a class="navbar-brand fw-bold text-dark" href="{{ url_for('index') }}">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="me-1" style="vertical-align: text-top;" aria-hidden="true">
-                    <rect x="2" y="3" width="20" height="18" rx="4" stroke="#007AFF" stroke-width="2"/>
-                    <path d="M9 8H13.5C14.8807 8 16 9.11929 16 10.5C16 11.8807 14.8807 13 13.5 13H9V16" stroke="#007AFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                    <line x1="9" y1="13" x2="13.5" y2="13" stroke="#007AFF" stroke-width="2"/>
-                    <rect x="2" y="10" width="20" height="4" fill="#007AFF" opacity="0.1"/>
-                </svg>
-                Spotflow
-            </a>
+            {{ logo_brand(size=28, link_class='navbar-brand fw-bold text-dark') }}
             
             {% if current_user.is_authenticated %}
             <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"

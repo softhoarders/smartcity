@@ -1,296 +1,591 @@
 {% extends "base.html" %}
+{% from 'macros/logo.html' import logo_mark, logo_brand %}
 {% block title %}Spotflow — Smart parking for your city{% endblock %}
 {% block body_class %}landing-page{% endblock %}
 {% block flash_class %}landing-flashes{% endblock %}
 {% block main_class %}landing-main{% endblock %}
 
 {% block head %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,500&display=swap" rel="stylesheet">
 <link href="{{ url_for('static', filename='landing.css') }}" rel="stylesheet">
+<meta name="description" content="Spotflow — Monitor parking bays, rent your spot, book nearby parking, and resolve disputes with photo evidence. Built for Romanian cities.">
 {% endblock %}
 
 {% block navbar %}
-<header class="landing-nav blur-bg" id="landing-nav">
+<header class="landing-nav" id="landing-nav">
     <div class="landing-nav-inner">
         <a class="landing-logo" href="{{ url_for('index') }}">
-            <span class="landing-logo-mark" aria-hidden="true">S</span>
+            {{ logo_mark(34, class='landing-logo-mark') }}
             <span>Spotflow</span>
         </a>
         <nav class="landing-nav-links" aria-label="Primary">
-            <a href="#features">Features</a>
-            <a href="#how-it-works">How it works</a>
-            <a href="#for-you">Who it's for</a>
-            <a href="#credits">Credits</a>
+            <a href="#problem" data-nav>Problem</a>
+            <a href="#features" data-nav>Product</a>
+            <a href="#how-it-works" data-nav>How it works</a>
+            <a href="#for-you" data-nav>Audiences</a>
+            <a href="#faq" data-nav>FAQ</a>
         </nav>
         <div class="landing-nav-actions">
             <a href="{{ url_for('login') }}" class="landing-btn landing-btn--ghost">Sign in</a>
             <a href="{{ url_for('login', mode='signup') }}" class="landing-btn landing-btn--primary">Get started</a>
         </div>
         <button type="button" class="landing-nav-toggle" id="landing-nav-toggle" aria-expanded="false" aria-controls="landing-mobile-menu" aria-label="Open menu">
-            <span></span><span></span>
+            <span></span><span></span><span></span>
         </button>
     </div>
     <div class="landing-mobile-menu" id="landing-mobile-menu" hidden>
-        <a href="#features">Features</a>
+        <a href="#problem">Problem</a>
+        <a href="#features">Product</a>
         <a href="#how-it-works">How it works</a>
-        <a href="#for-you">Who it's for</a>
-        <a href="#credits">Credits</a>
+        <a href="#for-you">Audiences</a>
+        <a href="#faq">FAQ</a>
+        <hr>
         <a href="{{ url_for('login') }}">Sign in</a>
-        <a href="{{ url_for('login', mode='signup') }}" class="landing-btn landing-btn--primary">Get started</a>
+        <a href="{{ url_for('login', mode='signup') }}" class="landing-btn landing-btn--primary">Get started free</a>
     </div>
 </header>
 {% endblock %}
 
 {% block content %}
 <section class="landing-hero" id="top">
-    <div class="landing-hero-glow" aria-hidden="true"></div>
-    <div class="landing-container landing-hero-grid">
+    <div class="landing-hero-bg" aria-hidden="true">
+        <div class="landing-hero-grid-lines"></div>
+        <div class="landing-hero-orb landing-hero-orb--1"></div>
+        <div class="landing-hero-orb landing-hero-orb--2"></div>
+    </div>
+    <div class="landing-container landing-hero-layout">
         <div class="landing-hero-copy landing-reveal">
-            <p class="landing-eyebrow">Community-scale parking</p>
-            <h1>Your spot. Your rules. <span class="landing-gradient-text">One flow.</span></h1>
+            <div class="landing-hero-badges">
+                <span class="landing-pill landing-pill--live"><span class="landing-pill-dot"></span> Live bay monitoring</span>
+                <span class="landing-pill">Romania-first · Credits = lei</span>
+            </div>
+            <h1>Parking that <span class="landing-gradient-text">watches, rents,</span> and settles fairly.</h1>
             <p class="landing-lead">
-                Monitor bays with smart cameras, rent empty time to neighbors, and settle disputes with photo evidence —
-                built for Bucharest, Cluj, Craiova, and every dense city in between.
+                Spotflow combines camera monitoring, a neighborhood marketplace, and a transparent wallet —
+                so drivers, spot owners, and building operators share one record instead of four apps.
             </p>
             <div class="landing-hero-cta">
-                <a href="{{ url_for('login', mode='signup') }}" class="landing-btn landing-btn--primary landing-btn--lg">Create free account</a>
-                <a href="{{ url_for('login') }}?demo=1" class="landing-btn landing-btn--glass landing-btn--lg">Try demo</a>
+                <a href="{{ url_for('login', mode='signup') }}" class="landing-btn landing-btn--primary landing-btn--lg">
+                    Create free account
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+                </a>
+                <a href="{{ url_for('login') }}?demo=1" class="landing-btn landing-btn--outline landing-btn--lg">Explore demo</a>
             </div>
-            <p class="landing-demo-hint">Demo: sign in as <code>demo</code> / <code>demo123!</code></p>
+            <p class="landing-demo-hint">
+                <kbd>demo</kbd> / <kbd>demo123!</kbd>, then verification <kbd>456789</kbd> — sample cities, live maps, no card required
+            </p>
         </div>
-        <div class="landing-hero-visual landing-reveal landing-reveal--delay" aria-hidden="true">
-            <div class="landing-phone">
-                <div class="landing-phone-notch"></div>
-                <div class="landing-phone-screen">
-                    <div class="landing-phone-header">
-                        <span>Live map</span>
-                        <span class="landing-phone-pill">3 alerts</span>
+
+        <div class="landing-hero-panel landing-reveal landing-reveal--delay" aria-hidden="true">
+            <div class="landing-mockup-glow" aria-hidden="true"></div>
+            <div class="landing-mockup-shell">
+                <div class="landing-mockup-device">
+                    <header class="landing-mockup-topbar">
+                        <div class="landing-mockup-brand">
+                            {{ logo_mark(22, class='landing-mockup-logo') }}
+                            <span>Spotflow</span>
+                            <span class="landing-mockup-demo">Demo</span>
+                        </div>
+                        <a class="landing-mockup-wallet" href="#" tabindex="-1">
+                            <span class="landing-mockup-wallet-value">1,000.00</span>
+                            <span class="landing-mockup-wallet-label">Credits</span>
+                        </a>
+                    </header>
+
+                    <div class="landing-mockup-scenes" id="landing-mockup-scenes">
+                        <section class="landing-mockup-scene is-active" data-mockup-scene="find">
+                            <div class="landing-mockup-head">
+                                <h2 class="landing-mockup-title">Find parking</h2>
+                                <span class="landing-mockup-trust">Trust 82 · Good</span>
+                            </div>
+
+                            <div class="landing-mockup-search">
+                                <svg class="landing-mockup-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/></svg>
+                                <span>Piata Universitatii, Bucharest</span>
+                                <span class="landing-mockup-search-filter" aria-hidden="true"></span>
+                            </div>
+
+                            <div class="landing-mockup-map" role="img" aria-label="Map preview with parking spots">
+                                <svg class="landing-mockup-map-svg" viewBox="0 0 400 220" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+                                    <defs>
+                                        <linearGradient id="lp-map-sky" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="0%" stop-color="#1a2332"/>
+                                            <stop offset="100%" stop-color="#0f141c"/>
+                                        </linearGradient>
+                                        <filter id="lp-map-glow">
+                                            <feGaussianBlur stdDeviation="2" result="blur"/>
+                                            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                                        </filter>
+                                    </defs>
+                                    <rect width="400" height="220" fill="url(#lp-map-sky)"/>
+                                    <g fill="#1c2430" stroke="#2a3444" stroke-width="1">
+                                        <rect x="24" y="28" width="88" height="56" rx="4"/>
+                                        <rect x="124" y="22" width="72" height="64" rx="4"/>
+                                        <rect x="210" y="34" width="96" height="48" rx="4"/>
+                                        <rect x="318" y="26" width="58" height="60" rx="4"/>
+                                        <rect x="38" y="100" width="110" height="44" rx="4"/>
+                                        <rect x="162" y="96" width="84" height="52" rx="4"/>
+                                        <rect x="262" y="92" width="104" height="56" rx="4"/>
+                                        <rect x="52" y="156" width="92" height="48" rx="4"/>
+                                        <rect x="156" y="160" width="118" height="44" rx="4"/>
+                                        <rect x="288" y="158" width="72" height="46" rx="4"/>
+                                    </g>
+                                    <path d="M72 180 C120 150, 180 130, 248 118 C290 110, 320 98, 348 86" fill="none" stroke="rgba(10,132,255,0.55)" stroke-width="3" stroke-dasharray="6 8" stroke-linecap="round"/>
+                                    <circle cx="72" cy="180" r="7" fill="#0a84ff" filter="url(#lp-map-glow)"/>
+                                    <circle cx="72" cy="180" r="14" fill="none" stroke="rgba(10,132,255,0.35)" stroke-width="2"/>
+                                </svg>
+                                <span class="landing-mockup-marker landing-mockup-marker--empty" style="--mx:28%;--my:38%"></span>
+                                <span class="landing-mockup-marker landing-mockup-marker--occupied" style="--mx:52%;--my:32%"></span>
+                                <span class="landing-mockup-marker landing-mockup-marker--registered" style="--mx:68%;--my:48%"></span>
+                                <span class="landing-mockup-marker landing-mockup-marker--violation" style="--mx:42%;--my:58%"></span>
+                                <span class="landing-mockup-marker landing-mockup-marker--selected" style="--mx:61%;--my:62%"></span>
+                                <div class="landing-mockup-map-chip">6 spots · 0.8 km</div>
+                            </div>
+
+                            <ul class="landing-mockup-legend">
+                                <li><i style="--c:#30d158"></i> Empty</li>
+                                <li><i style="--c:#ff9f0a"></i> Occupied</li>
+                                <li><i style="--c:#0a84ff"></i> Registered</li>
+                                <li><i style="--c:#ff453a"></i> Violation</li>
+                            </ul>
+
+                            <article class="landing-mockup-spot">
+                                <div class="landing-mockup-spot-main">
+                                    <div class="landing-mockup-spot-head">
+                                        <strong>P1-12</strong>
+                                        <span class="landing-mockup-badge landing-mockup-badge--flow">Walk 4 min</span>
+                                        <span class="landing-mockup-badge landing-mockup-badge--ok">Empty now</span>
+                                    </div>
+                                    <p>Calea Victoriei · Garage B · 0.4 km</p>
+                                    <span class="landing-mockup-avail">Available now · 94% confidence</span>
+                                </div>
+                                <div class="landing-mockup-spot-action">
+                                    <strong>10.50 <small>Credits/h</small></strong>
+                                    <span class="landing-mockup-btn">Pay &amp; park</span>
+                                </div>
+                            </article>
+                        </section>
+
+                        <section class="landing-mockup-scene" data-mockup-scene="home" hidden>
+                            <div class="landing-mockup-head landing-mockup-head--home">
+                                <div>
+                                    <h2 class="landing-mockup-title">Hi, Alex</h2>
+                                    <span class="landing-mockup-plate">B 123 MAB</span>
+                                </div>
+                                <a class="landing-mockup-link" href="#" tabindex="-1">Find parking</a>
+                            </div>
+
+                            <div class="landing-mockup-stats">
+                                <div class="landing-mockup-stat landing-mockup-stat--warn"><strong>2</strong><span>Need action</span></div>
+                                <div class="landing-mockup-stat landing-mockup-stat--pending"><strong>1</strong><span>In review</span></div>
+                                <div class="landing-mockup-stat"><strong>4</strong><span>Open</span></div>
+                                <div class="landing-mockup-stat landing-mockup-stat--muted"><strong>12</strong><span>Resolved</span></div>
+                            </div>
+
+                            <div class="landing-mockup-map landing-mockup-map--compact" role="img" aria-label="Alert map preview">
+                                <svg class="landing-mockup-map-svg" viewBox="0 0 400 160" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+                                    <rect width="400" height="160" fill="#121820"/>
+                                    <g fill="#1a222c" stroke="#283040" stroke-width="1">
+                                        <rect x="20" y="24" width="100" height="48" rx="3"/>
+                                        <rect x="140" y="20" width="80" height="52" rx="3"/>
+                                        <rect x="240" y="28" width="130" height="44" rx="3"/>
+                                        <rect x="36" y="88" width="120" height="52" rx="3"/>
+                                        <rect x="176" y="84" width="96" height="56" rx="3"/>
+                                        <rect x="290" y="90" width="84" height="48" rx="3"/>
+                                    </g>
+                                </svg>
+                                <span class="landing-mockup-marker landing-mockup-marker--alert" style="--mx:34%;--my:42%"></span>
+                                <span class="landing-mockup-marker landing-mockup-marker--pending" style="--mx:58%;--my:36%"></span>
+                                <span class="landing-mockup-marker landing-mockup-marker--resolved" style="--mx:72%;--my:58%"></span>
+                            </div>
+
+                            <article class="landing-mockup-alert">
+                                <div class="landing-mockup-alert-accent"></div>
+                                <div class="landing-mockup-alert-body">
+                                    <div class="landing-mockup-alert-top">
+                                        <time>May 24 · 08:05</time>
+                                        <span class="landing-mockup-badge landing-mockup-badge--danger">Mismatch</span>
+                                    </div>
+                                    <p><strong>P1-12</strong> Calea Victoriei · 14 min</p>
+                                    <div class="landing-mockup-plates">
+                                        <span><em>Detected</em> B 642 FST</span>
+                                        <span><em>Expected</em> B 123 MAB</span>
+                                    </div>
+                                    <span class="landing-mockup-alert-cta">Photo evidence ready</span>
+                                </div>
+                            </article>
+                        </section>
                     </div>
-                    <div class="landing-phone-map">
-                        <span class="landing-map-pin landing-map-pin--danger"></span>
-                        <span class="landing-map-pin landing-map-pin--ok"></span>
-                        <span class="landing-map-pin landing-map-pin--warn"></span>
-                        <span class="landing-map-pin landing-map-pin--open"></span>
-                    </div>
-                    <ul class="landing-phone-list">
-                        <li><strong>P1-12</strong> Mismatch · 12 min</li>
-                        <li><strong>Garage B</strong> Booking · 2h</li>
-                        <li><strong>Curbside</strong> Resolved</li>
-                    </ul>
+
+                    <nav class="landing-mockup-tabs" aria-label="App preview scenes">
+                        <button type="button" class="landing-mockup-tab is-active" data-mockup-tab="find" aria-pressed="true">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="10" r="3"/><path d="M12 21s7-6.5 7-11a7 7 0 10-14 0c0 4.5 7 11 7 11z"/></svg>
+                            Find parking
+                        </button>
+                        <button type="button" class="landing-mockup-tab" data-mockup-tab="home" aria-pressed="false">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z"/></svg>
+                            Home
+                            <em>3</em>
+                        </button>
+                        <span class="landing-mockup-tab landing-mockup-tab--static">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M6 20v-1a6 6 0 0112 0v1"/></svg>
+                            Account
+                        </span>
+                    </nav>
                 </div>
+
+                <aside class="landing-mockup-float landing-mockup-float--alert">
+                    <span class="landing-mockup-float-kicker">Live alert</span>
+                    <strong>P1-12 unauthorized</strong>
+                    <p>Photo captured · appeal in one tap</p>
+                </aside>
+
+                <aside class="landing-mockup-float landing-mockup-float--book">
+                    <span class="landing-mockup-float-kicker">Booked</span>
+                    <strong>Garage B · 2h</strong>
+                    <p>21.00 Credits · plate synced to camera</p>
+                </aside>
             </div>
-            <div class="landing-float-card landing-float-card--wallet">
-                <span class="landing-float-label">Wallet</span>
-                <strong>1000.00 Credits</strong>
-                <small>1 Credit = 1 lei</small>
-            </div>
-            <div class="landing-float-card landing-float-card--spot">
-                <span class="landing-float-label">Instant book</span>
-                <strong>10.50</strong>
-                <small>Credits / hour</small>
-            </div>
+        </div>
+    </div>
+
+    <div class="landing-container landing-trust landing-reveal">
+        <p class="landing-trust-label">Designed for dense European cities</p>
+        <ul class="landing-trust-cities" aria-label="Example cities">
+            <li>Bucharest</li>
+            <li>Cluj-Napoca</li>
+            <li>Timișoara</li>
+            <li>Iași</li>
+            <li>Craiova</li>
+        </ul>
+    </div>
+</section>
+
+<section class="landing-metrics landing-reveal" aria-label="Platform highlights">
+    <div class="landing-container landing-metrics-grid">
+        <article class="landing-metric">
+            <span class="landing-metric-value" data-count-target="24">24</span>
+            <span class="landing-metric-suffix">/7</span>
+            <p>Camera monitoring at every linked bay</p>
+        </article>
+        <article class="landing-metric">
+            <span class="landing-metric-value">1:1</span>
+            <p>Credits map directly to Romanian lei</p>
+        </article>
+        <article class="landing-metric">
+            <span class="landing-metric-value">Fair</span>
+            <p>Photo appeals before admin escalation</p>
+        </article>
+        <article class="landing-metric">
+            <span class="landing-metric-value">Map</span>
+            <p>Search, filter, and book in one flow</p>
+        </article>
+    </div>
+</section>
+
+<section class="landing-section" id="problem">
+    <div class="landing-container">
+        <div class="landing-section-head landing-section-head--center landing-reveal">
+            <p class="landing-eyebrow">The problem</p>
+            <h2>Parking breaks down the same way everywhere</h2>
+            <p class="landing-section-lead">Spotflow does not replace police or municipal enforcement. It gives communities a shared record and a simple economy.</p>
+        </div>
+        <div class="landing-problems">
+            <article class="landing-problem landing-reveal">
+                <div class="landing-problem-icon" aria-hidden="true">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+                </div>
+                <h3>Someone in your bay</h3>
+                <p>You return to find another car in the spot you pay for — with no timestamp, photo, or shared proof.</p>
+            </article>
+            <article class="landing-problem landing-reveal">
+                <div class="landing-problem-icon" aria-hidden="true">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+                </div>
+                <h3>Informal rentals</h3>
+                <p>Neighbors rent driveways over chat apps with no scheduling, payment trail, or camera authorization for the renter.</p>
+            </article>
+            <article class="landing-problem landing-reveal">
+                <div class="landing-problem-icon" aria-hidden="true">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                </div>
+                <h3>He-said-she-said disputes</h3>
+                <p>Without evidence, appeals become arguments. Operators walk lots because dashboards are too expensive.</p>
+            </article>
         </div>
     </div>
 </section>
 
-<section class="landing-stats landing-reveal" aria-label="Platform highlights">
-    <div class="landing-container landing-stats-grid">
-        <div class="landing-stat">
-            <span class="landing-stat-value">24/7</span>
-            <span class="landing-stat-label">Bay monitoring</span>
-        </div>
-        <div class="landing-stat">
-            <span class="landing-stat-value">1:1</span>
-            <span class="landing-stat-label">Credits to lei</span>
-        </div>
-        <div class="landing-stat">
-            <span class="landing-stat-value">Fair</span>
-            <span class="landing-stat-label">Appeal review</span>
-        </div>
-        <div class="landing-stat">
-            <span class="landing-stat-value">Map</span>
-            <span class="landing-stat-label">Search & book nearby</span>
-        </div>
-    </div>
-</section>
-
-<section class="landing-section" id="features">
+<section class="landing-section landing-section--glow" id="features">
     <div class="landing-container">
         <div class="landing-section-head landing-reveal">
-            <p class="landing-eyebrow">Features</p>
-            <h2>Everything parking should have been</h2>
-            <p class="landing-section-lead">Monitoring, marketplace, wallet, and fairness — not four different apps.</p>
+            <p class="landing-eyebrow">Product</p>
+            <h2>One platform, four jobs done right</h2>
+            <p class="landing-section-lead">Monitoring, marketplace, wallet, and fairness — integrated so bookings update cameras automatically.</p>
         </div>
-        <div class="landing-features">
-            <article class="landing-feature landing-reveal">
-                <div class="landing-feature-icon" aria-hidden="true">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                </div>
+        <div class="landing-bento">
+            <article class="landing-bento-card landing-bento-card--hero landing-reveal">
+                <div class="landing-bento-tag">Core</div>
                 <h3>Spot protection</h3>
-                <p>Cameras watch your assigned plate. Get push alerts when someone else parks in your bay, with timestamps and evidence on demand.</p>
+                <p>Edge cameras watch your assigned plate around the clock. Push alerts when a mismatch persists, with on-demand photo evidence and incident history.</p>
+                <ul class="landing-bento-list">
+                    <li>Empty · correct · violation states</li>
+                    <li>Renter plates authorized for booking windows</li>
+                    <li>Operator fleet map with live status</li>
+                </ul>
             </article>
-            <article class="landing-feature landing-reveal">
-                <div class="landing-feature-icon" aria-hidden="true">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="10" r="3"/><path d="M12 21s7-6.5 7-11a7 7 0 10-14 0c0 4.5 7 11 7 11z"/></svg>
+            <article class="landing-bento-card landing-reveal">
+                <div class="landing-bento-icon" aria-hidden="true">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="10" r="3"/><path d="M12 21s7-6.5 7-11a7 7 0 10-14 0c0 4.5 7 11 7 11z"/></svg>
                 </div>
                 <h3>Find parking</h3>
-                <p>Search any place on the map, filter by price and distance, and book instantly or on a schedule — with top picks recommended for you.</p>
+                <p>Search any neighborhood, filter by price and distance, book instantly or schedule ahead.</p>
             </article>
-            <article class="landing-feature landing-reveal">
-                <div class="landing-feature-icon" aria-hidden="true">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+            <article class="landing-bento-card landing-reveal">
+                <div class="landing-bento-icon" aria-hidden="true">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
                 </div>
                 <h3>Credits wallet</h3>
-                <p>Top up in lei, pay for bookings and subscriptions, withdraw to your bank when you're ready. Promo and referral codes included.</p>
+                <p>Top up in lei, pay for bookings, subscribe monthly, withdraw to your bank when eligible.</p>
             </article>
-            <article class="landing-feature landing-reveal">
-                <div class="landing-feature-icon" aria-hidden="true">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+            <article class="landing-bento-card landing-reveal">
+                <div class="landing-bento-icon" aria-hidden="true">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>
                 </div>
                 <h3>Fair appeals</h3>
-                <p>Request camera photos, appeal with context, and get a clear review before an admin steps in when needed.</p>
+                <p>Request camera photos, submit context, get automated or human review with downloadable receipts.</p>
             </article>
-            <article class="landing-feature landing-reveal">
-                <div class="landing-feature-icon" aria-hidden="true">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+            <article class="landing-bento-card landing-reveal">
+                <div class="landing-bento-icon" aria-hidden="true">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M2 12h20"/></svg>
                 </div>
                 <h3>Smart pricing</h3>
-                <p>Owners set floors and ceilings; Spotflow suggests or auto-adjusts hourly rates from demand, weather, and occupancy signals.</p>
+                <p>Owners set floors and ceilings; demand, weather, and occupancy signals adjust hourly rates.</p>
             </article>
-            <article class="landing-feature landing-reveal">
-                <div class="landing-feature-icon" aria-hidden="true">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+            <article class="landing-bento-card landing-bento-card--wide landing-reveal">
+                <div class="landing-bento-icon" aria-hidden="true">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
                 </div>
-                <h3>Operator dashboard</h3>
-                <p>Live maps, device health, verification queues, CSV exports, and analytics for buildings and small parking operators.</p>
+                <div>
+                    <h3>Operator dashboard</h3>
+                    <p>Device health, verification queues, CSV exports, and demand analytics for buildings and small operators — without enterprise pricing.</p>
+                </div>
             </article>
         </div>
     </div>
 </section>
 
 <section class="landing-section landing-section--alt" id="how-it-works">
-    <div class="landing-container">
+    <div class="landing-container landing-flow">
         <div class="landing-section-head landing-reveal">
             <p class="landing-eyebrow">How it works</p>
-            <h2>From camera to checkout in three steps</h2>
+            <h2>From verified plate to authorized parking</h2>
+            <p class="landing-section-lead">Three steps. No manual camera reconfiguration when a booking starts.</p>
         </div>
-        <ol class="landing-steps">
-            <li class="landing-step landing-reveal">
-                <span class="landing-step-num">1</span>
-                <div>
-                    <h3>Claim & verify</h3>
-                    <p>Register your plates with official documents. We verify ownership before you get full trust.</p>
+        <div class="landing-flow-layout landing-reveal">
+            <div class="landing-flow-tabs" role="tablist" aria-label="How Spotflow works">
+                <button type="button" class="landing-flow-tab is-active" role="tab" aria-selected="true" aria-controls="flow-panel-1" id="flow-tab-1" data-flow-tab="1">
+                    <span class="landing-flow-num">01</span>
+                    <span class="landing-flow-tab-text"><strong>Claim & verify</strong><small>Official documents, approved plates</small></span>
+                </button>
+                <button type="button" class="landing-flow-tab" role="tab" aria-selected="false" aria-controls="flow-panel-2" id="flow-tab-2" data-flow-tab="2">
+                    <span class="landing-flow-num">02</span>
+                    <span class="landing-flow-tab-text"><strong>Monitor or list</strong><small>Protect your bay or rent empty hours</small></span>
+                </button>
+                <button type="button" class="landing-flow-tab" role="tab" aria-selected="false" aria-controls="flow-panel-3" id="flow-tab-3" data-flow-tab="3">
+                    <span class="landing-flow-num">03</span>
+                    <span class="landing-flow-tab-text"><strong>Book & settle</strong><small>Map search, Credits, camera sync</small></span>
+                </button>
+            </div>
+            <div class="landing-flow-panels">
+                <div class="landing-flow-panel is-active" role="tabpanel" id="flow-panel-1" aria-labelledby="flow-tab-1">
+                    <p>Register license plates with registration or city paperwork. We match the plate to your account name before granting full trust — pending, approved, or rejected states are visible to you and operators.</p>
+                    <ul class="landing-checklist">
+                        <li>Document upload with admin review queue</li>
+                        <li>Multiple plates per household or fleet</li>
+                        <li>Demo mode with sample verification flow</li>
+                    </ul>
                 </div>
-            </li>
-            <li class="landing-step landing-reveal">
-                <span class="landing-step-num">2</span>
-                <div>
-                    <h3>Monitor or list</h3>
-                    <p>Link a bay to your plate, or list empty hours for rent with manual or automatic booking approval.</p>
+                <div class="landing-flow-panel" role="tabpanel" id="flow-panel-2" aria-labelledby="flow-tab-2" hidden>
+                    <p>Link a monitored bay to your plate, or list empty hours for rent. Choose manual approval or auto-accept for bookings. Smart pricing can suggest or adjust rates from local demand.</p>
+                    <ul class="landing-checklist">
+                        <li>Hourly and scheduled reservations</li>
+                        <li>Owner dashboards for occupancy and earnings</li>
+                        <li>Subscriptions for recurring parkers</li>
+                    </ul>
                 </div>
-            </li>
-            <li class="landing-step landing-reveal">
-                <span class="landing-step-num">3</span>
-                <div>
-                    <h3>Book & settle</h3>
-                    <p>Drivers search the map, pay in Credits, and park with their plate authorized on the camera for the booking window.</p>
+                <div class="landing-flow-panel" role="tabpanel" id="flow-panel-3" aria-labelledby="flow-tab-3" hidden>
+                    <p>Drivers search the map, pay in Credits, and park with their plate authorized on the camera for the booking window. Low-balance warnings fire before checkout fails.</p>
+                    <ul class="landing-checklist">
+                        <li>Instant and scheduled bookings</li>
+                        <li>PDF receipts for top-ups and withdrawals</li>
+                        <li>Promo and referral codes at checkout</li>
+                    </ul>
                 </div>
-            </li>
-        </ol>
+            </div>
+        </div>
     </div>
 </section>
 
 <section class="landing-section" id="for-you">
     <div class="landing-container">
-        <div class="landing-section-head landing-reveal">
-            <p class="landing-eyebrow">Who it's for</p>
+        <div class="landing-section-head landing-section-head--center landing-reveal">
+            <p class="landing-eyebrow">Audiences</p>
             <h2>Built for everyone in the lot</h2>
         </div>
         <div class="landing-personas">
-            <article class="landing-persona landing-reveal">
-                <h3>Drivers</h3>
+            <article class="landing-persona landing-persona--driver landing-reveal">
+                <div class="landing-persona-head">
+                    <span class="landing-persona-icon" aria-hidden="true">P</span>
+                    <h3>Drivers</h3>
+                </div>
+                <p>Commuters who need alerts, map search, and a fair appeals path when something goes wrong.</p>
                 <ul>
-                    <li>Alerts when your spot is misused</li>
-                    <li>Map search across major cities</li>
+                    <li>Misuse alerts with timestamps</li>
+                    <li>Book nearby bays in Credits</li>
                     <li>Appeals with photo evidence</li>
                 </ul>
-                <a href="{{ url_for('login', mode='signup') }}" class="landing-link">Start as driver →</a>
+                <a href="{{ url_for('login', mode='signup') }}" class="landing-persona-cta">Start as driver</a>
             </article>
-            <article class="landing-persona landing-reveal">
-                <h3>Spot owners</h3>
+            <article class="landing-persona landing-persona--owner landing-reveal">
+                <div class="landing-persona-head">
+                    <span class="landing-persona-icon" aria-hidden="true">O</span>
+                    <h3>Spot owners</h3>
+                </div>
+                <p>Tenants and landlords who control a bay and want protection plus income from empty hours.</p>
                 <ul>
-                    <li>List bays and set smart prices</li>
-                    <li>Approve or auto-accept bookings</li>
+                    <li>List bays with smart pricing</li>
+                    <li>Manual or auto booking approval</li>
                     <li>Earn Credits when others park</li>
                 </ul>
-                <a href="{{ url_for('login', mode='signup') }}" class="landing-link">List your spot →</a>
+                <a href="{{ url_for('login', mode='signup') }}" class="landing-persona-cta">List your spot</a>
             </article>
-            <article class="landing-persona landing-reveal">
-                <h3>Operators</h3>
+            <article class="landing-persona landing-persona--ops landing-reveal">
+                <div class="landing-persona-head">
+                    <span class="landing-persona-icon" aria-hidden="true">A</span>
+                    <h3>Operators</h3>
+                </div>
+                <p>Building staff and small garage operators who need fleet visibility without walking every level.</p>
                 <ul>
-                    <li>Fleet map with live status</li>
-                    <li>Device provisioning & appeals queue</li>
+                    <li>Live map and device health</li>
+                    <li>Verification and appeals queues</li>
                     <li>Exports and demand analytics</li>
                 </ul>
-                <a href="{{ url_for('login') }}?account_type=admin" class="landing-link">Admin access →</a>
+                <a href="{{ url_for('login') }}?account_type=admin" class="landing-persona-cta">Admin access</a>
             </article>
         </div>
     </div>
 </section>
 
 <section class="landing-section landing-section--alt" id="credits">
-    <div class="landing-container landing-credits-grid landing-reveal">
-        <div>
+    <div class="landing-container landing-wallet-layout landing-reveal">
+        <div class="landing-wallet-copy">
             <p class="landing-eyebrow">Credits</p>
-            <h2>Simple money, no mental math</h2>
-            <p class="landing-section-lead">One Credit equals one Romanian leu. Top up, book parking, subscribe monthly, or withdraw 100 Credits to your bank account when your balance allows.</p>
-            <ul class="landing-checklist">
+            <h2>Money you can reason about</h2>
+            <p class="landing-section-lead">One Credit equals one Romanian leu. No hidden conversion tables — what you see on the map is what you pay.</p>
+            <ul class="landing-checklist landing-checklist--large">
                 <li>Fractional hourly rates (e.g. 10.50 Credits)</li>
                 <li>PDF receipts for top-ups and withdrawals</li>
                 <li>Promo codes and referral bonuses</li>
-                <li>Low-balance warnings before you book</li>
+                <li>Low-balance warnings before booking</li>
             </ul>
         </div>
-        <div class="landing-credits-card">
-            <div class="landing-credits-row">
-                <span>Instant booking</span>
-                <strong>from 8.00 Credits/h</strong>
+        <div class="landing-wallet-card">
+            <div class="landing-wallet-balance">
+                <span>Available balance</span>
+                <strong>1,000.00 <small>Credits</small></strong>
             </div>
-            <div class="landing-credits-row">
-                <span>Monthly plan</span>
-                <strong>50 Credits / month</strong>
+            <div class="landing-wallet-rows">
+                <div class="landing-wallet-row">
+                    <span>Instant booking</span>
+                    <strong>from 8.00 / h</strong>
+                </div>
+                <div class="landing-wallet-row">
+                    <span>Monthly plan</span>
+                    <strong>50 Credits</strong>
+                </div>
+                <div class="landing-wallet-row">
+                    <span>Bank withdrawal</span>
+                    <strong>100 → 100 lei</strong>
+                </div>
             </div>
-            <div class="landing-credits-row">
-                <span>Bank withdrawal</span>
-                <strong>100 Credits → 100 lei</strong>
-            </div>
-            <a href="{{ url_for('login') }}" class="landing-btn landing-btn--primary w-100 mt-3">Open wallet</a>
+            <a href="{{ url_for('login') }}" class="landing-btn landing-btn--primary landing-btn--block">Open wallet</a>
+        </div>
+    </div>
+</section>
+
+<section class="landing-section" id="faq">
+    <div class="landing-container landing-faq-wrap">
+        <div class="landing-section-head landing-reveal">
+            <p class="landing-eyebrow">FAQ</p>
+            <h2>Common questions</h2>
+        </div>
+        <div class="landing-faq landing-reveal">
+            <details class="landing-faq-item">
+                <summary>Is Spotflow government parking enforcement?</summary>
+                <p>No. Spotflow is for property owners, tenants, and communities who want monitoring, rentals, and shared records — not municipal fines or police action.</p>
+            </details>
+            <details class="landing-faq-item">
+                <summary>How do cameras know a renter is allowed?</summary>
+                <p>When a booking is active, the authorized plate temporarily switches to the renter's plate for that window. When the booking ends, your assigned plate returns automatically.</p>
+            </details>
+            <details class="landing-faq-item">
+                <summary>Why do I need documents to add a plate?</summary>
+                <p>Trust matters. Uploading registration or city paperwork lets us verify the plate belongs to you before granting full account capabilities.</p>
+            </details>
+            <details class="landing-faq-item">
+                <summary>Can I try it without signing up?</summary>
+                <p>Yes. Use the demo login (<kbd>demo</kbd> / <kbd>demo123!</kbd>), then enter verification code <kbd>456789</kbd> to explore sample cities, maps, and flows with synthetic data.</p>
+            </details>
         </div>
     </div>
 </section>
 
 <section class="landing-cta landing-reveal">
-    <div class="landing-container landing-cta-inner">
-        <h2>Ready to flow?</h2>
-        <p>Join Spotflow in minutes — or explore the full demo with sample cities and live maps.</p>
-        <div class="landing-hero-cta">
-            <a href="{{ url_for('login', mode='signup') }}" class="landing-btn landing-btn--primary landing-btn--lg">Get started free</a>
-            <a href="{{ url_for('login') }}?demo=1" class="landing-btn landing-btn--glass landing-btn--lg">Launch demo</a>
+    <div class="landing-container">
+        <div class="landing-cta-card">
+            <div class="landing-cta-copy">
+                <h2>Ready to put parking in one flow?</h2>
+                <p>Create an account in minutes, or launch the demo and walk through Bucharest, Cluj, and live maps with sample data.</p>
+            </div>
+            <div class="landing-hero-cta landing-hero-cta--stack">
+                <a href="{{ url_for('login', mode='signup') }}" class="landing-btn landing-btn--primary landing-btn--lg">Get started free</a>
+                <a href="{{ url_for('login') }}?demo=1" class="landing-btn landing-btn--outline landing-btn--lg">Launch demo</a>
+            </div>
         </div>
     </div>
 </section>
 
 <footer class="landing-footer">
-    <div class="landing-container landing-footer-inner">
-        <a class="landing-logo" href="{{ url_for('index') }}">
-            <span class="landing-logo-mark" aria-hidden="true">S</span>
-            <span>Spotflow</span>
-        </a>
-        <p class="landing-footer-copy">Smart parking for communities. Not a government enforcement tool.</p>
-        <div class="landing-footer-links">
-            <a href="{{ url_for('login') }}">Sign in</a>
-            <a href="{{ url_for('login', mode='signup') }}">Sign up</a>
-            <a href="#features">Features</a>
+    <div class="landing-container landing-footer-grid">
+        <div class="landing-footer-brand">
+            <a class="landing-logo" href="{{ url_for('index') }}">
+                {{ logo_mark(34, class='landing-logo-mark') }}
+                <span>Spotflow</span>
+            </a>
+            <p>Smart parking for communities — monitor, rent, book, and resolve disputes in one place.</p>
         </div>
+        <nav class="landing-footer-col" aria-label="Product">
+            <h4>Product</h4>
+            <a href="#features">Features</a>
+            <a href="#how-it-works">How it works</a>
+            <a href="#credits">Credits</a>
+        </nav>
+        <nav class="landing-footer-col" aria-label="Account">
+            <h4>Account</h4>
+            <a href="{{ url_for('login', mode='signup') }}">Sign up</a>
+            <a href="{{ url_for('login') }}">Sign in</a>
+            <a href="{{ url_for('login') }}?demo=1">Demo</a>
+        </nav>
+        <div class="landing-footer-col">
+            <h4>Legal note</h4>
+            <p class="landing-footer-note">Not a government enforcement tool. Community-scale parking only.</p>
+        </div>
+    </div>
+    <div class="landing-container landing-footer-bottom">
+        <span>&copy; {{ 2026 }} Spotflow</span>
     </div>
 </footer>
 {% endblock %}

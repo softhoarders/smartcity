@@ -35,6 +35,44 @@
             </div>
         </div>
 
+        {% if parking_passport %}
+        <div class="card pw-card border-0 mb-4 fp-passport-card">
+            <div class="card-body p-4">
+                <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+                    <div>
+                        <h2 class="h5 fw-bold mb-1">Parking trust passport</h2>
+                        <p class="text-secondary small mb-0">Portable reputation across buildings — affects instant booking and owner requirements.</p>
+                    </div>
+                    <span class="badge fp-trust-badge fp-trust-badge--{{ parking_passport.tier }} fs-6">
+                        {{ parking_passport.trust_score }}/100 · {{ parking_passport.tier_label }}
+                    </span>
+                </div>
+                <div class="row g-3 fp-passport-metrics">
+                    <div class="col-6 col-md-3">
+                        <p class="small text-secondary mb-0">On-time departures</p>
+                        <p class="fw-bold mb-0">{{ parking_passport.on_time_pct }}%</p>
+                        <p class="small text-secondary">{{ parking_passport.on_time_departures }}/{{ parking_passport.completed_bookings }} completed</p>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <p class="small text-secondary mb-0">No-show rate</p>
+                        <p class="fw-bold mb-0">{{ parking_passport.no_show_pct }}%</p>
+                        <p class="small text-secondary">{{ parking_passport.no_shows }} of {{ parking_passport.total_bookings }} bookings</p>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <p class="small text-secondary mb-0">Appeals won</p>
+                        <p class="fw-bold mb-0">{{ parking_passport.appeal_win_pct }}%</p>
+                        <p class="small text-secondary">{{ parking_passport.appeals_won }}/{{ parking_passport.appeals_filed }} filed</p>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <p class="small text-secondary mb-0">False appeals</p>
+                        <p class="fw-bold mb-0">{{ parking_passport.false_appeal_pct }}%</p>
+                        <p class="small text-secondary">{{ parking_passport.false_appeals }} rejected</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         <div class="card pw-card border-0 mb-4">
             <div class="card-body p-4">
                 <h2 class="h5 fw-bold mb-3">Profile</h2>

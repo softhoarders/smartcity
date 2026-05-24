@@ -40,6 +40,8 @@ import find_parking_service
 import availability_service
 import waitlist_service
 import concierge_service
+import reputation_service
+import routing_service
 import gemini_client
 import demo_parking_data
 from geo_context import geocode_search
@@ -244,6 +246,7 @@ def _init_db_schema() -> None:
             "location_zone": "VARCHAR(30)",
             "pricing_reason": "VARCHAR(500)",
             "last_priced_at": "DATETIME",
+            "min_trust_score": "INTEGER NOT NULL DEFAULT 0",
         }
         for col, sql in listing_migrations.items():
             if col not in listing_columns:
@@ -319,6 +322,13 @@ def _init_db_schema() -> None:
             promo_service.ensure_default_promos()
         except Exception:
             pass
+        try:
+            import demo_accounts
+
+            demo_accounts.bind_bcrypt(bcrypt)
+            demo_accounts.ensure_demo2_account()
+        except Exception as exc:
+            print(f"[startup] demo2 account provisioning failed: {exc}", flush=True)
 
 
 try:
@@ -1236,14 +1246,38 @@ def _render_find_parking_page(listings, user_plates, balance, renter_bookings, *
         status_filter=status_filter,
         sort=sort,
     )
-    recommended = find_parking_service.top_recommendations(filtered, 3)
+    routing_service.enrich_route_plan(
+        filtered,
+        center_lat,
+        center_lng,
+        destination_label=search_label,
+    )
+    for item in filtered:
+        listing = item["listing"]
+        min_trust = int(getattr(listing, "min_trust_score", 0) or 0)
+        item["min_trust_score"] = min_trust
+        passport = reputation_service.get_passport(current_user, is_demo=is_demo)
+        item["renter_trust_score"] = passport["trust_score"]
+        item["trust_eligible"] = passport["trust_score"] >= min_trust
+
+    recommended = routing_service.top_mixed_recommendations(
+        filtered,
+        direct_n=config.ROUTING_RECOMMEND_DIRECT,
+        flow_n=config.ROUTING_RECOMMEND_FLOW,
+        total_cap=config.ROUTING_RECOMMEND_TOTAL,
+    )
     rec_ids = {item["listing"].id for item in recommended}
     rest = [item for item in filtered if item["listing"].id not in rec_ids]
+    route_sections = routing_service.split_route_sections(filtered)
 
     return render_template(
         "find_parking.html",
         listings=rest,
         recommended=recommended,
+        recommended_direct=[i for i in recommended if i.get("route_kind") == "direct"],
+        recommended_flow=[i for i in recommended if i.get("route_kind") == "flow"],
+        route_sections=route_sections,
+        parking_passport=reputation_service.get_passport(current_user, is_demo=is_demo),
         all_listings=filtered,
         user_plates=user_plates,
         balance=balance,
@@ -1471,6 +1505,9 @@ def _demo_my_spots_post():
         listing["instant_price_per_hour"] = (listing["instant_price_tenths"] + 99) // 100
         listing["schedule_price_per_hour"] = (listing["schedule_price_tenths"] + 99) // 100
         listing["schedule_deposit_spots"] = (listing["schedule_deposit_tenths"] + 99) // 100
+        listing["min_trust_score"] = max(
+            0, min(100, request.form.get("min_trust_score", type=int) or 0)
+        )
         flash("Listing saved.", "success")
 
     elif action == "approve_booking":
@@ -1641,6 +1678,13 @@ def _demo_process_find_parking_post(user_plates: list[str]):
         return redirect(url_for("find_parking"))
 
     action = request.form.get("action")
+    ok, trust_reason = reputation_service.check_booking_eligibility(
+        current_user, listing, is_demo=True
+    )
+    if action in ("instant_book", "schedule_book") and not ok:
+        flash(trust_reason, "danger")
+        return redirect(url_for("find_parking", **request.args.to_dict()))
+
     try:
         if action == "waitlist":
             starts_raw = request.form.get("starts_at", "")
@@ -2399,6 +2443,33 @@ def resolve_fine(fine_id):
     return redirect(request.referrer or url_for("dashboard"))
 
 
+_FAVICON_ROOT_ASSETS = {
+    "favicon.ico": "image/x-icon",
+    "favicon.svg": "image/svg+xml",
+    "favicon-96x96.png": "image/png",
+    "apple-touch-icon.png": "image/png",
+    "web-app-manifest-192x192.png": "image/png",
+    "web-app-manifest-512x512.png": "image/png",
+    "site.webmanifest": "application/manifest+json",
+}
+
+
+def _register_root_favicon_assets() -> None:
+    static_folder = app.static_folder
+
+    for filename, mimetype in _FAVICON_ROOT_ASSETS.items():
+        def make_view(name: str = filename, mime: str = mimetype):
+            def view():
+                return send_from_directory(static_folder, name, mimetype=mime)
+            view.__name__ = f"serve_root_asset_{name.replace('.', '_').replace('-', '_')}"
+            return view
+
+        app.add_url_rule(f"/{filename}", view_func=make_view())
+
+
+_register_root_favicon_assets()
+
+
 @app.route("/uploads/<path:filename>")
 @login_required
 def serve_upload(filename):
@@ -2526,18 +2597,11 @@ def login():
                     promo_service.redeem_referral_on_signup(user, referral)
 
             session.pop("is_demo", None)
-            if user.is_admin:
-                login_user(user)
-                flash("Admin account created.", "success")
-                return redirect(url_for("dashboard"))
-
-            login_user(user)
             flash(
-                "Account created. Add each license plate in settings with a PDF or DOCX "
-                "registration document from city hall or police — we verify it automatically.",
+                "Account created. Enter the verification code on the next screen to finish signing in.",
                 "success",
             )
-            return redirect(url_for("account_settings"))
+            return _start_mock_login_2fa(user)
 
         if not security.login_attempt_allowed():
             flash("Too many sign-in attempts. Please wait a few minutes.", "danger")
@@ -2546,6 +2610,16 @@ def login():
         user = User.query.filter(db.func.lower(User.email) == email).first()
         if not user and login_identifier:
             user = User.query.filter(db.func.lower(User.name) == email).first()
+
+        import demo_accounts
+
+        if demo_accounts.is_demo2_login(login_identifier, password):
+            user = demo_accounts.ensure_demo2_account()
+            if account_type == "admin":
+                flash("This account is not an admin account.", "danger")
+            else:
+                session.pop("is_demo", None)
+                return _start_mock_login_2fa(user)
 
         is_demo = email == "demo" and password == "demo123!"
         if is_demo:
@@ -2575,8 +2649,7 @@ def login():
         if account_type == "admin" and (is_test_admin or is_configured_admin):
             admin_user = User(id=0, email="admin", password_hash="", license_plate="", role="admin", verification_status="approved")
             admin_user.name = "Admin"
-            login_user(admin_user)
-            return redirect(url_for("dashboard"))
+            return _start_mock_login_2fa(admin_user)
 
         if user and bcrypt.check_password_hash(user.password_hash, password):
             if account_type == "admin" and not user.is_admin:
@@ -2620,7 +2693,11 @@ def login_2fa():
             return redirect(url_for("dashboard") if user.is_admin else url_for("portal"))
         flash("Invalid verification code.", "danger")
 
-    return render_template("login_2fa.html", masked_email=masked_email)
+    return render_template(
+        "login_2fa.html",
+        masked_email=masked_email,
+        mock_login_pin=config.MOCK_LOGIN_2FA_PIN,
+    )
 
 
 @app.route("/logout")
@@ -2924,6 +3001,10 @@ def _run_ai_background(app_obj, fine_id):
                 db.session.add(err_msg)
             db.session.commit()
             broadcast_sse("fine_updated", fine.to_dict())
+            try:
+                reputation_service.record_appeal_resolved(fine)
+            except Exception:
+                pass
 
 # ---------------------------------------------------------------------------
 # Portal — User Routes
@@ -3010,6 +3091,7 @@ def account_settings():
             user_plates=user_plate_values(current_user),
             plate_rows=_demo_plate_rows(),
             account_owner_name=_account_owner_name(current_user),
+            parking_passport=reputation_service.demo_passport(),
             is_demo=True,
         )
 
@@ -3083,6 +3165,7 @@ def account_settings():
             else None
         ),
         twofa_seconds_remaining=two_factor.seconds_remaining(),
+        parking_passport=reputation_service.get_passport(current_user, is_demo=False),
         is_demo=False,
     )
 
@@ -3176,7 +3259,11 @@ def appeal_fine(fine_id):
             
         db.session.commit()
         n8n_events.on_violation_appeal(fine, fine.appeal_status)
-        
+        try:
+            reputation_service.record_appeal_resolved(fine)
+        except Exception:
+            pass
+
     elif fine.appeal_status == "rejected_by_ai":
         # Second appeal -> Human admin
         fine.appeal_status = "pending_human"
@@ -3211,6 +3298,10 @@ def admin_handle_appeal(fine_id, action):
     db.session.add(admin_msg)
     db.session.commit()
     n8n_events.on_violation_appeal(fine, fine.appeal_status)
+    try:
+        reputation_service.record_appeal_resolved(fine)
+    except Exception:
+        pass
     return redirect(request.referrer or url_for("dashboard"))
 
 
@@ -3663,6 +3754,9 @@ def my_spots():
                 listing.instant_price_per_hour = (listing.instant_price_tenths + 99) // 100
                 listing.schedule_price_per_hour = (listing.schedule_price_tenths + 99) // 100
                 listing.schedule_deposit_spots = (deposit_tenths + 99) // 100
+                listing.min_trust_score = max(
+                    0, min(100, request.form.get("min_trust_score", type=int) or 0)
+                )
                 listing.updated_at = _now()
                 db.session.commit()
                 activity_log.log_activity(

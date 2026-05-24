@@ -169,20 +169,49 @@ def predict_for_listing(
     }
 
 
-def predict_for_demo_device(device, listing_id: int = 0, *, target_at: datetime | None = None) -> dict[str, Any]:
-    """Synthetic predictions for demo listings."""
+def predict_for_demo_device(
+    device,
+    listing_id: int = 0,
+    *,
+    target_at: datetime | None = None,
+    route_kind: str | None = None,
+) -> dict[str, Any]:
+    """Synthetic predictions for demo listings (mix of open now and predicted free)."""
     now = _utcnow()
     target = _aware(target_at) or (now + timedelta(minutes=30))
     status = (getattr(device, "current_status", None) or "empty").lower()
     lid = listing_id or getattr(device, "id", 0)
+    rk = route_kind or getattr(device, "_demo_route_kind", None)
 
-    if status == "empty":
+    # Direct bays: more often "available now"; flow bays: mix of walk-route value props
+    if rk == "flow":
+        if lid % 4 in (0, 1) or status == "empty":
+            return {
+                "available_now": True,
+                "free_at": now.isoformat(),
+                "confidence_pct": 91,
+                "prediction_label": "Available now",
+                "prediction_reason": "Open nearby — walk to your destination.",
+                "availability_score": 0.91,
+            }
+        free_at = now + timedelta(minutes=12 + (lid % 5) * 8)
+        conf = 78 + (lid % 15)
+        return {
+            "available_now": False,
+            "free_at": free_at.isoformat(),
+            "confidence_pct": conf,
+            "prediction_label": f"Likely free by {_format_local_time(free_at)}",
+            "prediction_reason": f"~{conf}% chance free before you arrive (flow route).",
+            "availability_score": conf / 100.0,
+        }
+
+    if status == "empty" or lid % 3 != 2:
         return {
             "available_now": True,
             "free_at": now.isoformat(),
             "confidence_pct": 94,
             "prediction_label": "Available now",
-            "prediction_reason": "Open in demo.",
+            "prediction_reason": "Open at your destination.",
             "availability_score": 0.94,
         }
 
@@ -193,7 +222,7 @@ def predict_for_demo_device(device, listing_id: int = 0, *, target_at: datetime 
         "free_at": free_at.isoformat(),
         "confidence_pct": conf,
         "prediction_label": f"May free ~{_format_local_time(free_at)}",
-        "prediction_reason": "Estimate for demo.",
+        "prediction_reason": "Estimate from recent turnover at this bay.",
         "availability_score": conf / 100.0,
     }
 
@@ -209,7 +238,10 @@ def enrich_listing_items(
         device = item["device"]
         if is_demo:
             pred = predict_for_demo_device(
-                device, getattr(listing, "id", 0), target_at=target_at
+                device,
+                getattr(listing, "id", 0),
+                target_at=target_at,
+                route_kind=item.get("route_kind"),
             )
         else:
             pred = predict_for_listing(listing, device, target_at=target_at)

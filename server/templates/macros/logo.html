@@ -1,0 +1,27 @@
+{# SpotFlow brand logo — same assets as site.webmanifest #}
+{% set spotflow_logo_192 = '/web-app-manifest-192x192.png' %}
+{% set spotflow_logo_512 = '/web-app-manifest-512x512.png' %}
+
+{% macro logo_img(size=32, class='', alt='Spotflow') %}
+<img src="{{ spotflow_logo_192 }}"
+     srcset="{{ spotflow_logo_192 }} 192w, {{ spotflow_logo_512 }} 512w"
+     sizes="{{ size }}px"
+     width="{{ size }}"
+     height="{{ size }}"
+     alt="{{ alt }}"
+     class="spotflow-logo-img {{ class }}"
+     decoding="async">
+{% endmacro %}
+
+{% macro logo_mark(size=32, class='') %}
+<span class="spotflow-logo-mark {{ class }}" style="--spotflow-logo-size: {{ size }}px" aria-hidden="true">
+    {{ logo_img(size, alt='') }}
+</span>
+{% endmacro %}
+
+{% macro logo_brand(href=None, size=32, show_text=true, text='Spotflow', link_class='', img_class='') %}
+<a href="{{ href if href is not none else url_for('index') }}" class="spotflow-logo {{ link_class }}">
+    {{ logo_img(size, class=img_class) }}
+    {% if show_text %}<span class="spotflow-logo-text">{{ text }}</span>{% endif %}
+</a>
+{% endmacro %}

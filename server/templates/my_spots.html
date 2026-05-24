@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "macros/ui.html" import breadcrumb, empty_state, booking_status_badge %}
 {% block title %}Spotflow — My Parking Spots{% endblock %}
+{% block body_class %}my-spots-page{% endblock %}
 {% block content %}
 <div class="row justify-content-center mb-4">
     <div class="col-12 col-lg-10">
@@ -56,11 +57,11 @@
                         {% if item.pending and item.pending|length %}
                         <span class="ms-spot-pending-badge" title="Pending requests">{{ item.pending|length }}</span>
                         {% endif %}
-                        <button type="button" class="ms-spot-settings-btn" data-ms-settings="{{ item.device.id }}"
-                                aria-label="Settings and booking history for {{ item.device.spot_label }}">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <button type="button" class="ms-spot-view-btn" data-ms-settings="{{ item.device.id }}"
+                                aria-label="View settings and booking history for {{ item.device.spot_label }}">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
                                 <circle cx="12" cy="12" r="3"/>
-                                <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
                             </svg>
                         </button>
                     </div>
@@ -123,6 +124,13 @@
                         <option value="auto" {% if listing and listing.approval_mode == 'auto' %}selected{% endif %}>Automatic</option>
                         <option value="manual" {% if listing and listing.approval_mode == 'manual' %}selected{% endif %}>Manual approval</option>
                     </select>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label" for="min-trust-{{ item.device.id }}">Minimum renter trust (0–100)</label>
+                    <input type="number" name="min_trust_score" id="min-trust-{{ item.device.id }}" class="form-control" min="0" max="100" step="1"
+                        value="{% if listing %}{{ listing.min_trust_score or 0 }}{% else %}0{% endif %}">
+                    <p class="form-text mb-0">0 = anyone. Try 55+ for instant book; 70+ for premium bays.</p>
                 </div>
 
                 <div class="col-md-6">

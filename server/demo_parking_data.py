@@ -285,11 +285,18 @@ def build_demo_rental_listings(devices, now_fn):
         ceiling = max(inst, sched)
         owner_min = max(200, floor - _rng.randint(0, 75))
         owner_max = min(999, ceiling + _rng.randint(40, 280))
+        min_trust = 0
+        if listing_id % 17 == 0:
+            min_trust = 70
+        elif listing_id % 11 == 0:
+            min_trust = 55
+
         listing = SimpleNamespace(
             id=listing_id,
             is_active=True,
             approval_mode=_rng.choice(["auto", "auto", "manual"]),
             pricing_mode=_rng.choice(["auto", "manual", "manual"]),
+            min_trust_score=min_trust,
             description=_rng.choice(
                 [
                     "Covered spot near metro.",

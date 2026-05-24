@@ -11,11 +11,13 @@
         if (!results.length) return "<p class='small mb-0'>No matching spots found.</p>";
         return results
             .map((r) => {
+                const route = r.route_label ? `${r.route_label} · ` : "";
                 const avail = r.prediction_label || (r.available_now ? "Available now" : "Check availability");
+                const trust = r.min_trust_score ? ` · trust ${r.min_trust_score}+` : "";
                 return `<div class="fp-concierge-result card border-0 mb-2">
                     <div class="card-body p-2">
                         <div class="fw-semibold small">${r.spot_label}</div>
-                        <div class="text-secondary small">${r.name || ""} · ${r.distance_km ?? "—"} km · ${avail}</div>
+                        <div class="text-secondary small">${route}${r.name || ""} · ${r.distance_km ?? "—"} km · ${avail}${trust}</div>
                         <div class="small">${r.instant_display || "—"} ${cfg.currencyName}/h · ~${r.estimated_total_credits} ${cfg.currencyName} total</div>
                         <button type="button" class="btn btn-primary btn-sm mt-2 fp-concierge-book"
                             data-listing-id="${r.listing_id}"

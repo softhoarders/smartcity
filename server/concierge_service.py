@@ -232,6 +232,10 @@ def _listing_result_payload(item: dict[str, Any], intent: ConciergeIntent) -> di
         "available_now": item.get("available_now"),
         "estimated_total_credits": total_est,
         "rate_hundredths": inst,
+        "route_kind": item.get("route_kind"),
+        "route_label": item.get("route_label"),
+        "walk_minutes": item.get("walk_minutes"),
+        "min_trust_score": int(getattr(listing, "min_trust_score", 0) or 0),
     }
 
 
@@ -280,7 +284,17 @@ def search_for_intent(
         sort="relevance",
     )
 
-    top = find_parking_service.top_recommendations(filtered, 3)
+    import routing_service
+
+    routing_service.enrich_route_plan(
+        filtered, center["lat"], center["lng"], destination_label=center.get("label")
+    )
+    top = routing_service.top_mixed_recommendations(
+        filtered,
+        direct_n=config.ROUTING_CONCIERGE_DIRECT,
+        flow_n=config.ROUTING_CONCIERGE_FLOW,
+        total_cap=config.ROUTING_CONCIERGE_TOTAL,
+    )
     results = [_listing_result_payload(item, intent) for item in top]
 
     if results:

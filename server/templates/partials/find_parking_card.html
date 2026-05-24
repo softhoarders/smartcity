@@ -4,15 +4,30 @@
             <div class="fp-listing-main">
                 <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
                     <h3 class="h6 fw-bold mb-0">{{ item.device.spot_label }}</h3>
+                    {% if item.route_kind == 'flow' %}
+                    <span class="fp-route-badge fp-route-badge--flow">{{ item.route_label }}</span>
+                    {% elif item.route_kind == 'direct' %}
+                    <span class="fp-route-badge fp-route-badge--direct">{{ item.route_label }}</span>
+                    {% endif %}
                     {% if item.status_label %}
                     <span class="fp-spot-status fp-spot-status--{{ item.status_group or item.status }}">{{ item.status_label }}</span>
                     {% endif %}
                 </div>
                 <p class="text-secondary small mb-1">{{ item.device.name }}</p>
+                {% if item.route_hint %}
+                <p class="small fp-route-hint mb-2">{{ item.route_hint }}</p>
+                {% else %}
                 <p class="small text-secondary mb-2">
                     {{ item.distance_km }} km away
                     {% if item.rating %} · ★ {{ item.rating }}{% endif %}
                 </p>
+                {% endif %}
+                {% if item.min_trust_score and item.min_trust_score > 0 %}
+                <p class="small mb-2 {% if item.trust_eligible %}text-secondary{% else %}text-danger{% endif %}">
+                    Requires trust {{ item.min_trust_score }}+
+                    {% if item.renter_trust_score is defined %} (yours: {{ item.renter_trust_score }}){% endif %}
+                </p>
+                {% endif %}
                 <span class="fp-availability-badge fp-availability-badge--{% if item.available_now %}now{% elif item.confidence_pct >= 70 %}soon{% else %}later{% endif %}">
                     {{ item.prediction_label }}
                     {% if not item.available_now and item.confidence_pct %} · {{ item.confidence_pct }}%{% endif %}
@@ -20,9 +35,13 @@
             </div>
             <div class="fp-listing-action text-md-end">
                 <p class="fw-bold mb-2 mb-md-1">{{ item.schedule_display }} <span class="text-secondary fw-normal small">{{ currency_name }}/h</span></p>
-                {% if item.available_now %}
+                {% if item.available_now and (item.trust_eligible is not defined or item.trust_eligible) %}
                 <button type="button" class="btn btn-primary btn-sm px-4 fp-book-open" data-listing-id="{{ item.listing.id }}">
                     Pay &amp; park
+                </button>
+                {% elif item.available_now %}
+                <button type="button" class="btn btn-outline-secondary btn-sm px-4" disabled title="Trust score too low for this spot">
+                    Trust required
                 </button>
                 {% else %}
                 <button type="button" class="btn btn-primary btn-sm px-4 fp-watch-open" data-listing-id="{{ item.listing.id }}">

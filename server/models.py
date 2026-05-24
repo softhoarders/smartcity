@@ -226,6 +226,7 @@ class SpotListing(db.Model):
     pricing_reason = db.Column(db.String(500), nullable=True)
     last_priced_at = db.Column(db.DateTime, nullable=True)
     description = db.Column(db.String(500), nullable=True)
+    min_trust_score = db.Column(db.Integer, default=0, nullable=False)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
@@ -365,6 +366,28 @@ class SpotWaitlist(db.Model):
     user = db.relationship("User", backref=db.backref("spot_waitlists", lazy="dynamic"))
     listing = db.relationship("SpotListing", backref=db.backref("waitlists", lazy="dynamic"))
     fulfilled_booking = db.relationship("SpotBooking", foreign_keys=[fulfilled_booking_id])
+
+
+class UserParkingReputation(db.Model):
+    """Cached cross-property trust metrics for drivers (parking passport)."""
+    __tablename__ = "user_parking_reputation"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, unique=True, index=True)
+    trust_score = db.Column(db.Integer, default=55, nullable=False)
+    tier = db.Column(db.String(20), default="new", nullable=False)
+    completed_bookings = db.Column(db.Integer, default=0, nullable=False)
+    total_bookings = db.Column(db.Integer, default=0, nullable=False)
+    on_time_departures = db.Column(db.Integer, default=0, nullable=False)
+    late_departures = db.Column(db.Integer, default=0, nullable=False)
+    no_shows = db.Column(db.Integer, default=0, nullable=False)
+    appeals_filed = db.Column(db.Integer, default=0, nullable=False)
+    appeals_won = db.Column(db.Integer, default=0, nullable=False)
+    appeals_lost = db.Column(db.Integer, default=0, nullable=False)
+    false_appeals = db.Column(db.Integer, default=0, nullable=False)
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    user = db.relationship("User", backref=db.backref("parking_reputation", uselist=False))
 
 
 class WalletWithdrawal(db.Model):

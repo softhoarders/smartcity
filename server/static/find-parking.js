@@ -98,7 +98,7 @@
                 lat: m.lat,
                 lng: m.lng,
                 title: m.title,
-                subtitle: `${m.rateDisplay} ${cfg.currencyName}/h · ${m.distanceKm} km${m.predictionLabel ? " · " + m.predictionLabel : ""}`,
+                subtitle: `${m.routeLabel || (m.distanceKm + " km")}${m.predictionLabel ? " · " + m.predictionLabel : ""} · ${m.rateDisplay} ${cfg.currencyName}/h`,
                 status: statusGroup,
                 statusLabel: m.statusLabel || STATUS_LABELS[m.status] || m.status,
                 listingId: m.listingId,
@@ -456,6 +456,7 @@
             const open = panel.hidden;
             panel.hidden = !open;
             toggle.setAttribute("aria-expanded", open ? "true" : "false");
+            toggle.setAttribute("aria-label", open ? "Hide filters" : "Show filters");
             toggle.classList.toggle("is-active", open);
         });
     }

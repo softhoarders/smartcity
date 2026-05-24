@@ -150,6 +150,26 @@ WAITLIST_MAX_ACTIVE_PER_USER = int(os.environ.get("WAITLIST_MAX_ACTIVE_PER_USER"
 WAITLIST_GRACE_MINUTES = int(os.environ.get("WAITLIST_GRACE_MINUTES", "15"))
 AVAILABILITY_HISTORY_DAYS = int(os.environ.get("AVAILABILITY_HISTORY_DAYS", "30"))
 
+# Flow routing (park nearby + walk)
+ROUTING_DIRECT_MAX_KM = float(os.environ.get("ROUTING_DIRECT_MAX_KM", "0.35"))
+ROUTING_WALK_SPEED_KMH = float(os.environ.get("ROUTING_WALK_SPEED_KMH", "4.8"))
+ROUTING_RECOMMEND_DIRECT = int(os.environ.get("ROUTING_RECOMMEND_DIRECT", "2"))
+ROUTING_RECOMMEND_FLOW = int(os.environ.get("ROUTING_RECOMMEND_FLOW", "2"))
+ROUTING_RECOMMEND_TOTAL = int(os.environ.get("ROUTING_RECOMMEND_TOTAL", "4"))
+ROUTING_CONCIERGE_DIRECT = int(os.environ.get("ROUTING_CONCIERGE_DIRECT", "2"))
+ROUTING_CONCIERGE_FLOW = int(os.environ.get("ROUTING_CONCIERGE_FLOW", "1"))
+ROUTING_CONCIERGE_TOTAL = int(os.environ.get("ROUTING_CONCIERGE_TOTAL", "3"))
+
+# Parking reputation passport
+REPUTATION_DEFAULT_NEW_SCORE = int(os.environ.get("REPUTATION_DEFAULT_NEW_SCORE", "55"))
+REPUTATION_MIN_AUTO_BOOK = int(os.environ.get("REPUTATION_MIN_AUTO_BOOK", "45"))
+REPUTATION_BLOCK_BELOW = int(os.environ.get("REPUTATION_BLOCK_BELOW", "25"))
+REPUTATION_TIER_FLAGGED_MAX = int(os.environ.get("REPUTATION_TIER_FLAGGED_MAX", "30"))
+REPUTATION_TIER_RESTRICTED_MAX = int(os.environ.get("REPUTATION_TIER_RESTRICTED_MAX", "45"))
+REPUTATION_TIER_GOOD_MAX = int(os.environ.get("REPUTATION_TIER_GOOD_MAX", "65"))
+REPUTATION_TIER_TRUSTED_MAX = int(os.environ.get("REPUTATION_TIER_TRUSTED_MAX", "80"))
+REPUTATION_TIER_EXCELLENT_MAX = int(os.environ.get("REPUTATION_TIER_EXCELLENT_MAX", "90"))
+
 # Simulated 2FA — show current code on verify page (always simulated, never real SMS)
 SIMULATED_2FA_SHOW_CODE = os.environ.get("SIMULATED_2FA_SHOW_CODE", "true").lower() in ("true", "1", "t")
 # Fixed mock code for login email verification (no real email sent)

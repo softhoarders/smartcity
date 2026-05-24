@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from 'macros/logo.html' import logo_mark %}
 {% block title %}Spotflow - Sign In{% endblock %}
 {% block body_class %}auth-page{% endblock %}
 {% block navbar %}{% endblock %}
@@ -21,7 +22,7 @@
 
     <div class="auth-form-panel">
         <div class="auth-card">
-            <div class="auth-brand-mark">P</div>
+            <div class="auth-brand-mark">{{ logo_mark(48) }}</div>
             <h2 class="auth-title">{% if mode == 'signup' %}Create account{% else %}Welcome back{% endif %}</h2>
             <p class="auth-subtitle">{% if mode == 'signup' %}Choose driver or admin and finish setup here.{% else %}Sign in as a driver or admin from this page.{% endif %}</p>
 
@@ -84,12 +85,12 @@
 
                 <div>
                     <label class="form-label" for="login-identifier">Username or email</label>
-                    <input type="text" name="email" id="login-identifier" class="form-control" required autofocus autocomplete="username" value="{% if request.args.get('demo') %}demo{% endif %}">
+                    <input type="text" name="email" id="login-identifier" class="form-control" required autofocus autocomplete="username" value="{% if request.args.get('demo2') %}demo2{% elif request.args.get('demo') %}demo{% endif %}">
                 </div>
                 <div>
                     <label class="form-label" for="login-password">Password</label>
                     <div class="pw-password-field">
-                        <input type="password" name="password" id="login-password" class="form-control" required autocomplete="current-password" value="{% if request.args.get('demo') %}demo123!{% endif %}">
+                        <input type="password" name="password" id="login-password" class="form-control" required autocomplete="current-password" value="{% if request.args.get('demo2') or request.args.get('demo') %}demo123!{% endif %}">
                         <button type="button" class="pw-password-toggle" data-target="login-password" aria-label="Show password" aria-pressed="false">
                             <svg class="pw-icon-eye" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                 <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/>
@@ -108,6 +109,9 @@
                 <p class="auth-switch-link mb-0 text-center">
                     Don't have an account?
                     <a href="{{ url_for('login', mode='signup') }}">Sign up</a>
+                </p>
+                <p class="auth-switch-link mb-0 text-center small text-muted mt-2">
+                    Pi / live edge: <a href="{{ url_for('login', demo2=1) }}">demo2</a> / <kbd>demo123!</kbd>, then code <kbd>456789</kbd>
                 </p>
             </form>
             {% endif %}

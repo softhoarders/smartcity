@@ -27,6 +27,39 @@
     --pw-map-height-tall: 540px;
 }
 
+.spotflow-logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    text-decoration: none;
+    color: inherit;
+}
+
+.spotflow-logo-img {
+    display: block;
+    width: var(--spotflow-logo-size, 32px);
+    height: var(--spotflow-logo-size, 32px);
+    object-fit: contain;
+    flex-shrink: 0;
+}
+
+.spotflow-logo-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--spotflow-logo-size, 32px);
+    height: var(--spotflow-logo-size, 32px);
+    flex-shrink: 0;
+    overflow: hidden;
+    border-radius: var(--pw-radius-sm, 8px);
+}
+
+.spotflow-logo-mark .spotflow-logo-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
 .terminal-body {
     min-height: 100vh;
     margin: 0;
@@ -138,9 +171,21 @@
     margin-bottom: 12px;
 }
 
-.terminal-topbar div {
+.terminal-topbar-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.terminal-topbar-brand > div {
     display: grid;
     gap: 4px;
+}
+
+.terminal-card-logo {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 14px;
 }
 
 .terminal-topbar strong {
@@ -1961,16 +2006,7 @@ h1, h2, h3, h4, h5, h6, .fw-bold {
 }
 
 .auth-brand-mark {
-    width: 48px;
-    height: 48px;
-    display: grid;
-    place-items: center;
     margin-bottom: 26px;
-    border-radius: 8px;
-    background: rgba(15, 23, 42, 0.82);
-    color: #fff;
-    font-weight: 800;
-    font-size: 1.25rem;
 }
 
 .auth-title {
@@ -2331,6 +2367,11 @@ h1, h2, h3, h4, h5, h6, .fw-bold {
 .has-bottom-nav {
     padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
 }
+/* Leaflet popups must sit above the mobile bottom nav (1030) */
+.has-bottom-nav .leaflet-pane.leaflet-popup-pane {
+    z-index: 1100;
+}
+
 .pw-bottom-nav {
     position: fixed;
     bottom: 0;
@@ -3576,18 +3617,48 @@ body:not(.has-bottom-nav) .pw-update-toast {
     cursor: not-allowed;
 }
 
+.fp-filter-icon {
+    display: block;
+    overflow: visible;
+}
+
+.fp-filter-bars,
+.fp-filter-close {
+    transform-origin: 12px 12px;
+    transition:
+        opacity 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+        transform 0.32s cubic-bezier(0.34, 1.2, 0.64, 1);
+}
+
+.fp-filter-close {
+    opacity: 0;
+    transform: rotate(-90deg) scale(0.5);
+}
+
 .fp-filter-toggle.is-active {
     color: var(--pw-accent);
+    background: rgba(10, 132, 255, 0.12);
 }
 
-.fp-filter-toggle.is-active .fp-filter-icon {
-    animation: fp-filter-wiggle 0.45s ease;
+.fp-filter-toggle.is-active .fp-filter-bars {
+    opacity: 0;
+    transform: rotate(90deg) scale(0.45);
 }
 
-@keyframes fp-filter-wiggle {
-    0%, 100% { transform: rotate(0deg); }
-    25% { transform: rotate(-8deg); }
-    75% { transform: rotate(8deg); }
+.fp-filter-toggle.is-active .fp-filter-close {
+    opacity: 1;
+    transform: rotate(0deg) scale(1);
+}
+
+.fp-filter-toggle:not(:disabled):active .fp-filter-icon {
+    transform: scale(0.88);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .fp-filter-bars,
+    .fp-filter-close {
+        transition-duration: 0.01ms;
+    }
 }
 
 .fp-search-input {
@@ -3617,6 +3688,14 @@ body:not(.has-bottom-nav) .pw-update-toast {
 
 .fp-map-wrap {
     max-width: 100%;
+}
+
+.has-bottom-nav #fp-results-section {
+    padding-bottom: 0.5rem;
+}
+
+.has-bottom-nav .fp-listing-card {
+    scroll-margin-bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
 }
 
 .fp-results-map {
@@ -3679,10 +3758,11 @@ body:not(.has-bottom-nav) .pw-update-toast {
 }
 
 .ms-spot-rate--off {
-    color: var(--pw-text-secondary, #8e8e93);
+    color: rgba(255, 255, 255, 0.72);
     font-weight: 500;
 }
 
+.ms-spot-view-btn,
 .ms-spot-settings-btn {
     display: inline-flex;
     align-items: center;
@@ -3692,10 +3772,11 @@ body:not(.has-bottom-nav) .pw-update-toast {
     border-radius: 12px;
     border: 1px solid rgba(255, 255, 255, 0.12);
     background: rgba(255, 255, 255, 0.04);
-    color: var(--pw-text-secondary, #aeaeb2);
+    color: rgba(255, 255, 255, 0.88);
     transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
+.ms-spot-view-btn:hover,
 .ms-spot-settings-btn:hover {
     background: rgba(10, 132, 255, 0.15);
     border-color: rgba(10, 132, 255, 0.35);
@@ -3716,11 +3797,26 @@ body:not(.has-bottom-nav) .pw-update-toast {
     background: #ff9f0a;
 }
 
-.ms-settings-modal {
-    max-width: 640px;
-    width: 100%;
-    max-height: min(90vh, 820px);
+.fp-modal.ms-settings-modal {
+    width: min(96vw, 960px);
+    max-width: none;
+    max-height: min(92vh, 880px);
+    padding: 2rem 2.25rem 1.75rem;
     overflow-y: auto;
+}
+
+body.my-spots-page .text-secondary,
+body.my-spots-page .form-text,
+body.my-spots-page .form-label,
+body.my-spots-page .ms-spot-card .text-secondary,
+.ms-settings-modal .text-secondary,
+.ms-settings-modal .form-text,
+.ms-settings-modal .form-label {
+    color: rgba(255, 255, 255, 0.88) !important;
+}
+
+body.my-spots-page .ms-spot-rate span.text-secondary {
+    color: rgba(255, 255, 255, 0.72) !important;
 }
 
 .ms-history-list .list-group-item {
@@ -4093,6 +4189,63 @@ body.ms-modal-open {
 .fp-waitlist-table td,
 .fp-waitlist-table th {
     vertical-align: middle;
+}
+
+.fp-trust-badge {
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+.fp-trust-badge--excellent,
+.fp-trust-badge--trusted {
+    background: rgba(48, 209, 88, 0.18);
+    color: #30d158;
+    border: 1px solid rgba(48, 209, 88, 0.35);
+}
+
+.fp-trust-badge--good,
+.fp-trust-badge--new {
+    background: rgba(10, 132, 255, 0.15);
+    color: #64b5ff;
+    border: 1px solid rgba(10, 132, 255, 0.28);
+}
+
+.fp-trust-badge--restricted,
+.fp-trust-badge--flagged {
+    background: rgba(255, 69, 58, 0.15);
+    color: #ff6961;
+    border: 1px solid rgba(255, 69, 58, 0.35);
+}
+
+.fp-route-badge {
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+}
+
+.fp-route-badge--direct {
+    background: rgba(10, 132, 255, 0.14);
+    color: #64b5ff;
+    border: 1px solid rgba(10, 132, 255, 0.25);
+}
+
+.fp-route-badge--flow {
+    background: rgba(191, 90, 242, 0.14);
+    color: #d8a8ff;
+    border: 1px solid rgba(191, 90, 242, 0.28);
+}
+
+.fp-route-hint {
+    color: var(--pw-text-secondary, #8e8e93);
+}
+
+.fp-passport-card {
+    border: 1px solid rgba(48, 209, 88, 0.15);
+}
+
+.fp-passport-metrics .fw-bold {
+    font-size: 1.25rem;
 }
 
 /* ===== Cross-page transitions ===== */

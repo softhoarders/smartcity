@@ -1,14 +1,19 @@
 {% extends "base.html" %}
+{% from 'macros/logo.html' import logo_img %}
 {% block title %}Spotflow — Verify sign-in{% endblock %}
 {% block content %}
 <div class="row justify-content-center">
     <div class="col-12 col-md-6 col-lg-5">
         <div class="card pw-card border-0 mt-4">
             <div class="card-body p-4 p-md-5">
-                <h1 class="h4 fw-bold mb-2">Check your email</h1>
+                <div class="mb-3">{{ logo_img(40) }}</div>
+                <h1 class="h4 fw-bold mb-2">Verify sign-in</h1>
                 <p class="text-secondary small mb-4">
-                    We sent a 6-digit verification code to <strong>{{ masked_email }}</strong>.
-                    Enter the code below to finish signing in. (Demo: no email is sent.)
+                    Every account uses a simulated email verification step (no email is sent).
+                    {% if masked_email %}
+                    Signing in as <strong>{{ masked_email }}</strong>.
+                    {% endif %}
+                    Enter code <strong>{{ mock_login_pin }}</strong> below to continue.
                 </p>
 
                 <form method="POST" action="{{ url_for('login_2fa') }}">
@@ -16,7 +21,7 @@
                         <label class="form-label">Verification code</label>
                         <input type="text" name="code" class="form-control form-control-lg text-center"
                                inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code"
-                               placeholder="000000" required autofocus>
+                               placeholder="{{ mock_login_pin }}" required autofocus>
                     </div>
                     <button type="submit" class="btn btn-primary w-100 py-2">Continue</button>
                 </form>

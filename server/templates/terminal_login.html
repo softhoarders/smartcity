@@ -1,14 +1,17 @@
+{% from 'macros/logo.html' import logo_img %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {% include "partials/favicon.html" %}
     <title>Terminal Login</title>
     <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet">
 </head>
 <body class="terminal-body">
     <main class="terminal-login">
         <form method="POST" class="terminal-card" autocomplete="off">
+            <div class="terminal-card-logo">{{ logo_img(40) }}</div>
             <h1>Terminal</h1>
             <p>Local admin access{% if loopback_only %} · loopback only{% endif %}</p>
             {% if error %}

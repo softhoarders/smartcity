@@ -114,13 +114,20 @@ def score_listing(
     price_score = max(0.0, 1.0 - price / 3000.0)
     avail_score = float(item.get("availability_score") or status_s)
 
+    route_bonus = 0.0
+    if item.get("route_kind") == "direct" and item.get("available_now"):
+        route_bonus = 0.06
+    elif item.get("route_kind") == "flow" and item.get("available_now"):
+        route_bonus = 0.04
+
     relevance = (
-        dist_score * 0.32
-        + price_score * 0.2
-        + status_s * 0.18
-        + avail_score * 0.15
+        dist_score * 0.28
+        + price_score * 0.18
+        + status_s * 0.16
+        + avail_score * 0.18
         + demand * 0.08
-        + (rating / 5.0) * 0.07
+        + (rating / 5.0) * 0.06
+        + route_bonus
     )
 
     item["distance_km"] = round(distance_km, 2)
@@ -174,6 +181,8 @@ def filter_and_sort_listings(
         scored.sort(key=lambda x: x["distance_km"])
     elif sort == "availability":
         scored.sort(key=lambda x: (-(x.get("availability_score") or 0), -x["score"]))
+    elif sort == "walk":
+        scored.sort(key=lambda x: (x.get("walk_minutes") or 99, -x["score"]))
     else:
         scored.sort(key=lambda x: -x["score"])
 
