@@ -16,7 +16,7 @@ self.addEventListener('push', function(event) {
         vibrate: [100, 50, 100],
         data: {
             dateOfArrival: Date.now(),
-            primaryKey: '2'
+            url: payload.url || '/portal/my-spots',
         }
     };
 
@@ -27,7 +27,17 @@ self.addEventListener('push', function(event) {
 
 self.addEventListener('notificationclick', function(event) {
     event.notification.close();
+    const target = event.notification.data?.url || "/portal/my-spots";
     event.waitUntil(
-        clients.openWindow('/')
+        clients.matchAll({ type: "window", includeUncontrolled: true }).then((windowClients) => {
+            for (const client of windowClients) {
+                if (client.url.includes(target) && "focus" in client) {
+                    return client.focus();
+                }
+            }
+            if (clients.openWindow) {
+                return clients.openWindow(target);
+            }
+        })
     );
 });

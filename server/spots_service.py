@@ -69,7 +69,7 @@ def transfer_spots(
 
 
 def lei_to_spots(lei: int) -> int:
-    return int(lei) * config.SPOT_TO_LEI
+    return spot_prices.credits_to_hundredths(int(lei) * config.SPOT_TO_LEI)
 
 
 def calculate_instant_total(listing: SpotListing, hours: int) -> int:
@@ -387,17 +387,22 @@ def mock_topup(user: User, lei_amount: int) -> int:
 def activate_subscription(user: User) -> None:
     """Charge monthly subscription (50 lei) and grant 50 Spots."""
     fee = config.SUBSCRIPTION_MONTHLY_LEI
-    grant = config.SUBSCRIPTION_MONTHLY_SPOTS
+    grant = spot_prices.credits_to_hundredths(config.SUBSCRIPTION_MONTHLY_SPOTS)
     spots_fee = lei_to_spots(fee)
 
     if user_balance(user) < spots_fee:
         raise ValueError(
-            f"You need at least {spots_fee} {config.WALLET_CURRENCY_NAME.lower()} ({fee} lei) on your balance to activate subscription, "
+            f"You need at least {config.SUBSCRIPTION_MONTHLY_LEI} {config.WALLET_CURRENCY_NAME.lower()} ({fee} lei) on your balance to activate subscription, "
             "or use the card checkout to pay in lei."
         )
 
     debit_spots(user, spots_fee, "subscription", f"Monthly subscription ({fee} lei)")
-    credit_spots(user, grant, "subscription_grant", f"Monthly {config.WALLET_CURRENCY_NAME.lower()} grant ({grant} {config.WALLET_CURRENCY_NAME})")
+    credit_spots(
+        user,
+        grant,
+        "subscription_grant",
+        f"Monthly {config.WALLET_CURRENCY_NAME.lower()} grant ({config.SUBSCRIPTION_MONTHLY_SPOTS} {config.WALLET_CURRENCY_NAME})",
+    )
     now = _utcnow()
     user.subscription_active = True
     if not user.subscription_started_at:
@@ -408,7 +413,7 @@ def activate_subscription(user: User) -> None:
 
 def subscribe_with_card_mock(user: User) -> None:
     """Mock card payment: pay 50 lei subscription and receive 50 Spots (no balance debit)."""
-    grant = config.SUBSCRIPTION_MONTHLY_SPOTS
+    grant = spot_prices.credits_to_hundredths(config.SUBSCRIPTION_MONTHLY_SPOTS)
     now = _utcnow()
     credit_spots(
         user,
@@ -431,7 +436,7 @@ def process_subscription_renewals():
         if not next_bill or next_bill > now:
             continue
         fee = lei_to_spots(config.SUBSCRIPTION_MONTHLY_LEI)
-        grant = config.SUBSCRIPTION_MONTHLY_SPOTS
+        grant = spot_prices.credits_to_hundredths(config.SUBSCRIPTION_MONTHLY_SPOTS)
         try:
             debit_spots(user, fee, "subscription", "Monthly subscription renewal")
             credit_spots(user, grant, "subscription_grant", f"Monthly {config.WALLET_CURRENCY_NAME.lower()} grant")
@@ -457,10 +462,10 @@ def request_bank_withdrawal(
     from models import WalletWithdrawal
     import receipt_pdf
 
-    amount = config.WITHDRAWAL_CREDITS
+    amount = spot_prices.credits_to_hundredths(config.WITHDRAWAL_CREDITS)
     if user_balance(user) < amount:
         raise ValueError(
-            f"You need at least {amount} {config.WALLET_CURRENCY_NAME.lower()} to withdraw "
+            f"You need at least {config.WITHDRAWAL_CREDITS} {config.WALLET_CURRENCY_NAME.lower()} to withdraw "
             f"({config.WITHDRAWAL_LEI} lei)."
         )
     iban_clean = "".join(ch for ch in (iban or "").upper() if ch.isalnum())

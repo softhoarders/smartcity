@@ -2802,6 +2802,14 @@ body:not(.has-bottom-nav) .pw-update-toast {
     line-height: 1.45;
 }
 
+.portal-map-hero-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.45rem;
+    flex-shrink: 0;
+}
+
 .portal-map-fit-btn {
     display: inline-flex;
     align-items: center;
@@ -2889,8 +2897,10 @@ body:not(.has-bottom-nav) .pw-update-toast {
     display: flex;
     flex-wrap: wrap;
     gap: 0.35rem 0.65rem;
-    margin-top: 0.55rem;
-    padding: 0 0.15rem 0.65rem;
+    margin-top: 0;
+    padding: 0;
+    justify-content: flex-end;
+    max-width: 14rem;
 }
 
 .portal-map-legend-item {
@@ -3660,6 +3670,69 @@ body:not(.has-bottom-nav) .pw-update-toast {
 .ms-spot-header {
     cursor: pointer;
     color: inherit;
+}
+
+.ms-spot-rate {
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: var(--pw-text);
+}
+
+.ms-spot-rate--off {
+    color: var(--pw-text-secondary, #8e8e93);
+    font-weight: 500;
+}
+
+.ms-spot-settings-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--pw-text-secondary, #aeaeb2);
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.ms-spot-settings-btn:hover {
+    background: rgba(10, 132, 255, 0.15);
+    border-color: rgba(10, 132, 255, 0.35);
+    color: #64d2ff;
+}
+
+.ms-spot-pending-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.35rem;
+    height: 1.35rem;
+    padding: 0 0.35rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #1c1c1e;
+    background: #ff9f0a;
+}
+
+.ms-settings-modal {
+    max-width: 640px;
+    width: 100%;
+    max-height: min(90vh, 820px);
+    overflow-y: auto;
+}
+
+.ms-history-list .list-group-item {
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+.ms-push-consent {
+    border-radius: 14px;
+}
+
+body.ms-modal-open {
+    overflow: hidden;
 }
 
 .ms-spot-card.is-open .ms-spot-header h2 {

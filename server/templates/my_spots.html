@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros/ui.html" import breadcrumb, empty_state %}
+{% from "macros/ui.html" import breadcrumb, empty_state, booking_status_badge %}
 {% block title %}Spotflow — My Parking Spots{% endblock %}
 {% block content %}
 <div class="row justify-content-center mb-4">
@@ -9,6 +9,8 @@
         <div class="mb-4 mt-2">
             <h1 class="h3 fw-bold mb-1">My spots</h1>
             <p class="text-secondary mb-0">Claim monitored spots and offer them for rent.</p>
+        </div>
+
         </div>
 
         {% if claimable %}
@@ -23,13 +25,11 @@
                             <span class="fw-semibold">{{ d.spot_label }}</span>
                             <span class="text-secondary small d-block">{{ d.name }} · plate {{ d.assigned_plate }}</span>
                         </div>
-                        {% if not (is_demo is defined and is_demo) %}
                         <form method="POST" action="{{ url_for('my_spots') }}" class="m-0">
                             <input type="hidden" name="action" value="claim">
                             <input type="hidden" name="device_id" value="{{ d.id }}">
                             <button type="submit" class="btn btn-sm btn-primary">Claim ownership</button>
                         </form>
-                        {% endif %}
                     </li>
                     {% endfor %}
                 </ul>
@@ -40,213 +40,30 @@
         {% if owned %}
         {% for item in owned %}
         {% set listing = item.listing %}
-        <div class="card pw-card border-0 mb-4 ms-spot-card">
+        <div class="card pw-card border-0 mb-3 ms-spot-card" id="spot-{{ item.device.id }}">
             <div class="card-body p-4">
-                <button type="button" class="ms-spot-header w-100 text-start border-0 bg-transparent p-0"
-                        data-ms-spot-toggle aria-expanded="false" aria-controls="ms-panel-{{ item.device.id }}">
-                    <div class="d-flex justify-content-between flex-wrap gap-2">
-                        <div>
-                            <h2 class="h5 fw-bold mb-1">{{ item.device.spot_label }}</h2>
-                            <p class="text-secondary small mb-0">{{ item.device.name }}
-                                {% if listing and listing.location_zone %}
-                                · <span class="text-primary">{{ listing.location_zone }}</span> zone
-                                {% endif %}
-                            </p>
-                            <p class="small text-secondary mb-0 mt-1">Tap for promo codes &amp; settings</p>
-                        </div>
+                <div class="d-flex justify-content-between align-items-start gap-3">
+                    <div class="min-w-0">
+                        <h2 class="h5 fw-bold mb-1">{{ item.device.spot_label }}</h2>
+                        <p class="text-secondary small mb-0">{{ item.device.name }}</p>
                         {% if listing and listing.is_active %}
-                        <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle">Listed · {{ item.instant_display }} {{ currency_name }}/h</span>
+                        <p class="ms-spot-rate mb-0 mt-2">{{ item.instant_display }} <span class="text-secondary fw-normal">{{ currency_name }}/h</span></p>
                         {% else %}
-                        <span class="badge bg-secondary bg-opacity-10 text-secondary">Not listed</span>
+                        <p class="ms-spot-rate ms-spot-rate--off mb-0 mt-2">Not listed</p>
                         {% endif %}
                     </div>
-                </button>
-
-                <div class="ms-spot-panel" id="ms-panel-{{ item.device.id }}" hidden>
-                {% if listing and not (is_demo is defined and is_demo) %}
-                <div class="ms-promo-block mt-3 mb-4">
-                    <h3 class="h6 fw-bold mb-2">Promo codes</h3>
-                    <p class="text-secondary small mb-3">Share codes for booking discounts on this spot.</p>
-                    {% if item.promos %}
-                    <ul class="list-group list-group-flush mb-3">
-                        {% for promo in item.promos %}
-                        <li class="list-group-item px-0">
-                            <code class="pw-plate-badge">{{ promo.code }}</code>
-                            <span class="small text-secondary ms-2">
-                                {% if promo.bonus_percent %}{{ promo.bonus_percent }}% off{% endif %}
-                                {% if promo.bonus_spots %}{{ promo.bonus_spots }} {{ currency_name }} off{% endif %}
-                            </span>
-                        </li>
-                        {% endfor %}
-                    </ul>
-                    {% endif %}
-                    <form method="POST" action="{{ url_for('my_spots') }}" class="row g-2 align-items-end">
-                        <input type="hidden" name="action" value="create_promo">
-                        <input type="hidden" name="listing_id" value="{{ listing.id }}">
-                        <input type="hidden" name="promo_kind" value="booking_discount">
-                        <div class="col-md-3">
-                            <label class="form-label small">Code</label>
-                            <input type="text" name="promo_code" class="form-control form-control-sm" required maxlength="16" placeholder="SAVE20">
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label small">% off</label>
-                            <input type="number" name="bonus_percent" class="form-control form-control-sm" min="0" max="100" value="15">
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label small">{{ currency_name }} off</label>
-                            <input type="number" name="bonus_spots" class="form-control form-control-sm" min="0" max="10" value="0">
-                        </div>
-                        <div class="col-md-2">
-                            <button type="submit" class="btn btn-primary btn-sm w-100">Create</button>
-                        </div>
-                    </form>
-                </div>
-                {% elif is_demo is defined and is_demo %}
-                <div class="ms-promo-block mt-3 mb-4">
-                    <p class="text-secondary small mb-0">Demo: spot owners can create promo codes (e.g. <code>SAVE20</code>) for booking discounts on their spots.</p>
-                </div>
-                {% endif %}
-                <hr class="my-3">
-                <form method="POST" action="{{ url_for('my_spots') }}" class="row g-3">
-                    <input type="hidden" name="action" value="save_listing">
-                    <input type="hidden" name="device_id" value="{{ item.device.id }}">
-
-                    <div class="col-12">
-                        <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox" name="is_active" id="active-{{ item.device.id }}" value="1"
-                                {% if listing and listing.is_active %}checked{% endif %}
-                                {% if is_demo is defined and is_demo %}disabled{% endif %}>
-                            <label class="form-check-label" for="active-{{ item.device.id }}">Offer this spot for rent</label>
-                        </div>
+                    <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                        {% if item.pending and item.pending|length %}
+                        <span class="ms-spot-pending-badge" title="Pending requests">{{ item.pending|length }}</span>
+                        {% endif %}
+                        <button type="button" class="ms-spot-settings-btn" data-ms-settings="{{ item.device.id }}"
+                                aria-label="Settings and booking history for {{ item.device.spot_label }}">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <circle cx="12" cy="12" r="3"/>
+                                <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+                            </svg>
+                        </button>
                     </div>
-
-                    <div class="col-md-6">
-                        <label class="form-label">Booking approval</label>
-                        <select name="approval_mode" class="form-select" {% if is_demo is defined and is_demo %}disabled{% endif %}>
-                            <option value="auto" {% if listing and listing.approval_mode == 'auto' %}selected{% endif %}>Automatic</option>
-                            <option value="manual" {% if listing and listing.approval_mode == 'manual' %}selected{% endif %}>Manual approval</option>
-                        </select>
-                    </div>
-
-                    <div class="col-md-6">
-                        <label class="form-label">Smart pricing</label>
-                        <select name="pricing_mode" class="form-select" {% if is_demo is defined and is_demo %}disabled{% endif %}>
-                            <option value="manual" {% if not listing or listing.pricing_mode == 'manual' %}selected{% endif %}>Manual — you set prices</option>
-                            <option value="suggest" {% if listing and listing.pricing_mode == 'suggest' %}selected{% endif %}>Suggest — we recommend rates, you accept</option>
-                            <option value="auto" {% if listing and listing.pricing_mode == 'auto' %}selected{% endif %}>Auto — prices update from demand</option>
-                        </select>
-                    </div>
-
-                    <div class="col-md-4">
-                        <label class="form-label">Min price ({{ currency_name }} / h)</label>
-                        <input type="number" name="owner_min_price" class="form-control" step="0.1" min="1"
-                            value="{% if listing %}{{ (listing.owner_min_tenths / 10) }}{% else %}{{ pricing_default_min }}{% endif %}"
-                            {% if is_demo is defined and is_demo %}disabled{% endif %}>
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label">Max price ({{ currency_name }} / h)</label>
-                        <input type="number" name="owner_max_price" class="form-control" step="0.1" min="1"
-                            value="{% if listing %}{{ (listing.owner_max_tenths / 10) }}{% else %}{{ pricing_default_max }}{% endif %}"
-                            {% if is_demo is defined and is_demo %}disabled{% endif %}>
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label">Your instant price ({{ currency_name }} / h)</label>
-                        <input type="number" name="instant_price" class="form-control" step="0.1" min="1"
-                            value="{% if listing %}{{ (listing.instant_price_tenths or listing.instant_price_per_hour * 10) / 10 }}{% else %}{{ default_instant_hourly }}{% endif %}"
-                            {% if is_demo is defined and is_demo %}disabled{% endif %}>
-                    </div>
-
-                    <div class="col-md-6">
-                        <label class="form-label">Schedule deposit ({{ currency_name }})</label>
-                        <input type="number" name="schedule_deposit" class="form-control" step="0.1" min="1"
-                            value="{% if listing %}{{ (listing.schedule_deposit_tenths or listing.schedule_deposit_spots * 10) / 10 }}{% else %}{{ default_schedule_deposit }}{% endif %}"
-                            {% if is_demo is defined and is_demo %}disabled{% endif %}>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label">Scheduled rate ({{ currency_name }} / h)</label>
-                        <input type="number" name="schedule_price" class="form-control" step="0.1" min="1"
-                            value="{% if listing %}{{ (listing.schedule_price_tenths or listing.schedule_price_per_hour * 10) / 10 }}{% else %}{{ default_schedule_hourly }}{% endif %}"
-                            {% if is_demo is defined and is_demo %}disabled{% endif %}>
-                    </div>
-
-                    <div class="col-12">
-                        <label class="form-label">Description (optional)</label>
-                        <textarea name="description" class="form-control" rows="2" {% if is_demo is defined and is_demo %}disabled{% endif %}>{{ listing.description if listing and listing.description else '' }}</textarea>
-                    </div>
-
-                    {% if listing and listing.suggested_instant_tenths and listing.pricing_mode == 'suggest' %}
-                    <div class="col-12">
-                        <div class="alert alert-info border-0 mb-0 py-3">
-                            <p class="fw-semibold mb-1">Suggested price</p>
-                            <p class="mb-1">{{ format_spots(listing.suggested_instant_tenths) }} {{ currency_name }}/h instant · {{ format_spots(listing.suggested_schedule_tenths) }} {{ currency_name }}/h scheduled</p>
-                            {% if listing.pricing_reason %}
-                            <p class="small text-secondary mb-2">{{ listing.pricing_reason }}</p>
-                            {% endif %}
-                            {% if listing.last_priced_at %}
-                            <p class="small text-secondary mb-0">Updated {{ listing.last_priced_at.strftime('%d %b %H:%M') }}</p>
-                            {% endif %}
-                        </div>
-                    </div>
-                    {% endif %}
-
-                    {% if not (is_demo is defined and is_demo) %}
-                    <div class="col-12">
-                        <button type="submit" class="btn btn-primary">Save listing</button>
-                    </div>
-                    {% endif %}
-                </form>
-
-                {% if listing and not (is_demo is defined and is_demo) %}
-                <div class="d-flex flex-wrap gap-2 mt-2">
-                    <form method="POST" action="{{ url_for('my_spots') }}" class="m-0">
-                        <input type="hidden" name="action" value="refresh_pricing">
-                        <input type="hidden" name="listing_id" value="{{ listing.id }}">
-                        <button type="submit" class="btn btn-sm btn-outline-primary">Refresh smart price</button>
-                    </form>
-                    {% if listing.suggested_instant_tenths and listing.pricing_mode == 'suggest' %}
-                    <form method="POST" action="{{ url_for('my_spots') }}" class="m-0">
-                        <input type="hidden" name="action" value="accept_suggestion">
-                        <input type="hidden" name="listing_id" value="{{ listing.id }}">
-                        <button type="submit" class="btn btn-sm btn-success">Accept suggestion</button>
-                    </form>
-                    {% endif %}
-                </div>
-                {% endif %}
-
-                {% if item.pending %}
-                <hr class="my-4">
-                <h3 class="h6 fw-bold mb-3">Pending approval</h3>
-                <ul class="list-group list-group-flush">
-                    {% for b in item.pending %}
-                    <li class="list-group-item px-0">
-                        <div class="d-flex justify-content-between flex-wrap gap-2">
-                            <div>
-                                <span class="badge bg-warning text-dark">{{ b.booking_type }}</span>
-                                <span class="fw-medium ms-1">{{ b.renter_plate }}</span>
-                                <span class="d-block small text-secondary">
-                                    {{ b.starts_at.strftime('%d %b %H:%M') }} – {{ b.ends_at.strftime('%d %b %H:%M') }}
-                                    · {{ b.total_spots }} {{ currency_name }}
-                                </span>
-                            </div>
-                            {% if not (is_demo is defined and is_demo) %}
-                            <div class="d-flex gap-2">
-                                <form method="POST" action="{{ url_for('my_spots') }}" class="m-0">
-                                    <input type="hidden" name="action" value="approve_booking">
-                                    <input type="hidden" name="booking_id" value="{{ b.id }}">
-                                    <button type="submit" class="btn btn-sm btn-success">Approve</button>
-                                </form>
-                                <form method="POST" action="{{ url_for('my_spots') }}" class="m-0" data-confirm="Reject this booking request?">
-                                    <input type="hidden" name="action" value="reject_booking">
-                                    <input type="hidden" name="booking_id" value="{{ b.id }}">
-                                    <button type="submit" class="btn btn-sm btn-outline-danger">Reject</button>
-                                </form>
-                            </div>
-                            {% endif %}
-                        </div>
-                    </li>
-                    {% endfor %}
-                </ul>
-                {% endif %}
                 </div>
             </div>
         </div>
@@ -274,34 +91,173 @@
             </div>
         </div>
         {% endif %}
-
-        {% if my_bookings %}
-        <div class="card pw-card border-0 mt-4">
-            <div class="card-body p-4">
-                <h2 class="h5 fw-bold mb-3">Bookings on your spots</h2>
-                <div class="table-responsive">
-                    <table class="table pw-table mb-0">
-                        <thead>
-                            <tr><th>Spot</th><th>Renter</th><th>When</th><th>Status</th><th class="text-end">{{ currency_name }}</th></tr>
-                        </thead>
-                        <tbody>
-                            {% for b in my_bookings %}
-                            <tr>
-                                <td>{{ b.listing.device.spot_label }}</td>
-                                <td>{{ b.renter_plate }}</td>
-                                <td class="small">{{ b.starts_at.strftime('%d %b %H:%M') }} – {{ b.ends_at.strftime('%H:%M') }}</td>
-                                <td><span class="badge bg-secondary">{{ b.status }}</span></td>
-                                <td class="text-end">{{ b.total_spots }}</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-        {% endif %}
     </div>
 </div>
+
+{% if owned %}
+<div class="fp-modal-backdrop" id="ms-settings-modal" hidden aria-hidden="true">
+    <div class="fp-modal ms-settings-modal" role="dialog" aria-modal="true" aria-labelledby="ms-settings-title">
+        <button type="button" class="fp-modal-close" data-ms-close aria-label="Close">×</button>
+
+        {% for item in owned %}
+        {% set listing = item.listing %}
+        <div class="ms-settings-panel" data-ms-panel="{{ item.device.id }}" hidden tabindex="-1">
+            <h2 class="h4 fw-bold mb-1" id="ms-settings-title">{{ item.device.spot_label }}</h2>
+            <p class="text-secondary small mb-4">{{ item.device.name }}</p>
+
+            <form method="POST" action="{{ url_for('my_spots') }}" class="row g-3 mb-4">
+                <input type="hidden" name="action" value="save_listing">
+                <input type="hidden" name="device_id" value="{{ item.device.id }}">
+
+                <div class="col-12">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" name="is_active" id="active-{{ item.device.id }}" value="1"
+                            {% if listing and listing.is_active %}checked{% endif %}>
+                        <label class="form-check-label" for="active-{{ item.device.id }}">Offer this spot for rent</label>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label" for="approval-{{ item.device.id }}">Booking approval</label>
+                    <select name="approval_mode" id="approval-{{ item.device.id }}" class="form-select">
+                        <option value="auto" {% if listing and listing.approval_mode == 'auto' %}selected{% endif %}>Automatic</option>
+                        <option value="manual" {% if listing and listing.approval_mode == 'manual' %}selected{% endif %}>Manual approval</option>
+                    </select>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label" for="pricing-{{ item.device.id }}">Smart pricing</label>
+                    <select name="pricing_mode" id="pricing-{{ item.device.id }}" class="form-select">
+                        <option value="manual" {% if not listing or listing.pricing_mode == 'manual' %}selected{% endif %}>Manual — you set prices</option>
+                        <option value="suggest" {% if listing and listing.pricing_mode == 'suggest' %}selected{% endif %}>Suggest — we recommend rates, you accept</option>
+                        <option value="auto" {% if listing and listing.pricing_mode == 'auto' %}selected{% endif %}>Auto — prices update from demand</option>
+                    </select>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Min price ({{ currency_name }} / h)</label>
+                    <input type="number" name="owner_min_price" class="form-control" step="0.01" min="1"
+                        value="{% if listing %}{{ listing_hundredths_form(listing.owner_min_tenths, (pricing_default_min * 100)|int) }}{% else %}{{ pricing_default_min }}{% endif %}">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Max price ({{ currency_name }} / h)</label>
+                    <input type="number" name="owner_max_price" class="form-control" step="0.01" min="1"
+                        value="{% if listing %}{{ listing_hundredths_form(listing.owner_max_tenths, (pricing_default_max * 100)|int) }}{% else %}{{ pricing_default_max }}{% endif %}">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Instant price ({{ currency_name }} / h)</label>
+                    <input type="number" name="instant_price" class="form-control" step="0.01" min="1"
+                        value="{% if listing %}{{ listing_hundredths_form(listing.instant_price_tenths, default_instant_hourly * 100) }}{% else %}{{ default_instant_hourly }}{% endif %}">
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label">Schedule deposit ({{ currency_name }})</label>
+                    <input type="number" name="schedule_deposit" class="form-control" step="0.01" min="1"
+                        value="{% if listing %}{{ listing_hundredths_form(listing.schedule_deposit_tenths, default_schedule_deposit * 100) }}{% else %}{{ default_schedule_deposit }}{% endif %}">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Scheduled rate ({{ currency_name }} / h)</label>
+                    <input type="number" name="schedule_price" class="form-control" step="0.01" min="1"
+                        value="{% if listing %}{{ listing_hundredths_form(listing.schedule_price_tenths, default_schedule_hourly * 100) }}{% else %}{{ default_schedule_hourly }}{% endif %}">
+                </div>
+
+                {% if listing and listing.suggested_instant_tenths and listing.pricing_mode == 'suggest' %}
+                <div class="col-12">
+                    <div class="alert alert-info border-0 mb-0 py-3">
+                        <p class="fw-semibold mb-1">Suggested price</p>
+                        <p class="mb-0">{{ format_spots(listing.suggested_instant_tenths) }} {{ currency_name }}/h instant · {{ format_spots(listing.suggested_schedule_tenths) }} {{ currency_name }}/h scheduled</p>
+                    </div>
+                </div>
+                {% endif %}
+
+                <div class="col-12">
+                    <button type="submit" class="btn btn-primary">Save settings</button>
+                </div>
+            </form>
+
+            {% if listing and not (is_demo is defined and is_demo) %}
+            <div class="d-flex flex-wrap gap-2 mb-4">
+                <form method="POST" action="{{ url_for('my_spots') }}" class="m-0">
+                    <input type="hidden" name="action" value="refresh_pricing">
+                    <input type="hidden" name="listing_id" value="{{ listing.id }}">
+                    <button type="submit" class="btn btn-sm btn-outline-primary">Refresh smart price</button>
+                </form>
+                {% if listing.suggested_instant_tenths and listing.pricing_mode == 'suggest' %}
+                <form method="POST" action="{{ url_for('my_spots') }}" class="m-0">
+                    <input type="hidden" name="action" value="accept_suggestion">
+                    <input type="hidden" name="listing_id" value="{{ listing.id }}">
+                    <button type="submit" class="btn btn-sm btn-outline-primary">Accept suggestion</button>
+                </form>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            <h3 class="h6 fw-bold mb-3">Requests &amp; history</h3>
+
+            {% if item.pending %}
+            <div class="mb-4">
+                <p class="small text-secondary mb-2">Awaiting your decision</p>
+                <ul class="list-group list-group-flush ms-history-list">
+                    {% for b in item.pending %}
+                    <li class="list-group-item px-0">
+                        <div class="d-flex justify-content-between flex-wrap gap-2 align-items-start">
+                            <div>
+                                <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
+                                    <span class="badge bg-warning bg-opacity-15 text-warning border border-warning-subtle">{{ b.booking_type }}</span>
+                                    {{ booking_status_badge(b.status) }}
+                                </div>
+                                <span class="fw-medium">{{ b.renter_plate }}</span>
+                                <span class="d-block small text-secondary">
+                                    {{ b.starts_at.strftime('%d %b %H:%M') }} – {{ b.ends_at.strftime('%d %b %H:%M') }}
+                                    · {{ format_credits(b.total_spots) }} {{ currency_name }}
+                                </span>
+                            </div>
+                            <div class="d-flex gap-2">
+                                <form method="POST" action="{{ url_for('my_spots') }}" class="m-0">
+                                    <input type="hidden" name="action" value="approve_booking">
+                                    <input type="hidden" name="booking_id" value="{{ b.id }}">
+                                    <button type="submit" class="btn btn-sm btn-primary">Approve</button>
+                                </form>
+                                <form method="POST" action="{{ url_for('my_spots') }}" class="m-0" data-confirm="Reject this booking request?">
+                                    <input type="hidden" name="action" value="reject_booking">
+                                    <input type="hidden" name="booking_id" value="{{ b.id }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger">Reject</button>
+                                </form>
+                            </div>
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            {% if item.history %}
+            <div class="table-responsive">
+                <table class="table pw-table mb-0">
+                    <thead>
+                        <tr><th>Plate</th><th>When</th><th>Type</th><th>Status</th><th class="text-end">{{ currency_name }}</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for b in item.history %}
+                        <tr>
+                            <td>{{ b.renter_plate }}</td>
+                            <td class="small">{{ b.starts_at.strftime('%d %b %H:%M') }} – {{ b.ends_at.strftime('%H:%M') }}</td>
+                            <td><span class="badge bg-secondary bg-opacity-10 text-secondary">{{ b.booking_type }}</span></td>
+                            <td>{{ booking_status_badge(b.status) }}</td>
+                            <td class="text-end">{{ format_credits(b.total_spots) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-secondary small mb-0">No past bookings yet.</p>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}

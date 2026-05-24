@@ -1,12 +1,10 @@
 """Fractional Credits prices stored as hundredths (100 = 1.00 Credit).
 
+Wallet balances and booking totals are also stored in hundredths.
 Legacy rows may still hold tenths (10 = 1.0); helpers normalize on read.
-Billing debits round up to whole Credits: ceil(hundredths / 100).
 """
 
 from __future__ import annotations
-
-import math
 
 from models import SpotListing
 
@@ -29,20 +27,23 @@ def format_hundredths(hundredths: int | None) -> str:
     return f"{whole}.{frac:02d}"
 
 
-def format_credits(credits: int | None) -> str:
-    """Whole Credits balance with two decimal places (e.g. 1000 → 1000.00)."""
-    if credits is None:
-        return "—"
-    return format_hundredths(int(credits) * 100)
+def format_credits(balance_hundredths: int | None) -> str:
+    """Wallet balance or booking total (hundredths → e.g. 100000 → 1000.00)."""
+    return format_hundredths(balance_hundredths)
 
 
-def format_credits_delta(amount: int | None) -> str:
+def format_credits_delta(amount_hundredths: int | None) -> str:
     """Signed ledger line (+1000.00 / -16.00)."""
-    if amount is None:
+    if amount_hundredths is None:
         return "—"
-    n = int(amount)
+    n = int(amount_hundredths)
     prefix = "+" if n > 0 else ""
-    return f"{prefix}{format_hundredths(abs(n) * 100)}"
+    return f"{prefix}{format_hundredths(abs(n))}"
+
+
+def credits_to_hundredths(credits: int) -> int:
+    """Convert whole-credit config amounts to wallet hundredths."""
+    return int(credits) * 100
 
 
 def format_tenths(tenths: int | None) -> str:
@@ -106,8 +107,8 @@ def effective_deposit_hundredths(listing: SpotListing) -> int:
 
 
 def hundredths_to_billable_spots(total_hundredths: int) -> int:
-    """Round up fractional Credits for wallet debits."""
-    return (int(total_hundredths) + 99) // 100
+    """Exact wallet debit in hundredths (305 × 2h → 610 = 6.10 Credits)."""
+    return int(total_hundredths)
 
 
 def tenths_to_billable_spots(total_tenths: int) -> int:

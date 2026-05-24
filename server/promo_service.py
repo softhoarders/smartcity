@@ -7,6 +7,7 @@ import secrets
 from datetime import datetime, timezone
 
 import config
+import spot_prices
 from models import db, PromoCode, ReferralCode, ReferralRedemption, User
 import spots_service
 
@@ -60,7 +61,7 @@ def apply_topup_promo(user: User, base_spots: int, code: str) -> tuple[int, str]
         raise ValueError(err)
     if promo.kind != "topup_bonus":
         raise ValueError("This code is not valid for top-up.")
-    bonus = int(promo.bonus_spots or 0)
+    bonus = spot_prices.credits_to_hundredths(int(promo.bonus_spots or 0))
     if promo.bonus_percent:
         bonus += max(0, (base_spots * int(promo.bonus_percent)) // 100)
     if bonus <= 0:
@@ -70,7 +71,7 @@ def apply_topup_promo(user: User, base_spots: int, code: str) -> tuple[int, str]
         user,
         bonus,
         "promo_bonus",
-        f"Promo {promo.code} (+{bonus} {config.WALLET_CURRENCY_NAME})",
+        f"Promo {promo.code} (+{spot_prices.format_credits(bonus)} {config.WALLET_CURRENCY_NAME})",
     )
     db.session.commit()
     return bonus, promo.code
@@ -145,9 +146,9 @@ def apply_booking_promo(listing_id: int, base_credits: int, code: str) -> tuple[
         raise ValueError("This code is not valid for this spot.")
     total = int(base_credits)
     if promo.bonus_percent:
-        total = max(1, total - (total * int(promo.bonus_percent)) // 100)
+        total = max(100, total - (total * int(promo.bonus_percent)) // 100)
     if promo.bonus_spots:
-        total = max(1, total - int(promo.bonus_spots))
+        total = max(100, total - spot_prices.credits_to_hundredths(int(promo.bonus_spots)))
     promo.uses_count = int(promo.uses_count or 0) + 1
     db.session.commit()
     return total, promo
@@ -170,8 +171,8 @@ def redeem_referral_on_signup(new_user: User, code: str) -> bool:
     db.session.add(ReferralRedemption(referral_code_id=ref.id, referee_user_id=new_user.id))
     ref.uses_count = int(ref.uses_count or 0) + 1
 
-    ref_bonus = config.REFERRAL_BONUS_REFERRER
-    new_bonus = config.REFERRAL_BONUS_REFEREE
+    ref_bonus = spot_prices.credits_to_hundredths(config.REFERRAL_BONUS_REFERRER)
+    new_bonus = spot_prices.credits_to_hundredths(config.REFERRAL_BONUS_REFEREE)
     if ref_bonus > 0:
         spots_service.credit_spots(
             referrer,

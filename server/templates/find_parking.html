@@ -9,12 +9,6 @@
     <div class="col-12 col-xl-10">
         {{ breadcrumb([{'url': url_for('account_settings'), 'label': 'Account'}, {'url': url_for('find_parking'), 'label': 'Find parking'}]) }}
 
-        {% if low_balance %}
-        <div class="alert alert-warning border-0 mb-3 py-2 small" role="status">
-            Low balance: you have {{ balance }} {{ currency_name }} (under {{ low_balance_threshold }}).
-            <a href="{{ url_for('wallet_topup') }}" class="alert-link">Top up</a> before booking.
-        </div>
-        {% endif %}
 
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start mb-3 mt-2 gap-3">
             <div>

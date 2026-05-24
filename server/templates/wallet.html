@@ -17,13 +17,6 @@
             </div>
         </div>
 
-        {% if low_balance %}
-        <div class="alert alert-warning border-0 mb-3 py-2 small">
-            Your balance is below {{ low_balance_threshold }} {{ currency_name }}.
-            <a href="{{ url_for('wallet_topup') }}" class="alert-link">Top up</a> before parking or subscriptions.
-        </div>
-        {% endif %}
-
         <div class="alert alert-secondary border-0 mb-4 py-3">
             <p class="mb-1 fw-semibold">How {{ currency_name }} work</p>
             <ul class="mb-0 small text-secondary ps-3">

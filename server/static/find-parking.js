@@ -44,19 +44,27 @@
         return Math.max(1, Math.floor((ends - starts) / 3600000) || 1);
     }
 
+    function formatCreditsFromHundredths(hundredths) {
+        const n = Math.max(0, Math.round(hundredths));
+        const whole = Math.floor(n / 100);
+        const frac = String(n % 100).padStart(2, "0");
+        return `${whole}.${frac}`;
+    }
+
     function billableCredits(hundredths) {
-        return Math.ceil(Math.max(0, hundredths) / 100);
+        return formatCreditsFromHundredths(hundredths);
     }
 
     function calcBookingQuote(listing, starts, ends) {
         const hours = bookingHours(starts, ends);
         if (!hours) {
-            return { hours: 0, total: 0, valid: false };
+            return { hours: 0, total: "0.00", totalHundredths: 0, valid: false };
         }
         const totalHundredths = (listing.rateHundredths || 0) * hours;
         return {
             hours,
-            total: billableCredits(totalHundredths),
+            total: formatCreditsFromHundredths(totalHundredths),
+            totalHundredths,
             valid: true,
         };
     }
@@ -257,9 +265,13 @@
             ? "Your payment is reserved. The spot owner will confirm shortly."
             : "You're all set. Your plate is authorized for this spot during your booking.";
 
+        const paidTotal =
+            typeof data.total === "number"
+                ? formatCreditsFromHundredths(data.total)
+                : String(data.total);
         const rows = [
             ["Spot", data.spot],
-            ["Paid", `${data.total} ${cfg.currencyName}`],
+            ["Paid", `${paidTotal} ${cfg.currencyName}`],
         ];
         if (data.starts && data.ends) rows.push(["When", `${data.starts} – ${data.ends}`]);
         else if (data.hours) rows.push(["Duration", `${data.hours} hour(s)`]);

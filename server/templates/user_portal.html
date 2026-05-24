@@ -29,13 +29,6 @@
     Need parking fast? Use <a href="{{ url_for('find_parking') }}#concierge">quick parking search</a> on Find parking — describe where and when you need a spot.
 </p>
 
-<div id="push-consent" class="pw-push-consent portal-push" hidden>
-    <p class="mb-0 small"><strong>Browser alerts</strong> — notify me when a violation is detected.</p>
-    <div class="d-flex gap-2 flex-shrink-0">
-        <button type="button" class="btn btn-primary btn-sm" id="push-enable-btn">Enable</button>
-        <button type="button" class="btn btn-outline-secondary btn-sm" id="push-dismiss-btn">Later</button>
-    </div>
-</div>
 
 {% if user_plates %}
 <div class="portal-stats" aria-label="Alert summary">
@@ -80,6 +73,12 @@
                     <span class="portal-map-fit-icon" aria-hidden="true">⌖</span>
                     Fit view
                 </button>
+                <div class="portal-map-legend" aria-hidden="false">
+                    <span class="portal-map-legend-item"><i class="portal-map-legend-dot portal-map-legend-dot--danger"></i> Needs action</span>
+                    <span class="portal-map-legend-item"><i class="portal-map-legend-dot portal-map-legend-dot--pending"></i> In review</span>
+                    <span class="portal-map-legend-item"><i class="portal-map-legend-dot portal-map-legend-dot--open"></i> Open</span>
+                    <span class="portal-map-legend-item"><i class="portal-map-legend-dot portal-map-legend-dot--resolved"></i> Resolved</span>
+                </div>
             </div>
         </div>
 
@@ -89,12 +88,6 @@
                     <span class="portal-map-loading-pulse" aria-hidden="true"></span>
                     <span>Loading map…</span>
                 </div>
-            </div>
-            <div class="portal-map-legend" aria-hidden="false">
-                <span class="portal-map-legend-item"><i class="portal-map-legend-dot portal-map-legend-dot--danger"></i> Needs action</span>
-                <span class="portal-map-legend-item"><i class="portal-map-legend-dot portal-map-legend-dot--pending"></i> In review</span>
-                <span class="portal-map-legend-item"><i class="portal-map-legend-dot portal-map-legend-dot--open"></i> Open</span>
-                <span class="portal-map-legend-item"><i class="portal-map-legend-dot portal-map-legend-dot--resolved"></i> Resolved</span>
             </div>
         </div>
 
@@ -304,23 +297,6 @@
         return outputArray;
     }
 
-    window.addEventListener('load', () => {
-        const consent = document.getElementById('push-consent');
-        const dismissed = localStorage.getItem('pw-push-dismissed');
-        const enabled = localStorage.getItem('pw-push-enabled');
-        if (consent && !dismissed && !enabled && 'PushManager' in window) {
-            consent.hidden = false;
-        }
-        document.getElementById('push-enable-btn')?.addEventListener('click', async () => {
-            await subscribeToPush();
-            localStorage.setItem('pw-push-enabled', '1');
-            if (consent) consent.hidden = true;
-        });
-        document.getElementById('push-dismiss-btn')?.addEventListener('click', () => {
-            localStorage.setItem('pw-push-dismissed', '1');
-            if (consent) consent.hidden = true;
-        });
-    });
 
     const evtSource = new EventSource("/stream");
     evtSource.onmessage = function(event) {
