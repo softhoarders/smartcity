@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% from "macros/ui.html" import breadcrumb %}
+{% block title %}Spotflow — Navigate to {{ spot_label }}{% endblock %}
+{% block body_class %}nav-parking-page{% endblock %}
+{% block main_class %}nav-parking-main{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+{% endblock %}
+{% block content %}
+<div class="nav-parking-shell">
+    <div class="nav-parking-header">
+        {{ breadcrumb([{'url': url_for('find_parking'), 'label': 'Find parking'}, {'label': 'Navigate'}]) }}
+        <div class="nav-parking-title-row">
+            <div>
+                <h1 class="h4 fw-bold mb-1">Navigate to {{ spot_label }}</h1>
+                <p class="text-secondary small mb-0">{{ location_name }}</p>
+            </div>
+            <a href="{{ url_for('find_parking') }}" class="btn btn-outline-secondary btn-sm nav-parking-back">Back</a>
+        </div>
+    </div>
+
+    <div class="nav-parking-layout">
+        <div class="nav-parking-map-col">
+            <div id="nav-parking-map" class="pw-map-frame nav-parking-map">
+                <div class="pw-map-loading" id="nav-parking-map-loading">Loading map…</div>
+            </div>
+            <div class="nav-parking-map-meta">
+                <span class="nav-parking-meta-chip" id="nav-route-summary">Calculating route…</span>
+                <button type="button" class="btn btn-sm btn-outline-primary" id="nav-recenter-btn">Recenter</button>
+            </div>
+        </div>
+
+        <aside class="nav-parking-panel card pw-card border-0" aria-label="Turn-by-turn directions">
+            <div class="card-body p-3 p-md-4">
+                <div class="nav-parking-panel-head">
+                    <h2 class="h6 fw-bold mb-0">Directions</h2>
+                    <button type="button" class="btn btn-link btn-sm p-0" id="nav-use-location">Use my location</button>
+                </div>
+
+                <div class="nav-parking-phase" id="nav-road-phase">
+                    <p class="nav-parking-phase-label small text-secondary mb-2">On the road</p>
+                    <ol class="nav-parking-steps list-unstyled mb-0" id="nav-road-steps" aria-live="polite">
+                        <li class="nav-parking-step nav-parking-step--loading">
+                            <span class="nav-parking-step-icon" aria-hidden="true">…</span>
+                            <span>Fetching driving directions…</span>
+                        </li>
+                    </ol>
+                </div>
+
+                <div class="nav-parking-phase nav-parking-phase--lot" id="nav-lot-phase">
+                    <p class="nav-parking-phase-label small text-secondary mb-2">In the parking lot</p>
+                    <ol class="nav-parking-steps list-unstyled mb-0" id="nav-lot-steps">
+                        {% for step in lot_steps %}
+                        <li class="nav-parking-step nav-parking-step--lot" data-kind="{{ step.kind }}">
+                            <span class="nav-parking-step-icon" aria-hidden="true"></span>
+                            <span>{{ step.instruction }}</span>
+                        </li>
+                        {% endfor %}
+                    </ol>
+                </div>
+
+                <div class="nav-parking-destination card border-0 mt-3">
+                    <div class="card-body p-3">
+                        <p class="small text-secondary mb-1">Your reserved bay</p>
+                        <p class="fw-bold mb-0">{{ spot_label }}</p>
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% from "macros/park_map.html" import park_map_assets %}
+{{ park_map_assets() }}
+<script src="{{ url_for('static', filename='navigate-parking.js') }}"></script>
+<script>
+window.SPOTFLOW_NAV_PARKING = {
+    spot: {{ spot | tojson }},
+    entrance: {{ entrance | tojson }},
+    lotSteps: {{ lot_steps | tojson }},
+    searchCenter: {{ search_center | tojson if search_center else 'null' }},
+};
+document.addEventListener("DOMContentLoaded", () => {
+    if (window.SpotflowNavigateParking) SpotflowNavigateParking.init(window.SPOTFLOW_NAV_PARKING);
+});
+</script>
+{% endblock %}

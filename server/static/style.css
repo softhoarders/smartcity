@@ -4423,3 +4423,191 @@ html.pw-page-leaving .landing-nav {
         transition: none;
     }
 }
+
+/* Navigate to parking spot */
+.nav-parking-main {
+    max-width: none;
+    padding: 0 0 5rem;
+}
+
+.nav-parking-page.has-bottom-nav .nav-parking-main {
+    padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
+}
+
+.nav-parking-shell {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 0 1rem 1.5rem;
+}
+
+.nav-parking-header {
+    padding-top: 0.5rem;
+}
+
+.nav-parking-title-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.nav-parking-layout {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    min-height: min(72vh, 720px);
+}
+
+@media (min-width: 992px) {
+    .nav-parking-layout {
+        grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.65fr);
+        align-items: stretch;
+    }
+}
+
+.nav-parking-map-col {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    min-height: 320px;
+}
+
+.nav-parking-map {
+    flex: 1 1 auto;
+    min-height: min(52vh, 520px);
+    height: auto;
+}
+
+.nav-parking-map-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.nav-parking-meta-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.35rem 0.75rem;
+    border-radius: 999px;
+    background: var(--pw-glass);
+    border: 1px solid var(--pw-border);
+    color: var(--pw-text-secondary);
+    font-size: 0.8125rem;
+}
+
+.nav-parking-panel {
+    max-height: min(72vh, 720px);
+    overflow: auto;
+}
+
+.nav-parking-panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.nav-parking-phase + .nav-parking-phase {
+    margin-top: 1.25rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--pw-border);
+}
+
+.nav-parking-phase-label {
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+
+.nav-parking-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+}
+
+.nav-parking-step {
+    display: grid;
+    grid-template-columns: 2rem 1fr;
+    gap: 0.65rem;
+    align-items: start;
+    padding: 0.65rem 0.75rem;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid transparent;
+    font-size: 0.9rem;
+    line-height: 1.45;
+}
+
+.nav-parking-step--active {
+    border-color: rgba(10, 132, 255, 0.45);
+    background: rgba(10, 132, 255, 0.1);
+}
+
+.nav-parking-step--lot {
+    border-color: rgba(48, 209, 88, 0.2);
+}
+
+.nav-parking-step--muted {
+    color: var(--pw-text-secondary);
+}
+
+.nav-parking-step-icon {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 10px;
+    display: grid;
+    place-items: center;
+    font-size: 0.85rem;
+    font-weight: 700;
+    background: rgba(10, 132, 255, 0.15);
+    color: var(--pw-accent);
+}
+
+.nav-parking-step--lot .nav-parking-step-icon {
+    background: rgba(48, 209, 88, 0.15);
+    color: var(--pw-success);
+}
+
+.nav-parking-step--lot[data-kind="enter"] .nav-parking-step-icon::before {
+    content: "IN";
+    font-size: 0.62rem;
+    letter-spacing: 0.04em;
+}
+
+.nav-parking-step--lot[data-kind="straight"] .nav-parking-step-icon::before {
+    content: "↑";
+}
+
+.nav-parking-step--lot[data-kind="turn"] .nav-parking-step-icon::before {
+    content: "↱";
+}
+
+.nav-parking-step--lot[data-kind="spot"] .nav-parking-step-icon::before {
+    content: "P";
+    font-weight: 800;
+}
+
+.nav-parking-step-meta {
+    display: block;
+    margin-top: 0.2rem;
+    font-size: 0.75rem;
+    color: var(--pw-text-secondary);
+}
+
+.nav-parking-destination {
+    background: rgba(48, 209, 88, 0.08);
+    border: 1px solid rgba(48, 209, 88, 0.25);
+}
+
+.pw-map-pin--user .pw-map-pin-user {
+    display: block;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #ffd60a;
+    box-shadow: 0 0 0 4px rgba(255, 214, 10, 0.35);
+}

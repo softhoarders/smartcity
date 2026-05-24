@@ -320,6 +320,22 @@
         modal.setAttribute("aria-hidden", "true");
     }
 
+    function buildNavigateUrl(data, cfg) {
+        const params = new URLSearchParams();
+        params.set("lat", String(data.lat));
+        params.set("lng", String(data.lng));
+        params.set("spot", data.spot || "");
+        if (data.location_name) params.set("name", data.location_name);
+        if (data.listing_id) params.set("listing_id", String(data.listing_id));
+        const sc = cfg.searchCenter;
+        if (sc?.lat != null && sc?.lng != null) {
+            params.set("from_lat", String(sc.lat));
+            params.set("from_lng", String(sc.lng));
+            if (sc.label) params.set("from_q", sc.label);
+        }
+        return `/portal/navigate-to-spot?${params.toString()}`;
+    }
+
     function showConfirmation(cfg) {
         const data = cfg.bookingConfirmation;
         if (!data) return;
@@ -328,6 +344,7 @@
         const body = document.getElementById("fp-confirm-body");
         const details = document.getElementById("fp-confirm-details");
         const title = document.getElementById("fp-confirm-title");
+        const navigateBtn = document.getElementById("fp-confirm-navigate");
         if (!modal || !body) return;
 
         const pending = data.status === "pending_approval";
@@ -351,13 +368,36 @@
             .map(([k, v]) => `<li><span class="text-secondary">${escapeHtml(k)}</span> <strong>${escapeHtml(v)}</strong></li>`)
             .join("");
 
+        if (navigateBtn) {
+            const canNavigate = data.lat != null && data.lng != null;
+            if (canNavigate) {
+                navigateBtn.href = buildNavigateUrl(data, cfg);
+                navigateBtn.hidden = false;
+            } else {
+                navigateBtn.hidden = true;
+                navigateBtn.removeAttribute("href");
+            }
+        }
+
         modal.hidden = false;
         modal.setAttribute("aria-hidden", "false");
 
         const cleanUrl = new URL(window.location.href);
-        ["booking_ok", "booking_spot", "booking_plate", "booking_total", "booking_hours", "booking_status", "booking_type", "booking_starts", "booking_ends"].forEach((k) =>
-            cleanUrl.searchParams.delete(k)
-        );
+        [
+            "booking_ok",
+            "booking_spot",
+            "booking_plate",
+            "booking_total",
+            "booking_hours",
+            "booking_status",
+            "booking_type",
+            "booking_starts",
+            "booking_ends",
+            "booking_lat",
+            "booking_lng",
+            "booking_location",
+            "booking_listing_id",
+        ].forEach((k) => cleanUrl.searchParams.delete(k));
         window.history.replaceState({}, "", cleanUrl.pathname + cleanUrl.search);
     }
 

@@ -54,20 +54,18 @@
     </nav>
     {% endblock %}
 
-    {% if not (current_user.is_authenticated and not current_user.is_admin and current_user.id != 0) %}
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages and not (current_user.is_authenticated and not current_user.is_admin and current_user.id != 0) %}
     <div class="container mt-4 {% block flash_class %}{% endblock %}" id="flash-container" aria-live="polite" aria-atomic="true">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
         {% for category, message in messages %}
         <div class="alert ios-alert ios-alert-{{ category if category != 'error' else 'danger' }} alert-dismissible fade show" role="alert">
             <span>{{ message }}</span>
             <button type="button" class="btn-close ios-alert-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
         {% endfor %}
-        {% endif %}
-        {% endwith %}
     </div>
     {% endif %}
+    {% endwith %}
 
     <main id="main" class="{% block main_class %}container py-4{% endblock %}">
         {% block content %}{% endblock %}

@@ -213,7 +213,7 @@
                 <div class="table-responsive">
                     <table class="table pw-table mb-0">
                         <thead>
-                            <tr><th>Spot</th><th>Plate</th><th>When</th><th>Type</th><th>Status</th></tr>
+                            <tr><th>Spot</th><th>Plate</th><th>When</th><th>Type</th><th>Status</th><th></th></tr>
                         </thead>
                         <tbody>
                             {% for b in renter_bookings %}
@@ -223,6 +223,11 @@
                                 <td class="small">{{ b.starts_at.strftime('%d %b %H:%M') }} – {{ b.ends_at.strftime('%d %b %H:%M') }}</td>
                                 <td>{{ b.booking_type }}</td>
                                 <td>{{ booking_status_badge(b.status) }}</td>
+                                <td class="text-end">
+                                    {% if b.listing.device.latitude and b.listing.device.longitude and b.status in ('active', 'approved') %}
+                                    <a href="{{ url_for('navigate_to_spot', lat=b.listing.device.latitude, lng=b.listing.device.longitude, spot=b.listing.device.spot_label, name=b.listing.device.name) }}" class="btn btn-link btn-sm p-0">Navigate</a>
+                                    {% endif %}
+                                </td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -338,7 +343,10 @@
         <h2 class="h5 fw-bold mb-2" id="fp-confirm-title">Booking confirmed</h2>
         <p class="text-secondary small mb-3" id="fp-confirm-body"></p>
         <ul class="fp-confirm-details list-unstyled small mb-3" id="fp-confirm-details"></ul>
-        <button type="button" class="btn btn-primary w-100" id="fp-confirm-done">Done</button>
+        <div class="d-grid gap-2">
+            <a href="#" class="btn btn-primary w-100" id="fp-confirm-navigate" hidden>Navigate to parking spot</a>
+            <button type="button" class="btn btn-outline-secondary w-100" id="fp-confirm-done">Done</button>
+        </div>
     </div>
 </div>
 {% endblock %}

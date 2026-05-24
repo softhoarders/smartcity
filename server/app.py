@@ -42,6 +42,7 @@ import waitlist_service
 import concierge_service
 import reputation_service
 import routing_service
+import parking_nav_service
 import gemini_client
 import demo_parking_data
 from geo_context import geocode_search
@@ -1169,6 +1170,20 @@ def _demo_apply_promo_bonus(base_hundredths: int, code: str) -> int:
     return demo_promos[norm]
 
 
+def _enrich_booking_confirm(device, confirm: dict) -> dict:
+    """Attach map coordinates for post-booking navigation."""
+    out = dict(confirm)
+    if device is None:
+        return out
+    lat = getattr(device, "latitude", None)
+    lng = getattr(device, "longitude", None)
+    if lat is not None and lng is not None:
+        out["lat"] = lat
+        out["lng"] = lng
+        out["location_name"] = getattr(device, "name", None) or ""
+    return out
+
+
 def _find_parking_search_redirect_args(item, *, booking_confirmation: dict):
     """Preserve search context and pass booking confirmation query params."""
     args = {}
@@ -1205,6 +1220,14 @@ def _find_parking_search_redirect_args(item, *, booking_confirmation: dict):
         args["booking_starts"] = booking_confirmation["starts"]
     if booking_confirmation.get("ends"):
         args["booking_ends"] = booking_confirmation["ends"]
+    if booking_confirmation.get("lat") is not None:
+        args["booking_lat"] = str(booking_confirmation["lat"])
+    if booking_confirmation.get("lng") is not None:
+        args["booking_lng"] = str(booking_confirmation["lng"])
+    if booking_confirmation.get("location_name"):
+        args["booking_location"] = booking_confirmation["location_name"]
+    if booking_confirmation.get("listing_id") is not None:
+        args["booking_listing_id"] = str(booking_confirmation["listing_id"])
     return args
 
 
@@ -1252,6 +1275,17 @@ def _render_find_parking_page(listings, user_plates, balance, renter_bookings, *
             "starts": request.args.get("booking_starts", ""),
             "ends": request.args.get("booking_ends", ""),
         }
+        booking_lat = request.args.get("booking_lat", type=float)
+        booking_lng = request.args.get("booking_lng", type=float)
+        if booking_lat is not None and booking_lng is not None:
+            booking_confirmation["lat"] = booking_lat
+            booking_confirmation["lng"] = booking_lng
+        booking_location = request.args.get("booking_location")
+        if booking_location:
+            booking_confirmation["location_name"] = booking_location
+        booking_listing_id = request.args.get("booking_listing_id", type=int)
+        if booking_listing_id:
+            booking_confirmation["listing_id"] = booking_listing_id
 
     enriched = availability_service.enrich_listing_items(
         [dict(x) for x in listings],
@@ -1762,14 +1796,18 @@ def _demo_process_find_parking_post(user_plates: list[str]):
                     "status": status,
                 },
             )
-            confirm = {
-                "spot": item["device"].spot_label,
-                "plate": renter_plate,
-                "total": total,
-                "hours": hours,
-                "status": status,
-                "type": "instant",
-            }
+            confirm = _enrich_booking_confirm(
+                item["device"],
+                {
+                    "spot": item["device"].spot_label,
+                    "plate": renter_plate,
+                    "total": total,
+                    "hours": hours,
+                    "status": status,
+                    "type": "instant",
+                    "listing_id": listing.id,
+                },
+            )
             return redirect(
                 url_for("find_parking", **_find_parking_search_redirect_args(item, booking_confirmation=confirm))
             )
@@ -1803,16 +1841,20 @@ def _demo_process_find_parking_post(user_plates: list[str]):
                     "status": status,
                 },
             )
-            confirm = {
-                "spot": item["device"].spot_label,
-                "plate": renter_plate,
-                "total": deposit,
-                "hours": hours,
-                "status": status,
-                "type": "scheduled",
-                "starts": starts_at.strftime("%d %b %H:%M"),
-                "ends": ends_at.strftime("%d %b %H:%M"),
-            }
+            confirm = _enrich_booking_confirm(
+                item["device"],
+                {
+                    "spot": item["device"].spot_label,
+                    "plate": renter_plate,
+                    "total": deposit,
+                    "hours": hours,
+                    "status": status,
+                    "type": "scheduled",
+                    "starts": starts_at.strftime("%d %b %H:%M"),
+                    "ends": ends_at.strftime("%d %b %H:%M"),
+                    "listing_id": listing.id,
+                },
+            )
             return redirect(
                 url_for("find_parking", **_find_parking_search_redirect_args(item, booking_confirmation=confirm))
             )
@@ -4143,14 +4185,18 @@ def api_concierge_book():
         )
         n8n_events.on_booking_event(booking, "requested")
         listing = SpotListing.query.get(listing_id)
-        confirm = {
-            "spot": listing.device.spot_label if listing and listing.device else "",
-            "plate": renter_plate,
-            "total": booking.total_spots,
-            "hours": intent.duration_hours,
-            "status": booking.status,
-            "type": booking.booking_type,
-        }
+        confirm = _enrich_booking_confirm(
+            listing.device if listing else None,
+            {
+                "spot": listing.device.spot_label if listing and listing.device else "",
+                "plate": renter_plate,
+                "total": booking.total_spots,
+                "hours": intent.duration_hours,
+                "status": booking.status,
+                "type": booking.booking_type,
+                "listing_id": listing.id if listing else None,
+            },
+        )
         redirect_url = url_for(
             "find_parking",
             **_find_parking_search_redirect_args(
@@ -4186,6 +4232,52 @@ def wallet_receipt(token):
         data,
         mimetype="application/pdf",
         headers={"Content-Disposition": f'inline; filename="spotflow-receipt-{token[:8]}.pdf"'},
+    )
+
+
+@app.route("/portal/navigate-to-spot")
+@login_required
+def navigate_to_spot():
+    """Turn-by-turn navigation to a booked parking bay."""
+    denied = _require_driver_portal()
+    if denied:
+        return denied
+
+    lat = request.args.get("lat", type=float)
+    lng = request.args.get("lng", type=float)
+    spot_label = (request.args.get("spot") or "").strip()
+    location_name = (request.args.get("name") or request.args.get("location") or "").strip()
+    listing_id = request.args.get("listing_id", type=int)
+
+    if (lat is None or lng is None) and listing_id:
+        listing = SpotListing.query.get(listing_id)
+        if listing and listing.device:
+            lat = listing.device.latitude
+            lng = listing.device.longitude
+            spot_label = spot_label or listing.device.spot_label
+            location_name = location_name or listing.device.name or ""
+
+    if lat is None or lng is None:
+        flash("This spot does not have map coordinates yet.", "warning")
+        return redirect(url_for("find_parking"))
+
+    plan = parking_nav_service.build_navigation_plan(lat, lng, spot_label, location_name)
+    search_center = None
+    if request.args.get("from_lat") and request.args.get("from_lng"):
+        search_center = {
+            "lat": request.args.get("from_lat", type=float),
+            "lng": request.args.get("from_lng", type=float),
+            "label": request.args.get("from_q") or "Your search",
+        }
+
+    return render_template(
+        "navigate_parking.html",
+        spot_label=plan["spot"]["label"],
+        location_name=plan["spot"]["location_name"] or location_name,
+        spot=plan["spot"],
+        entrance=plan["entrance"],
+        lot_steps=plan["lot_steps"],
+        search_center=search_center,
     )
 
 
@@ -4322,14 +4414,18 @@ def find_parking():
                     push_notify.notify_owner_booking_request(booking)
                 if booking.status != "pending_approval":
                     n8n_events.on_booking_event(booking, booking.status)
-                confirm = {
-                    "spot": listing.device.spot_label,
-                    "plate": renter_plate,
-                    "total": booking.total_spots,
-                    "hours": hours,
-                    "status": booking.status,
-                    "type": "instant",
-                }
+                confirm = _enrich_booking_confirm(
+                    listing.device,
+                    {
+                        "spot": listing.device.spot_label,
+                        "plate": renter_plate,
+                        "total": booking.total_spots,
+                        "hours": hours,
+                        "status": booking.status,
+                        "type": "instant",
+                        "listing_id": listing.id,
+                    },
+                )
                 return redirect(
                     url_for(
                         "find_parking",
@@ -4376,16 +4472,20 @@ def find_parking():
                     push_notify.notify_owner_booking_request(booking)
                 if booking.status != "pending_approval":
                     n8n_events.on_booking_event(booking, booking.status)
-                confirm = {
-                    "spot": listing.device.spot_label,
-                    "plate": renter_plate,
-                    "total": booking.deposit_spots or booking.total_spots,
-                    "hours": max(1, int((ends_at - starts_at).total_seconds() // 3600) or 1),
-                    "status": booking.status,
-                    "type": "scheduled",
-                    "starts": starts_at.strftime("%d %b %H:%M"),
-                    "ends": ends_at.strftime("%d %b %H:%M"),
-                }
+                confirm = _enrich_booking_confirm(
+                    listing.device,
+                    {
+                        "spot": listing.device.spot_label,
+                        "plate": renter_plate,
+                        "total": booking.deposit_spots or booking.total_spots,
+                        "hours": max(1, int((ends_at - starts_at).total_seconds() // 3600) or 1),
+                        "status": booking.status,
+                        "type": "scheduled",
+                        "starts": starts_at.strftime("%d %b %H:%M"),
+                        "ends": ends_at.strftime("%d %b %H:%M"),
+                        "listing_id": listing.id,
+                    },
+                )
                 return redirect(
                     url_for(
                         "find_parking",
