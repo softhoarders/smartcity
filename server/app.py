@@ -313,9 +313,10 @@ with app.app_context():
     except Exception:
         pass
 
-# Start background mailer worker
-mailer_worker = PhotoMailerWorker(app)
-mailer_worker.start()
+# Start background mailer worker (local/server only — not on Vercel serverless)
+if not config.IS_VERCEL:
+    mailer_worker = PhotoMailerWorker(app)
+    mailer_worker.start()
 
 def cleanup_old_files():
     cutoff = datetime.now() - timedelta(days=30)
@@ -1346,7 +1347,7 @@ def _default_demo_spot(device_id: int, base: datetime) -> dict:
                 "renter_plate": "IF-22-RST",
                 "starts_at": (base + timedelta(hours=5)).isoformat(),
                 "ends_at": (base + timedelta(hours=9)).isoformat(),
-                "total_spots": 24,
+                "total_spots": 2400,
             },
         ],
         "history": [
@@ -1357,7 +1358,7 @@ def _default_demo_spot(device_id: int, base: datetime) -> dict:
                 "renter_plate": "B-441-PKR",
                 "starts_at": (base - timedelta(days=3)).isoformat(),
                 "ends_at": (base - timedelta(days=3) + timedelta(hours=2)).isoformat(),
-                "total_spots": 12,
+                "total_spots": 1200,
             },
             {
                 "id": 499,
@@ -1366,7 +1367,7 @@ def _default_demo_spot(device_id: int, base: datetime) -> dict:
                 "renter_plate": "B-900-ZAB",
                 "starts_at": (base - timedelta(days=5)).isoformat(),
                 "ends_at": (base - timedelta(days=5) + timedelta(hours=1)).isoformat(),
-                "total_spots": 8,
+                "total_spots": 800,
             },
         ],
     }
@@ -3437,7 +3438,7 @@ def wallet_topup():
                 state = _demo_wallet_state()
                 state["subscription_active"] = True
                 _demo_wallet_credit(
-                    config.SUBSCRIPTION_MONTHLY_SPOTS,
+                    spot_prices.credits_to_hundredths(config.SUBSCRIPTION_MONTHLY_SPOTS),
                     f"Subscription · card ending {last4}",
                 )
                 flash(
@@ -3450,8 +3451,9 @@ def wallet_topup():
             if lei_amount < 1 or lei_amount > 5000:
                 flash("Enter an amount between 1 and 5000 lei.", "danger")
                 return redirect(url_for("wallet_topup", plan=plan))
+            topup_hundredths = spot_prices.credits_to_hundredths(lei_amount)
             token = receipt_pdf.new_receipt_token()
-            _demo_wallet_credit(lei_amount, f"Top-up · card ending {last4}", receipt_token=token)
+            _demo_wallet_credit(topup_hundredths, f"Top-up · card ending {last4}", receipt_token=token)
             receipt_pdf.save_receipt(
                 token,
                 "Wallet top-up",
@@ -3464,9 +3466,9 @@ def wallet_topup():
             promo_code = request.form.get("promo_code", "").strip()
             if promo_code:
                 try:
-                    bonus = _demo_apply_promo_bonus(lei_amount, promo_code)
+                    bonus = _demo_apply_promo_bonus(topup_hundredths, promo_code)
                     _demo_wallet_credit(bonus, f"Promo {promo_service.normalize_code(promo_code)} bonus")
-                    flash(f"Promo applied: +{bonus} {config.WALLET_CURRENCY_NAME.lower()}.", "success")
+                    flash(f"Promo applied: +{spot_prices.format_credits(bonus)} {config.WALLET_CURRENCY_NAME.lower()}.", "success")
                 except ValueError as exc:
                     flash(str(exc), "warning")
             flash(
