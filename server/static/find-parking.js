@@ -87,7 +87,64 @@
         return { start, end };
     }
 
-    function initMap(cfg) {
+    function markersFromConciergeResults(results, cfg) {
+        const currency = cfg.currencyName || "Credits";
+        return (results || [])
+            .filter((r) => r.lat != null && r.lng != null)
+            .map((r) => {
+                const route = r.route_label ? `${r.route_label} · ` : "";
+                const avail = r.prediction_label || (r.available_now ? "Available now" : "Check availability");
+                return {
+                    lat: r.lat,
+                    lng: r.lng,
+                    title: r.spot_label,
+                    subtitle: `${route}${r.name || ""} · ${r.distance_km ?? "—"} km · ${avail}`,
+                    status: "empty",
+                    statusLabel: avail,
+                    listingId: r.listing_id,
+                    actionHtml: `<button type="button" class="btn btn-sm btn-primary fp-map-book-btn" data-listing-id="${r.listing_id}">Pay &amp; park</button>`,
+                };
+            });
+    }
+
+    function syncSearchFields(center) {
+        if (!center) return;
+        const q = document.getElementById("fp-search-input");
+        const lat = document.getElementById("fp-lat");
+        const lng = document.getElementById("fp-lng");
+        const filtersQ = document.querySelector("#fp-filters-form input[name='q']");
+        const filtersLat = document.querySelector("#fp-filters-form input[name='lat']");
+        const filtersLng = document.querySelector("#fp-filters-form input[name='lng']");
+        const label = center.label || "";
+        if (q) q.value = label;
+        if (lat) lat.value = center.lat;
+        if (lng) lng.value = center.lng;
+        if (filtersQ) filtersQ.value = label;
+        if (filtersLat) filtersLat.value = center.lat;
+        if (filtersLng) filtersLng.value = center.lng;
+
+        let meta = document.querySelector(".fp-search-meta");
+        if (!meta) {
+            const card = document.querySelector(".fp-search-card .card-body");
+            if (card) {
+                meta = document.createElement("p");
+                meta.className = "small text-secondary mb-0 mt-2 fp-search-meta";
+                card.appendChild(meta);
+            }
+        }
+        if (meta) {
+            meta.innerHTML = `Spots close to <strong>${escapeHtml(label)}</strong>`;
+        }
+    }
+
+    function revealMapSections() {
+        document.getElementById("fp-map-section")?.classList.remove("d-none");
+        document.getElementById("fp-results-section")?.classList.remove("d-none");
+        const ft = document.getElementById("fp-filter-toggle");
+        if (ft) ft.disabled = false;
+    }
+
+    function initMap(cfg, markerOverride) {
         const container = document.getElementById("rental-map");
         const loading = document.getElementById("rental-map-loading");
         const center = cfg.searchCenter;
@@ -99,7 +156,8 @@
             illegal: "Violation",
         };
 
-        const markers = (cfg.listings || [])
+        const markerSource = markerOverride != null ? markerOverride : cfg.listings || [];
+        const markers = markerSource
             .filter((m) => m.lat != null && m.lng != null)
             .map((m) => {
                 const statusGroup = m.statusGroup || (m.status === "illegal" ? "violation" : m.status);
@@ -124,10 +182,14 @@
             if (loading) loading.textContent = "No spots with map coordinates in this area";
         }
 
+        const mapZoomKm = cfg.mapZoomKm != null ? cfg.mapZoomKm : 2;
+
         SpotflowMaps.render("rental-map", markers, {
-            fitBounds: true,
-            padding: [56, 56],
-            maxZoom: 15,
+            fitBounds: false,
+            zoomAroundKm: mapZoomKm,
+            showRadiusCircle: false,
+            padding: [40, 40],
+            zoomMax: 15,
             destination: {
                 lat: center.lat,
                 lng: center.lng,
@@ -470,6 +532,44 @@
         });
     }
 
+    function buildConciergeUrl(center, intent) {
+        const url = new URL(window.location.pathname, window.location.origin);
+        url.searchParams.set("q", center.label || "");
+        url.searchParams.set("lat", center.lat);
+        url.searchParams.set("lng", center.lng);
+        if (intent?.arrive_at) {
+            const d = new Date(intent.arrive_at);
+            if (!Number.isNaN(d.getTime())) {
+                url.searchParams.set("target_at", toDatetimeLocalValue(d));
+            }
+        }
+        return url.pathname + url.search + "#concierge";
+    }
+
+    function applyConciergeSearch(center, results, cfg) {
+        if (!center?.lat || !center?.lng) return;
+        cfg = cfg || window.SPOTFLOW_FIND_PARKING || {};
+        cfg.searchCenter = {
+            lat: Number(center.lat),
+            lng: Number(center.lng),
+            label: center.label || "Your destination",
+        };
+        window.SPOTFLOW_FIND_PARKING = cfg;
+
+        syncSearchFields(cfg.searchCenter);
+        revealMapSections();
+
+        const mapMarkers = markersFromConciergeResults(results, cfg);
+        const loading = document.getElementById("rental-map-loading");
+        if (loading) {
+            loading.textContent = "Loading map…";
+            loading.style.display = "";
+        }
+        initMap(cfg, mapMarkers.length ? mapMarkers : null);
+
+        document.getElementById("fp-map-section")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+
     function init(cfg) {
         cfg = cfg || {};
         wireSearch(cfg);
@@ -483,5 +583,5 @@
         showConfirmation(cfg);
     }
 
-    window.SpotflowFindParking = { init, openBookModal };
+    window.SpotflowFindParking = { init, openBookModal, applyConciergeSearch, buildConciergeUrl };
 })();

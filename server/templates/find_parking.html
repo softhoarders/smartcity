@@ -35,9 +35,16 @@
                 <p class="small text-secondary mb-2">Describe where and when you need parking — we'll show matching spots on the map.</p>
                 <div id="fp-concierge-log" class="fp-concierge-log mb-2" aria-live="polite"></div>
                 <form id="fp-concierge-form" class="fp-concierge-form" data-no-loading data-no-transition="true">
-                    <textarea class="form-control form-control-sm mb-2" id="fp-concierge-input" rows="2"
-                              placeholder="e.g. Parking near Universitate tomorrow 6pm for 2 hours, max 5 {{ currency_name }}/h"></textarea>
-                    <button type="submit" class="btn btn-outline-primary btn-sm" id="fp-concierge-send">Search</button>
+                    <div class="fp-concierge-composer">
+                        <textarea class="form-control form-control-sm fp-concierge-input" id="fp-concierge-input" rows="2"
+                                  placeholder="Where and when do you need parking? e.g. Universitate tomorrow 6pm, 2 hours…"
+                                  aria-label="Describe where and when you need parking"></textarea>
+                        <button type="submit" class="fp-concierge-send" id="fp-concierge-send" aria-label="Send message">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                <path d="M2.01 21 23 12 2.01 3 2 10l15 2-15 2z"/>
+                            </svg>
+                        </button>
+                    </div>
                 </form>
                 <div id="fp-concierge-loading" class="fp-concierge-loading" hidden aria-hidden="true">
                     <div class="fp-concierge-loading__card" role="status">
@@ -347,6 +354,7 @@
 window.SPOTFLOW_FIND_PARKING = {
     currencyName: {{ currency_name | tojson }},
     radiusKm: {{ (filters.max_distance or search_radius_km) | tojson }},
+    mapZoomKm: 2,
     balance: {{ balance }},
     searchCenter: {{ search_center | tojson if search_center else 'null' }},
     bookingConfirmation: {{ booking_confirmation | tojson if booking_confirmation else 'null' }},

@@ -112,6 +112,13 @@
 
         resumeLoadingAfterNavigation();
 
+        input.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                form.requestSubmit();
+            }
+        });
+
         form.addEventListener("submit", async (e) => {
             e.preventDefault();
             const message = input.value.trim();
@@ -141,27 +148,36 @@
                 }
 
                 if (data.search_center && data.search_center.lat) {
-                    showLoading("Updating map", "Showing matching spots on the map…");
+                    showLoading("Updating map", "Placing your destination on the map…");
+                    if (window.SpotflowFindParking?.applyConciergeSearch) {
+                        window.SpotflowFindParking.applyConciergeSearch(
+                            data.search_center,
+                            data.results || [],
+                            cfg
+                        );
+                    }
+                    appendMessage(
+                        log,
+                        "assistant",
+                        `<p class="small mb-0">${(data.reply_text || "Found spots near your destination.").replace(/</g, "&lt;")}</p>`
+                    );
                     try {
                         sessionStorage.setItem(LOADING_KEY, "1");
                     } catch (_e) {
                         /* ignore */
                     }
-                    const url = new URL(window.location.pathname, window.location.origin);
-                    url.searchParams.set("q", data.search_center.label || "");
-                    url.searchParams.set("lat", data.search_center.lat);
-                    url.searchParams.set("lng", data.search_center.lng);
-                    if (data.intent && data.intent.arrive_at) {
-                        const d = new Date(data.intent.arrive_at);
-                        if (!Number.isNaN(d.getTime())) {
-                            const pad = (n) => String(n).padStart(2, "0");
-                            url.searchParams.set(
-                                "target_at",
-                                `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
-                            );
-                        }
-                    }
-                    window.location.href = url.pathname + url.search + "#concierge";
+                    const href = window.SpotflowFindParking?.buildConciergeUrl
+                        ? window.SpotflowFindParking.buildConciergeUrl(data.search_center, data.intent || {})
+                        : (() => {
+                              const url = new URL(window.location.pathname, window.location.origin);
+                              url.searchParams.set("q", data.search_center.label || "");
+                              url.searchParams.set("lat", data.search_center.lat);
+                              url.searchParams.set("lng", data.search_center.lng);
+                              return url.pathname + url.search + "#concierge";
+                          })();
+                    window.setTimeout(() => {
+                        window.location.href = href;
+                    }, 500);
                     return;
                 }
 

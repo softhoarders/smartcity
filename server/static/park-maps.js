@@ -41,6 +41,22 @@
                 ${action}`;
     }
 
+    function boundsAroundKm(lat, lng, km) {
+        const latDelta = km / 111.0;
+        const lngDelta = km / (111.0 * Math.cos((lat * Math.PI) / 180));
+        return [
+            [lat - latDelta, lng - lngDelta],
+            [lat + latDelta, lng + lngDelta],
+        ];
+    }
+
+    function zoomForKmRadius(km) {
+        if (km <= 1.5) return 15;
+        if (km <= 2.5) return 14;
+        if (km <= 4) return 13;
+        return 12;
+    }
+
     function pinHtml(marker, color) {
         if (marker.kind === "destination") {
             return `<div class="pw-map-pin pw-map-pin--destination" style="--pin-color:${color}"><span class="pw-map-pin-dest"></span></div>`;
@@ -119,7 +135,7 @@
                     .bindPopup(
                         popupHtml({
                             title: dest.label || "Your destination",
-                            subtitle: "Search center",
+                            subtitle: "Where you want to stay",
                             statusLabel: options.radiusKm ? `Within ${options.radiusKm} km` : "",
                             color: destColor,
                         }),
@@ -127,7 +143,7 @@
                     );
                 markerRefs.push({ data: dest, leaflet: destMarker });
 
-                if (options.radiusKm) {
+                if (options.showRadiusCircle && options.radiusKm) {
                     radiusLayer = L.circle([dest.lat, dest.lng], {
                         radius: options.radiusKm * 1000,
                         color: "rgba(100, 210, 255, 0.55)",
@@ -167,8 +183,17 @@
 
             const fitPadding = options?.padding || [52, 52];
             const maxZoom = options?.maxZoom ?? 16;
-            if (bounds.length === 1) {
-                map.setView(bounds[0], options?.zoom || 16);
+            const dest = options?.destination;
+            const zoomKm = options?.zoomAroundKm;
+
+            if (dest?.lat != null && dest?.lng != null && zoomKm) {
+                const localBounds = boundsAroundKm(dest.lat, dest.lng, zoomKm);
+                map.fitBounds(localBounds, {
+                    padding: fitPadding,
+                    maxZoom: options?.zoomMax ?? zoomForKmRadius(zoomKm),
+                });
+            } else if (bounds.length === 1) {
+                map.setView(bounds[0], options?.zoom || zoomForKmRadius(zoomKm || 2));
             } else if (bounds.length > 1 && options?.fitBounds !== false) {
                 map.fitBounds(bounds, { padding: fitPadding, maxZoom: maxZoom });
             } else if (!bounds.length) {

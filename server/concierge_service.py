@@ -14,7 +14,7 @@ import find_parking_service
 import gemini_client
 import spot_prices
 import spots_service
-from geo_context import geocode_search
+from geo_context import CITY_REGIONS, detect_city_from_text, geocode_search, normalize_city_name
 from models import SpotBooking, SpotListing, User
 
 logger = logging.getLogger(__name__)
@@ -32,10 +32,12 @@ class ConciergeIntent:
     needs_clarification: bool
     clarification_question: str | None
     user_summary: str
+    city: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "location_query": self.location_query,
+            "city": self.city,
             "arrive_at": self.arrive_at.isoformat(),
             "duration_hours": self.duration_hours,
             "max_price_per_hour_credits": self.max_price_per_hour_credits,
@@ -56,6 +58,7 @@ class ConciergeIntent:
             arrive_at = arrive_at.replace(tzinfo=timezone.utc)
         return cls(
             location_query=str(data.get("location_query") or "Bucharest"),
+            city=normalize_city_name(data.get("city")),
             arrive_at=arrive_at,
             duration_hours=max(1, min(72, int(data.get("duration_hours") or 2))),
             max_price_per_hour_credits=(
@@ -103,17 +106,52 @@ def _parse_arrive_at(raw: str | None, now: datetime) -> datetime:
         return now + timedelta(minutes=30)
 
 
+_CITY_LANDMARKS: dict[str, dict[str, str]] = {
+    "Bucharest": {
+        "universitate": "Piata Universitatii, Bucharest, Romania",
+        "university": "Piata Universitatii, Bucharest, Romania",
+        "victoriei": "Calea Victoriei, Bucharest, Romania",
+        "unirii": "Piata Unirii, Bucharest, Romania",
+        "old town": "Bucharest Old Town, Romania",
+        "centru vechi": "Bucharest Old Town, Romania",
+        "lipscani": "Lipscani, Bucharest Old Town, Romania",
+        "herastrau": "Herastrau Park, Bucharest, Romania",
+        "otopeni": "Henri Coanda Airport, Bucharest, Romania",
+    },
+    "Cluj-Napoca": {
+        "universitate": "Universitatea Babes-Bolyai, Cluj-Napoca, Romania",
+        "university": "Universitatea Babes-Bolyai, Cluj-Napoca, Romania",
+        "babes": "Universitatea Babes-Bolyai, Cluj-Napoca, Romania",
+        "bolyai": "Universitatea Babes-Bolyai, Cluj-Napoca, Romania",
+        "piezisa": "Piezisa, Cluj-Napoca, Romania",
+        "memorandumului": "Piata Memorandumului, Cluj-Napoca, Romania",
+        "unirii": "Piata Unirii, Cluj-Napoca, Romania",
+        "gara": "Cluj-Napoca railway station, Romania",
+    },
+    "Craiova": {
+        "universitate": "University of Craiova, Craiova, Romania",
+        "university": "University of Craiova, Craiova, Romania",
+        "centru": "Centrul Istoric, Craiova, Romania",
+        "unirii": "Piata Mihai Viteazu, Craiova, Romania",
+    },
+}
+
+
+def _resolve_location_query(message: str, city: str) -> str:
+    msg = (message or "").lower()
+    landmarks = _CITY_LANDMARKS.get(city, {})
+    for key in sorted(landmarks.keys(), key=len, reverse=True):
+        if key in msg:
+            return landmarks[key]
+    return f"{city}, Romania"
+
+
 def parse_intent_demo(message: str) -> ConciergeIntent:
     """Keyword stub when Gemini is unavailable or demo mode."""
     msg = (message or "").lower()
     now = _utcnow()
-    city = "Bucharest"
-    if "cluj" in msg:
-        city = "Cluj-Napoca"
-    elif "craiova" in msg:
-        city = "Craiova"
-    elif "old town" in msg or "centru" in msg:
-        city = "Bucharest Old Town"
+    city = detect_city_from_text(message) or "Bucharest"
+    location_query = _resolve_location_query(message, city)
 
     hours = 2
     m = re.search(r"(\d+)\s*h", msg)
@@ -134,14 +172,15 @@ def parse_intent_demo(message: str) -> ConciergeIntent:
             arrive += timedelta(hours=2)
 
     return ConciergeIntent(
-        location_query=city,
+        location_query=location_query,
+        city=city,
         arrive_at=arrive.astimezone(timezone.utc),
         duration_hours=hours,
         max_price_per_hour_credits=max_price,
         booking_type="either",
         needs_clarification=False,
         clarification_question=None,
-        user_summary=f"Parking near {city} for {hours}h",
+        user_summary=f"Parking near {location_query.split(',')[0]} for {hours}h",
     )
 
 
@@ -166,7 +205,8 @@ Request:
 
 Return JSON:
 {{
-  "location_query": "place to geocode in Romania",
+  "city": "Bucharest" | "Cluj-Napoca" | "Craiova" | null,
+  "location_query": "specific place or landmark to geocode, including the city when known (e.g. Universitatea Babes-Bolyai, Cluj-Napoca)",
   "arrive_at": "ISO-8601 datetime with timezone, e.g. 2026-05-24T20:00:00+03:00",
   "duration_hours": integer 1-72,
   "max_price_per_hour_credits": number or null,
@@ -183,8 +223,11 @@ Return JSON:
             max_output_tokens=600,
         )
         arrive = _parse_arrive_at(data.get("arrive_at"), _utcnow())
+        raw_city = normalize_city_name(data.get("city")) or detect_city_from_text(message)
+        location_query = str(data.get("location_query") or raw_city or "Bucharest")
         return ConciergeIntent(
-            location_query=str(data.get("location_query") or "Bucharest"),
+            location_query=location_query,
+            city=raw_city,
             arrive_at=arrive,
             duration_hours=max(1, min(72, int(data.get("duration_hours") or 2))),
             max_price_per_hour_credits=(
@@ -229,6 +272,8 @@ def _listing_result_payload(item: dict[str, Any], intent: ConciergeIntent) -> di
         "listing_id": listing.id,
         "spot_label": device.spot_label,
         "name": device.name,
+        "lat": getattr(device, "latitude", None),
+        "lng": getattr(device, "longitude", None),
         "distance_km": item.get("distance_km"),
         "instant_display": item.get("instant_display"),
         "schedule_display": item.get("schedule_display"),
@@ -260,15 +305,29 @@ def search_for_intent(
             results=[],
         )
 
-    geocoded = geocode_search(intent.location_query, limit=1)
+    geocoded = geocode_search(
+        intent.location_query,
+        limit=3,
+        city=intent.city or detect_city_from_text(intent.location_query),
+    )
     if geocoded:
         center = geocoded[0]
     else:
-        center = {
-            "label": intent.location_query,
-            "lat": config.BUCHAREST_CENTER_LAT,
-            "lng": config.BUCHAREST_CENTER_LNG,
-        }
+        city_name = intent.city or detect_city_from_text(intent.location_query) or "Bucharest"
+        region = CITY_REGIONS.get(city_name)
+        if region:
+            clat, clng = region["center"]
+            center = {
+                "label": intent.location_query,
+                "lat": clat,
+                "lng": clng,
+            }
+        else:
+            center = {
+                "label": intent.location_query,
+                "lat": config.BUCHAREST_CENTER_LAT,
+                "lng": config.BUCHAREST_CENTER_LNG,
+            }
 
     import availability_service
 
