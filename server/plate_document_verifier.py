@@ -14,7 +14,7 @@ import unicodedata
 from dataclasses import dataclass
 from typing import Any
 
-import requests
+import gemini_client
 
 import config
 
@@ -155,39 +155,6 @@ def _parse_verification_response(raw: str) -> dict[str, Any]:
     }
 
 
-def _gemini_generate(parts: list[dict[str, Any]]) -> str:
-    api_key = config.GEMINI_API_KEY
-    if not api_key:
-        raise RuntimeError("GEMINI_API_KEY is not configured")
-
-    model = config.GEMINI_MODEL
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-
-    payload = {
-        "contents": [{"role": "user", "parts": parts}],
-        "generationConfig": {
-            "temperature": 0.1,
-            "maxOutputTokens": 512,
-            "responseMimeType": "application/json",
-        },
-    }
-
-    resp = requests.post(url, params={"key": api_key}, json=payload, timeout=120)
-    resp.raise_for_status()
-    body = resp.json()
-
-    candidates = body.get("candidates") or []
-    if not candidates:
-        raise RuntimeError("Gemini returned no candidates")
-
-    content = candidates[0].get("content") or {}
-    out_parts = content.get("parts") or []
-    texts = [p.get("text", "") for p in out_parts if p.get("text")]
-    if not texts:
-        raise RuntimeError("Gemini returned empty text")
-    return "".join(texts)
-
-
 def _finalize_verification(
     parsed: dict[str, Any],
     claimed_plate: str,
@@ -283,7 +250,7 @@ def verify_plate_registration_document(
     else:
         return PlateVerificationResult(False, "Unsupported document type. Use PDF, DOC, or DOCX.")
 
-    raw = _gemini_generate(parts)
+    raw = gemini_client.generate_text(parts)
     try:
         parsed = _parse_verification_response(raw)
     except ValueError as exc:

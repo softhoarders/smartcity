@@ -312,7 +312,13 @@ class PromoCode(db.Model):
     uses_count = db.Column(db.Integer, default=0, nullable=False)
     active = db.Column(db.Boolean, default=True, nullable=False)
     expires_at = db.Column(db.DateTime, nullable=True)
+    owner_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True, index=True)
+    listing_id = db.Column(db.Integer, db.ForeignKey("spot_listings.id"), nullable=True, index=True)
+    label = db.Column(db.String(120), nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    owner = db.relationship("User", foreign_keys=[owner_user_id])
+    listing = db.relationship("SpotListing", foreign_keys=[listing_id])
 
 
 class ReferralCode(db.Model):
@@ -336,6 +342,29 @@ class ReferralRedemption(db.Model):
     referral_code_id = db.Column(db.Integer, db.ForeignKey("referral_codes.id"), nullable=False)
     referee_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, unique=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class SpotWaitlist(db.Model):
+    """Driver watchlist: notify or auto-book when a bay becomes available."""
+    __tablename__ = "spot_waitlists"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    listing_id = db.Column(db.Integer, db.ForeignKey("spot_listings.id"), nullable=False, index=True)
+    renter_plate = db.Column(db.String(20), nullable=False)
+    window_start = db.Column(db.DateTime, nullable=False)
+    window_end = db.Column(db.DateTime, nullable=False)
+    max_price_hundredths = db.Column(db.Integer, nullable=True)
+    auto_book = db.Column(db.Boolean, default=True, nullable=False)
+    status = db.Column(db.String(20), default="active", nullable=False)
+    failure_reason = db.Column(db.String(255), nullable=True)
+    fulfilled_booking_id = db.Column(db.Integer, db.ForeignKey("spot_bookings.id"), nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    expires_at = db.Column(db.DateTime, nullable=True)
+
+    user = db.relationship("User", backref=db.backref("spot_waitlists", lazy="dynamic"))
+    listing = db.relationship("SpotListing", backref=db.backref("waitlists", lazy="dynamic"))
+    fulfilled_booking = db.relationship("SpotBooking", foreign_keys=[fulfilled_booking_id])
 
 
 class WalletWithdrawal(db.Model):

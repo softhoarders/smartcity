@@ -26,9 +26,23 @@ def format_hundredths(hundredths: int | None) -> str:
         return "—"
     hundredths = int(hundredths)
     whole, frac = divmod(hundredths, 100)
-    if frac == 0:
-        return str(whole)
     return f"{whole}.{frac:02d}"
+
+
+def format_credits(credits: int | None) -> str:
+    """Whole Credits balance with two decimal places (e.g. 1000 → 1000.00)."""
+    if credits is None:
+        return "—"
+    return format_hundredths(int(credits) * 100)
+
+
+def format_credits_delta(amount: int | None) -> str:
+    """Signed ledger line (+1000.00 / -16.00)."""
+    if amount is None:
+        return "—"
+    n = int(amount)
+    prefix = "+" if n > 0 else ""
+    return f"{prefix}{format_hundredths(abs(n) * 100)}"
 
 
 def format_tenths(tenths: int | None) -> str:

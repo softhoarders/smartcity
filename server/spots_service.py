@@ -132,6 +132,13 @@ def refresh_booking_statuses():
                 booking = SpotBooking.query.get(booking_id)
                 if booking:
                     n8n_events.on_booking_event(booking, new_status)
+                    if new_status == "completed" and booking.listing:
+                        try:
+                            import waitlist_service
+
+                            waitlist_service.on_booking_completed(booking.listing.device_id)
+                        except Exception:
+                            pass
         except Exception:
             pass
 
@@ -195,6 +202,7 @@ def create_instant_booking(
     renter_plate: str,
     hours: int,
     starts_at: datetime | None = None,
+    promo_code: str | None = None,
 ) -> SpotBooking:
     refresh_booking_statuses()
     if not listing.is_active:
@@ -205,6 +213,10 @@ def create_instant_booking(
     starts_at = _aware(starts_at or _utcnow())
     ends_at = starts_at + timedelta(hours=max(config.MIN_INSTANT_HOURS, min(hours, config.MAX_BOOKING_HOURS)))
     total = calculate_instant_total(listing, hours)
+    if promo_code:
+        import promo_service
+
+        total, _promo = promo_service.apply_booking_promo(listing.id, total, promo_code)
 
     overlap = (
         SpotBooking.query.filter(
@@ -253,6 +265,7 @@ def create_scheduled_booking(
     renter_plate: str,
     starts_at: datetime,
     ends_at: datetime,
+    promo_code: str | None = None,
 ) -> SpotBooking:
     refresh_booking_statuses()
     if not listing.is_active:
@@ -268,6 +281,11 @@ def create_scheduled_booking(
         raise ValueError("Cannot schedule in the past")
 
     total, deposit, _hours = calculate_scheduled_total(listing, starts_at, ends_at)
+    if promo_code:
+        import promo_service
+
+        total, _promo = promo_service.apply_booking_promo(listing.id, total, promo_code)
+        deposit = max(1, min(deposit, total))
 
     overlap = (
         SpotBooking.query.filter(

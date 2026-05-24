@@ -6,15 +6,21 @@ from dotenv import load_dotenv
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 
+IS_VERCEL = os.environ.get("VERCEL") == "1"
+# Serverless filesystem is read-only except /tmp; keep DB and uploads there on Vercel.
+DATA_DIR = os.path.join("/tmp", "spotflow") if IS_VERCEL else BASE_DIR
+if IS_VERCEL:
+    os.makedirs(DATA_DIR, exist_ok=True)
+
 PORT = 2026
 SECRET_KEY = os.environ.get("PARKWATCH_SECRET", "parkwatch-dev-key-change-in-production")
-DATABASE_URI = f"sqlite:///{os.path.join(BASE_DIR, 'parkwatch.db')}"
+DATABASE_URI = f"sqlite:///{os.path.join(DATA_DIR, 'parkwatch.db')}"
 
 # Device is considered offline after this many seconds without heartbeat
 OFFLINE_THRESHOLD_SECONDS = 120
 
 # Upload folder for fine evidence images
-UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
+UPLOAD_FOLDER = os.path.join(DATA_DIR, "uploads")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # Admin credentials
@@ -47,7 +53,7 @@ MAIL_USERNAME = os.environ.get("MAIL_USERNAME")
 MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD")
 MAIL_DEFAULT_SENDER = os.environ.get("MAIL_DEFAULT_SENDER", "noreply@spotflow.com")
 
-MOCK_MAIL_DIR = os.path.join(BASE_DIR, "mail_queue")
+MOCK_MAIL_DIR = os.path.join(DATA_DIR, "mail_queue")
 os.makedirs(MOCK_MAIL_DIR, exist_ok=True)
 
 # ---------------------------------------------------------------------------
@@ -58,9 +64,10 @@ WALLET_CURRENCY_SINGULAR = os.environ.get("WALLET_CURRENCY_SINGULAR", "Credit")
 SPOT_TO_LEI = 1
 SUBSCRIPTION_MONTHLY_LEI = int(os.environ.get("SPOTS_SUBSCRIPTION_LEI", "50"))
 SUBSCRIPTION_MONTHLY_SPOTS = int(os.environ.get("SPOTS_SUBSCRIPTION_GRANT", "50"))
-DEFAULT_INSTANT_PRICE_PER_HOUR = int(os.environ.get("SPOTS_INSTANT_HOURLY", "10"))
-DEFAULT_SCHEDULE_DEPOSIT = int(os.environ.get("SPOTS_SCHEDULE_DEPOSIT", "5"))
-DEFAULT_SCHEDULE_PRICE_PER_HOUR = int(os.environ.get("SPOTS_SCHEDULE_HOURLY", "8"))
+DEFAULT_INSTANT_PRICE_PER_HOUR = int(os.environ.get("SPOTS_INSTANT_HOURLY", "4"))
+DEFAULT_SCHEDULE_DEPOSIT = int(os.environ.get("SPOTS_SCHEDULE_DEPOSIT", "3"))
+DEFAULT_SCHEDULE_PRICE_PER_HOUR = int(os.environ.get("SPOTS_SCHEDULE_HOURLY", "3"))
+MAX_LISTING_PRICE_HUNDREDTHS = int(os.environ.get("MAX_LISTING_PRICE_HUNDREDTHS", "500"))
 MIN_INSTANT_HOURS = 1
 MAX_BOOKING_HOURS = 72
 NEW_USER_WELCOME_SPOTS = int(os.environ.get("SPOTS_WELCOME_BONUS", "0"))
@@ -69,7 +76,7 @@ NEW_USER_WELCOME_SPOTS = int(os.environ.get("SPOTS_WELCOME_BONUS", "0"))
 LOW_BALANCE_THRESHOLD = int(os.environ.get("LOW_BALANCE_THRESHOLD", "10"))
 
 # Find parking: default search radius (~2 miles)
-FIND_PARKING_RADIUS_KM = float(os.environ.get("FIND_PARKING_RADIUS_KM", "3.2"))
+FIND_PARKING_RADIUS_KM = float(os.environ.get("FIND_PARKING_RADIUS_KM", "12"))
 
 # Bank withdrawal: fixed bundle
 WITHDRAWAL_CREDITS = int(os.environ.get("WITHDRAWAL_CREDITS", "100"))
@@ -85,8 +92,8 @@ BUCHAREST_CENTER_LAT = float(os.environ.get("BUCHAREST_CENTER_LAT", "44.4268"))
 BUCHAREST_CENTER_LNG = float(os.environ.get("BUCHAREST_CENTER_LNG", "26.1025"))
 PRICING_CENTRAL_KM = float(os.environ.get("PRICING_CENTRAL_KM", "2.5"))
 PRICING_INNER_KM = float(os.environ.get("PRICING_INNER_KM", "8.0"))
-PRICING_DEFAULT_MIN_TENTHS = int(os.environ.get("PRICING_MIN_TENTHS", "50"))
-PRICING_DEFAULT_MAX_TENTHS = int(os.environ.get("PRICING_MAX_TENTHS", "300"))
+PRICING_DEFAULT_MIN_TENTHS = int(os.environ.get("PRICING_MIN_TENTHS", "300"))
+PRICING_DEFAULT_MAX_TENTHS = int(os.environ.get("PRICING_MAX_TENTHS", "500"))
 PRICING_GEMINI_ENABLED = os.environ.get("PRICING_GEMINI_ENABLED", "true").lower() in ("true", "1", "t")
 PRICING_REFRESH_INTERVAL_SECONDS = int(os.environ.get("PRICING_REFRESH_INTERVAL", "3600"))
 GEO_CACHE_HOURS = int(os.environ.get("GEO_CACHE_HOURS", "24"))
@@ -116,11 +123,23 @@ except json.JSONDecodeError:
 DEVICE_API_KEY = os.environ.get("DEVICE_API_KEY", "")
 
 # Security
-FORCE_HTTPS = os.environ.get("SPOTFLOW_FORCE_HTTPS", "false").lower() in ("true", "1", "t")
+FORCE_HTTPS = IS_VERCEL or os.environ.get("SPOTFLOW_FORCE_HTTPS", "false").lower() in (
+    "true",
+    "1",
+    "t",
+)
 RATE_LIMIT_DEFAULT = int(os.environ.get("RATE_LIMIT_DEFAULT", "120"))
 RATE_LIMIT_WINDOW_SECONDS = int(os.environ.get("RATE_LIMIT_WINDOW_SECONDS", "60"))
 RATE_LIMIT_LOGIN_ATTEMPTS = int(os.environ.get("RATE_LIMIT_LOGIN_ATTEMPTS", "8"))
 RATE_LIMIT_LOGIN_WINDOW = int(os.environ.get("RATE_LIMIT_LOGIN_WINDOW", "900"))
+
+# Concierge + predictive availability
+CONCIERGE_ENABLED = os.environ.get("CONCIERGE_ENABLED", "true").lower() in ("true", "1", "t")
+CONCIERGE_MODEL = os.environ.get("CONCIERGE_MODEL", "") or GEMINI_MODEL
+WAITLIST_DEFAULT_AUTO_BOOK = os.environ.get("WAITLIST_DEFAULT_AUTO_BOOK", "true").lower() in ("true", "1", "t")
+WAITLIST_MAX_ACTIVE_PER_USER = int(os.environ.get("WAITLIST_MAX_ACTIVE_PER_USER", "5"))
+WAITLIST_GRACE_MINUTES = int(os.environ.get("WAITLIST_GRACE_MINUTES", "15"))
+AVAILABILITY_HISTORY_DAYS = int(os.environ.get("AVAILABILITY_HISTORY_DAYS", "30"))
 
 # Simulated 2FA — show current code on verify page (always simulated, never real SMS)
 SIMULATED_2FA_SHOW_CODE = os.environ.get("SIMULATED_2FA_SHOW_CODE", "true").lower() in ("true", "1", "t")

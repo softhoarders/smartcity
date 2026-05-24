@@ -40,24 +40,73 @@
         {% if owned %}
         {% for item in owned %}
         {% set listing = item.listing %}
-        <div class="card pw-card border-0 mb-4">
+        <div class="card pw-card border-0 mb-4 ms-spot-card">
             <div class="card-body p-4">
-                <div class="d-flex justify-content-between flex-wrap gap-2 mb-3">
-                    <div>
-                        <h2 class="h5 fw-bold mb-1">{{ item.device.spot_label }}</h2>
-                        <p class="text-secondary small mb-0">{{ item.device.name }}
-                            {% if listing and listing.location_zone %}
-                            · <span class="text-primary">{{ listing.location_zone }}</span> zone
-                            {% endif %}
-                        </p>
+                <button type="button" class="ms-spot-header w-100 text-start border-0 bg-transparent p-0"
+                        data-ms-spot-toggle aria-expanded="false" aria-controls="ms-panel-{{ item.device.id }}">
+                    <div class="d-flex justify-content-between flex-wrap gap-2">
+                        <div>
+                            <h2 class="h5 fw-bold mb-1">{{ item.device.spot_label }}</h2>
+                            <p class="text-secondary small mb-0">{{ item.device.name }}
+                                {% if listing and listing.location_zone %}
+                                · <span class="text-primary">{{ listing.location_zone }}</span> zone
+                                {% endif %}
+                            </p>
+                            <p class="small text-secondary mb-0 mt-1">Tap for promo codes &amp; settings</p>
+                        </div>
+                        {% if listing and listing.is_active %}
+                        <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle">Listed · {{ item.instant_display }} {{ currency_name }}/h</span>
+                        {% else %}
+                        <span class="badge bg-secondary bg-opacity-10 text-secondary">Not listed</span>
+                        {% endif %}
                     </div>
-                    {% if listing and listing.is_active %}
-                    <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle">Listed · {{ item.instant_display }} {{ currency_name }}/h</span>
-                    {% else %}
-                    <span class="badge bg-secondary bg-opacity-10 text-secondary">Not listed</span>
-                    {% endif %}
-                </div>
+                </button>
 
+                <div class="ms-spot-panel" id="ms-panel-{{ item.device.id }}" hidden>
+                {% if listing and not (is_demo is defined and is_demo) %}
+                <div class="ms-promo-block mt-3 mb-4">
+                    <h3 class="h6 fw-bold mb-2">Promo codes</h3>
+                    <p class="text-secondary small mb-3">Share codes for booking discounts on this spot.</p>
+                    {% if item.promos %}
+                    <ul class="list-group list-group-flush mb-3">
+                        {% for promo in item.promos %}
+                        <li class="list-group-item px-0">
+                            <code class="pw-plate-badge">{{ promo.code }}</code>
+                            <span class="small text-secondary ms-2">
+                                {% if promo.bonus_percent %}{{ promo.bonus_percent }}% off{% endif %}
+                                {% if promo.bonus_spots %}{{ promo.bonus_spots }} {{ currency_name }} off{% endif %}
+                            </span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% endif %}
+                    <form method="POST" action="{{ url_for('my_spots') }}" class="row g-2 align-items-end">
+                        <input type="hidden" name="action" value="create_promo">
+                        <input type="hidden" name="listing_id" value="{{ listing.id }}">
+                        <input type="hidden" name="promo_kind" value="booking_discount">
+                        <div class="col-md-3">
+                            <label class="form-label small">Code</label>
+                            <input type="text" name="promo_code" class="form-control form-control-sm" required maxlength="16" placeholder="SAVE20">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small">% off</label>
+                            <input type="number" name="bonus_percent" class="form-control form-control-sm" min="0" max="100" value="15">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small">{{ currency_name }} off</label>
+                            <input type="number" name="bonus_spots" class="form-control form-control-sm" min="0" max="10" value="0">
+                        </div>
+                        <div class="col-md-2">
+                            <button type="submit" class="btn btn-primary btn-sm w-100">Create</button>
+                        </div>
+                    </form>
+                </div>
+                {% elif is_demo is defined and is_demo %}
+                <div class="ms-promo-block mt-3 mb-4">
+                    <p class="text-secondary small mb-0">Demo: spot owners can create promo codes (e.g. <code>SAVE20</code>) for booking discounts on their spots.</p>
+                </div>
+                {% endif %}
+                <hr class="my-3">
                 <form method="POST" action="{{ url_for('my_spots') }}" class="row g-3">
                     <input type="hidden" name="action" value="save_listing">
                     <input type="hidden" name="device_id" value="{{ item.device.id }}">
@@ -83,7 +132,7 @@
                         <label class="form-label">Smart pricing</label>
                         <select name="pricing_mode" class="form-select" {% if is_demo is defined and is_demo %}disabled{% endif %}>
                             <option value="manual" {% if not listing or listing.pricing_mode == 'manual' %}selected{% endif %}>Manual — you set prices</option>
-                            <option value="suggest" {% if listing and listing.pricing_mode == 'suggest' %}selected{% endif %}>Suggest — AI recommends, you accept</option>
+                            <option value="suggest" {% if listing and listing.pricing_mode == 'suggest' %}selected{% endif %}>Suggest — we recommend rates, you accept</option>
                             <option value="auto" {% if listing and listing.pricing_mode == 'auto' %}selected{% endif %}>Auto — prices update from demand</option>
                         </select>
                     </div>
@@ -198,6 +247,7 @@
                     {% endfor %}
                 </ul>
                 {% endif %}
+                </div>
             </div>
         </div>
         {% endfor %}
@@ -252,4 +302,8 @@
         {% endif %}
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='my-spots.js') }}"></script>
 {% endblock %}

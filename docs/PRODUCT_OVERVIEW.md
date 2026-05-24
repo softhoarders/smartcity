@@ -96,6 +96,16 @@ Other users open **Find parking**, see available listings on a **map**, and can:
 
 Only **verified plates** on the renter’s account can be used for a booking. You cannot rent your own listing to yourself.
 
+### Availability and watchlists
+
+Each listing shows an **availability badge** (for example “Available now” or “Likely free by 18:30”). You can set an **arrive around** time in filters so times match when you plan to park.
+
+If a spot is busy, add it to your **watchlist**. By default Spotflow **auto-books** when it frees and you have enough Credits; you can turn that off for notify-only.
+
+### Quick parking search
+
+On **Find parking**, describe where and when you need parking in plain language (for example: “near Universitate Friday 6pm for 2 hours”). Spotflow shows matching spots on the map so you can book in one step.
+
 ### While a booking is active
 
 For the booked period, the system treats the renter as the legitimate user of that bay. Owners can see pending requests, approve or reject them, and view recent bookings on their spots.

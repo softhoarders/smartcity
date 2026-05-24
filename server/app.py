@@ -28,7 +28,7 @@ import config
 from models import (
     db, Device, Fine, User, UserPlate, PushSubscription, FineMessage,
     SpotListing, SpotBooking, SpotTransaction, SpotActivityLog,
-    WalletWithdrawal,
+    WalletWithdrawal, SpotWaitlist,
 )
 import spots_service
 import activity_log
@@ -37,6 +37,10 @@ import spot_prices
 import promo_service
 import receipt_pdf
 import find_parking_service
+import availability_service
+import waitlist_service
+import concierge_service
+import gemini_client
 import demo_parking_data
 from geo_context import geocode_search
 from mailer import mail, PhotoMailerWorker
@@ -96,6 +100,8 @@ def _apply_security_headers(response):
 def inject_globals():
     ctx = {
         "format_spots": spot_prices.format_tenths,
+        "format_credits": spot_prices.format_credits,
+        "format_credits_delta": spot_prices.format_credits_delta,
         "currency_name": config.WALLET_CURRENCY_NAME,
         "currency_singular": config.WALLET_CURRENCY_SINGULAR,
     }
@@ -215,19 +221,30 @@ with app.app_context():
         if col not in listing_columns:
             db.session.execute(text(f"ALTER TABLE spot_listings ADD COLUMN {col} {sql}"))
 
+    promo_columns = set()
+    if inspector.has_table("promo_codes"):
+        promo_columns = {c["name"] for c in inspector.get_columns("promo_codes")}
+    for col, sql in {
+        "owner_user_id": "INTEGER",
+        "listing_id": "INTEGER",
+        "label": "VARCHAR(120)",
+    }.items():
+        if col not in promo_columns:
+            db.session.execute(text(f"ALTER TABLE promo_codes ADD COLUMN {col} {sql}"))
     db.session.commit()
 
+    cap = config.MAX_LISTING_PRICE_HUNDREDTHS
     for listing in SpotListing.query.all():
         if not listing.instant_price_tenths:
-            listing.instant_price_tenths = (listing.instant_price_per_hour or 10) * 100
+            listing.instant_price_tenths = (listing.instant_price_per_hour or config.DEFAULT_INSTANT_PRICE_PER_HOUR) * 100
         elif listing.instant_price_tenths < 1000:
             listing.instant_price_tenths *= 10
         if not listing.schedule_price_tenths:
-            listing.schedule_price_tenths = (listing.schedule_price_per_hour or 8) * 100
+            listing.schedule_price_tenths = (listing.schedule_price_per_hour or config.DEFAULT_SCHEDULE_PRICE_PER_HOUR) * 100
         elif listing.schedule_price_tenths < 1000:
             listing.schedule_price_tenths *= 10
         if not listing.schedule_deposit_tenths:
-            listing.schedule_deposit_tenths = (listing.schedule_deposit_spots or 5) * 100
+            listing.schedule_deposit_tenths = (listing.schedule_deposit_spots or config.DEFAULT_SCHEDULE_DEPOSIT) * 100
         elif listing.schedule_deposit_tenths < 1000:
             listing.schedule_deposit_tenths *= 10
         if not listing.owner_min_tenths:
@@ -238,6 +255,20 @@ with app.app_context():
             listing.owner_max_tenths = config.PRICING_DEFAULT_MAX_TENTHS * 10
         elif listing.owner_max_tenths < 1000:
             listing.owner_max_tenths *= 10
+        for field in (
+            "instant_price_tenths",
+            "schedule_price_tenths",
+            "schedule_deposit_tenths",
+            "dynamic_instant_tenths",
+            "dynamic_schedule_tenths",
+            "suggested_instant_tenths",
+            "suggested_schedule_tenths",
+        ):
+            val = getattr(listing, field, None)
+            if val and int(val) > cap:
+                setattr(listing, field, cap)
+        listing.owner_min_tenths = min(listing.owner_min_tenths or cap, cap)
+        listing.owner_max_tenths = min(listing.owner_max_tenths or cap, cap)
     db.session.commit()
 
     tx_columns = set()
@@ -297,6 +328,26 @@ def _periodic_pricing_refresh():
 
 
 threading.Thread(target=_periodic_pricing_refresh, daemon=True).start()
+
+
+def _periodic_waitlist_refresh():
+    import time
+
+    while True:
+        time.sleep(60)
+        try:
+            with app.app_context():
+                spots_service.refresh_booking_statuses()
+                n = waitlist_service.process_due_waitlists()
+                if n:
+                    activity_log.log_activity(
+                        "waitlist.batch_fulfilled", metadata={"count": n}, commit=True
+                    )
+        except Exception as exc:
+            print(f"[waitlist] refresh error: {exc}")
+
+
+threading.Thread(target=_periodic_waitlist_refresh, daemon=True).start()
 
 
 @app.after_request
@@ -884,10 +935,7 @@ def _process_plate_registration_upload(user, plate_input: str, proof_file, *, de
         else:
             if proof_path and os.path.exists(proof_path):
                 os.remove(proof_path)
-            flash(
-                f"Could not verify the document automatically: {exc}",
-                "danger",
-            )
+            flash("We couldn't verify that document right now. Try again or contact support.", "danger")
         return True
 
 
@@ -896,14 +944,9 @@ def _demo_wallet_transactions():
     base = _now()
     return [
         SimpleNamespace(
-            amount=config.SUBSCRIPTION_MONTHLY_SPOTS,
-            description="Monthly subscription credit",
-            created_at=base - timedelta(days=12),
-        ),
-        SimpleNamespace(
-            amount=50,
-            description="Top-up · card ending 4242",
-            created_at=base - timedelta(days=18),
+            amount=-6,
+            description="Schedule deposit · H-22",
+            created_at=base - timedelta(days=1),
         ),
         SimpleNamespace(
             amount=-16,
@@ -911,9 +954,19 @@ def _demo_wallet_transactions():
             created_at=base - timedelta(days=3),
         ),
         SimpleNamespace(
-            amount=-6,
-            description="Schedule deposit · H-22",
-            created_at=base - timedelta(days=1),
+            amount=50,
+            description="Top-up · card ending 4242",
+            created_at=base - timedelta(days=18),
+        ),
+        SimpleNamespace(
+            amount=config.SUBSCRIPTION_MONTHLY_SPOTS,
+            description="Monthly subscription credit",
+            created_at=base - timedelta(days=12),
+        ),
+        SimpleNamespace(
+            amount=1000,
+            description="Demo welcome balance",
+            created_at=base - timedelta(days=45),
         ),
     ]
 
@@ -921,13 +974,16 @@ def _demo_wallet_transactions():
 def _demo_wallet_state():
     state = session.get("demo_wallet")
     if state is None:
-        state = {"balance": 120, "extra_txs": [], "subscription_active": True}
+        state = {"balance": 1000, "extra_txs": [], "subscription_active": True}
+        session["demo_wallet"] = state
+    elif int(state.get("balance", 0)) == 120:
+        state["balance"] = 1000
         session["demo_wallet"] = state
     return state
 
 
 def _demo_wallet_balance():
-    return int(_demo_wallet_state().get("balance", 120))
+    return int(_demo_wallet_state().get("balance", 1000))
 
 
 def _demo_wallet_transactions_merged():
@@ -950,7 +1006,7 @@ def _demo_wallet_transactions_merged():
 
 def _demo_wallet_credit(amount: int, description: str, *, receipt_token: str | None = None) -> None:
     state = _demo_wallet_state()
-    state["balance"] = int(state.get("balance", 120)) + amount
+    state["balance"] = int(state.get("balance", 1000)) + amount
     tx = {
         "amount": amount,
         "description": description,
@@ -965,7 +1021,7 @@ def _demo_wallet_credit(amount: int, description: str, *, receipt_token: str | N
 
 def _demo_wallet_debit(amount: int, description: str, *, receipt_token: str | None = None) -> None:
     state = _demo_wallet_state()
-    bal = int(state.get("balance", 120))
+    bal = int(state.get("balance", 1000))
     if bal < amount:
         raise ValueError(f"Insufficient {config.WALLET_CURRENCY_NAME.lower()} balance")
     state["balance"] = bal - amount
@@ -1054,7 +1110,7 @@ def _find_parking_search_redirect_args(item, *, booking_confirmation: dict):
         args["q"] = _param("q") or _param("label") or ""
     max_dist = _param("max_distance", float)
     args["max_distance"] = max_dist if max_dist is not None else config.FIND_PARKING_RADIUS_KM
-    for key in ("sort", "min_price", "max_price", "status", "booking_mode"):
+    for key in ("sort", "min_price", "max_price", "status", "booking_mode", "target_at"):
         val = _param(key)
         if val is not None and val != "":
             args[key] = val
@@ -1072,10 +1128,28 @@ def _find_parking_search_redirect_args(item, *, booking_confirmation: dict):
     return args
 
 
+def _parse_target_at_param() -> datetime | None:
+    raw = request.args.get("target_at") or request.form.get("target_at")
+    if not raw:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except ValueError:
+        return None
+
+
+def _demo_waitlists() -> list[dict]:
+    return list(session.get("demo_waitlists") or [])
+
+
 def _render_find_parking_page(listings, user_plates, balance, renter_bookings, *, is_demo: bool, search: dict | None = None):
     center_lat = float((search or {}).get("lat") or config.BUCHAREST_CENTER_LAT)
     center_lng = float((search or {}).get("lng") or config.BUCHAREST_CENTER_LNG)
     search_label = (search or {}).get("label") or "Bucharest city center"
+    target_at = _parse_target_at_param() or (datetime.now(timezone.utc) + timedelta(minutes=30))
 
     sort = request.args.get("sort", "relevance")
     min_price = request.args.get("min_price", type=float)
@@ -1099,8 +1173,14 @@ def _render_find_parking_page(listings, user_plates, balance, renter_bookings, *
             "ends": request.args.get("booking_ends", ""),
         }
 
+    enriched = availability_service.enrich_listing_items(
+        [dict(x) for x in listings],
+        target_at=target_at,
+        is_demo=is_demo,
+    )
+
     filtered = find_parking_service.filter_and_sort_listings(
-        listings,
+        enriched,
         center_lat,
         center_lng,
         min_price=min_price,
@@ -1137,6 +1217,12 @@ def _render_find_parking_page(listings, user_plates, balance, renter_bookings, *
         },
         search_radius_km=config.FIND_PARKING_RADIUS_KM,
         booking_confirmation=booking_confirmation,
+        target_at=target_at.strftime("%Y-%m-%dT%H:%M"),
+        active_waitlists=waitlist_service.active_waitlists_for_user(current_user.id)
+        if not is_demo and current_user.is_authenticated
+        else _demo_waitlists(),
+        waitlist_default_auto_book=config.WAITLIST_DEFAULT_AUTO_BOOK,
+        concierge_enabled=config.CONCIERGE_ENABLED,
     )
 
 
@@ -1151,13 +1237,13 @@ def _demo_owned_spots():
         pricing_mode="auto",
         description="Rent when you're at the office.",
         location_zone="Calea Victoriei",
-        owner_min_tenths=50,
-        owner_max_tenths=300,
-        instant_price_tenths=80,
-        schedule_price_tenths=60,
-        instant_price_per_hour=8,
-        schedule_price_per_hour=6,
-        schedule_deposit_spots=5,
+        owner_min_tenths=300,
+        owner_max_tenths=500,
+        instant_price_tenths=400,
+        schedule_price_tenths=350,
+        instant_price_per_hour=4,
+        schedule_price_per_hour=3,
+        schedule_deposit_spots=3,
     )
     pending = SimpleNamespace(
         id=501,
@@ -1171,8 +1257,9 @@ def _demo_owned_spots():
         "device": device,
         "listing": listing,
         "pending": [pending],
-        "instant_display": "8",
-        "schedule_display": "6",
+        "promos": [],
+        "instant_display": "4",
+        "schedule_display": "3.5",
     }]
 
 
@@ -1181,14 +1268,41 @@ def _demo_renter_bookings():
 
     base = _now()
     devices = {d.id: d for d in _demo_devices()}
+    dev105 = devices.get(105) or _demo_devices()[0]
+    dev113 = devices.get(113) or dev105
+    dev101 = devices.get(101) or dev105
     rows = [
         SimpleNamespace(
-            listing=SimpleNamespace(device=devices.get(105) or _demo_devices()[0]),
+            listing=SimpleNamespace(device=dev105),
             renter_plate="B123MAB",
             starts_at=base - timedelta(hours=1),
             ends_at=base + timedelta(hours=1),
             booking_type="instant",
             status="active",
+        ),
+        SimpleNamespace(
+            listing=SimpleNamespace(device=dev113),
+            renter_plate="B123MAB",
+            starts_at=base + timedelta(days=2),
+            ends_at=base + timedelta(days=2, hours=3),
+            booking_type="schedule",
+            status="pending_approval",
+        ),
+        SimpleNamespace(
+            listing=SimpleNamespace(device=dev101),
+            renter_plate="B123MAB",
+            starts_at=base - timedelta(days=5),
+            ends_at=base - timedelta(days=5) + timedelta(hours=3),
+            booking_type="instant",
+            status="completed",
+        ),
+        SimpleNamespace(
+            listing=SimpleNamespace(device=dev105),
+            renter_plate="B123MAB",
+            starts_at=base + timedelta(hours=4),
+            ends_at=base + timedelta(hours=7),
+            booking_type="schedule",
+            status="approved",
         ),
     ]
     for raw in _demo_bookings_state():
@@ -1212,6 +1326,13 @@ def _demo_renter_bookings():
 def _demo_process_find_parking_post(user_plates: list[str]):
     from types import SimpleNamespace
 
+    if request.form.get("action") == "cancel_waitlist":
+        wl_id = request.form.get("waitlist_id", type=int)
+        rows = session.get("demo_waitlists") or []
+        session["demo_waitlists"] = [r for r in rows if r.get("id") != wl_id]
+        flash("Watch removed.", "success")
+        return redirect(url_for("find_parking", **request.args.to_dict()))
+
     listing_id = request.form.get("listing_id", type=int)
     items = _demo_rental_listings()
     item = next((x for x in items if x["listing"].id == listing_id), None)
@@ -1227,7 +1348,36 @@ def _demo_process_find_parking_post(user_plates: list[str]):
 
     action = request.form.get("action")
     try:
-        if action == "instant_book":
+        if action == "waitlist":
+            starts_raw = request.form.get("starts_at", "")
+            ends_raw = request.form.get("ends_at", "")
+            starts_at = datetime.fromisoformat(starts_raw)
+            ends_at = datetime.fromisoformat(ends_raw)
+            if starts_at.tzinfo is None:
+                starts_at = starts_at.replace(tzinfo=timezone.utc)
+            if ends_at.tzinfo is None:
+                ends_at = ends_at.replace(tzinfo=timezone.utc)
+            auto_book = request.form.get("auto_book", "1") in ("1", "true", "on")
+            rows = list(session.get("demo_waitlists") or [])
+            rows.append({
+                "id": len(rows) + 1,
+                "listing_id": listing.id,
+                "spot_label": item["device"].spot_label,
+                "renter_plate": renter_plate,
+                "window_start": starts_at.strftime("%d %b %H:%M"),
+                "window_end": ends_at.strftime("%d %b %H:%M"),
+                "auto_book": auto_book,
+                "status": "active",
+            })
+            session["demo_waitlists"] = rows[: config.WAITLIST_MAX_ACTIVE_PER_USER]
+            flash(
+                "Watching spot (demo) — auto-book when it frees."
+                if auto_book
+                else "Watching spot (demo).",
+                "success",
+            )
+            return redirect(url_for("find_parking", **request.args.to_dict()))
+        elif action == "instant_book":
             hours = request.form.get("hours", type=int) or config.MIN_INSTANT_HOURS
             hours = max(config.MIN_INSTANT_HOURS, min(hours, config.MAX_BOOKING_HOURS))
             total = spot_prices.hundredths_to_billable_spots(item["instant_hundredths"] * hours)
@@ -2493,11 +2643,11 @@ def _run_ai_background(app_obj, fine_id):
                 else:
                     fine.appeal_status = "rejected_by_ai"
                     ai_details = f"I did not detect a match for {fine.expected_plate} in the image. The spot is occupied by a violator."
-                ai_msg = FineMessage(fine_id=fine.id, sender="AI Assessor", content=ai_details)
+                ai_msg = FineMessage(fine_id=fine.id, sender="Spotflow", content=ai_details)
                 db.session.add(ai_msg)
             else:
                 fine.appeal_status = "pending_human"
-                err_msg = FineMessage(fine_id=fine.id, sender="System", content=f"AI failure: {is_fine_wrong}. Escalate to human.")
+                err_msg = FineMessage(fine_id=fine.id, sender="Spotflow", content="Forwarded for manual review.")
                 db.session.add(err_msg)
             db.session.commit()
             broadcast_sse("fine_updated", fine.to_dict())
@@ -2587,7 +2737,6 @@ def account_settings():
             user_plates=user_plate_values(current_user),
             plate_rows=_demo_plate_rows(),
             account_owner_name=_account_owner_name(current_user),
-            gemini_configured=bool(config.GEMINI_API_KEY),
             is_demo=True,
         )
 
@@ -2729,7 +2878,7 @@ def appeal_fine(fine_id):
         
     if fine.appeal_status == "none":
         fine.appeal_status = "pending_ai"
-        flash("Appeal submitted. The AI is analyzing the evidence (this may take a moment)...", "info")
+        flash("Appeal submitted. We're reviewing the evidence (this may take a moment)...", "info")
         success, is_fine_wrong = analyze_appeal_with_ollama(fine)
         
         if success:
@@ -2738,18 +2887,18 @@ def appeal_fine(fine_id):
                 fine.appeal_status = "approved"
                 fine.resolved = True
                 ai_details = f"I detected plate matching {fine.expected_plate}. The fine was incorrect and is cleared."
-                flash("AI Analysis: the fine was incorrect and has been cleared.", "success")
+                flash("Review complete: the alert was cleared.", "success")
             else:
                 fine.appeal_status = "rejected_by_ai"
                 ai_details = f"I did not detect a match for {fine.expected_plate} in the image. The spot is occupied by a violator."
-                flash("AI Analysis: the fine is valid based on the evidence.", "danger")
+                flash("Review complete: the alert still applies based on the evidence.", "danger")
             
-            ai_msg = FineMessage(fine_id=fine.id, sender="AI Assessor", content=ai_details)
+            ai_msg = FineMessage(fine_id=fine.id, sender="Spotflow", content=ai_details)
             db.session.add(ai_msg)
         else:
             fine.appeal_status = "pending_human"
-            flash(f"AI could not process appeal. Forwarded to admin.", "warning")
-            err_msg = FineMessage(fine_id=fine.id, sender="System", content=f"AI failure: {is_fine_wrong}. Escalate to human.")
+            flash("We couldn't finish the automatic review. An admin will take a look.", "warning")
+            err_msg = FineMessage(fine_id=fine.id, sender="Spotflow", content="Forwarded for manual review.")
             db.session.add(err_msg)
             
         db.session.commit()
@@ -3317,6 +3466,26 @@ def my_spots():
             except ValueError as exc:
                 flash(str(exc), "danger")
 
+        elif action == "create_promo":
+            listing = SpotListing.query.filter_by(
+                id=request.form.get("listing_id", type=int),
+                owner_id=current_user.id,
+            ).first_or_404()
+            try:
+                promo_service.create_owner_promo(
+                    current_user,
+                    listing.id,
+                    code=request.form.get("promo_code", ""),
+                    kind=request.form.get("promo_kind", "booking_discount"),
+                    bonus_percent=request.form.get("bonus_percent", type=int) or 0,
+                    bonus_spots=request.form.get("bonus_spots", type=int) or 0,
+                    max_uses=request.form.get("max_uses", type=int) or 100,
+                    label=request.form.get("promo_label", ""),
+                )
+                flash("Promo code created. Share it with renters for this spot.", "success")
+            except ValueError as exc:
+                flash(str(exc), "danger")
+
         return redirect(url_for("my_spots"))
 
     owned_devices = Device.query.filter_by(owner_user_id=current_user.id).all()
@@ -3332,10 +3501,12 @@ def my_spots():
             )
         if listing and listing.pricing_mode in ("auto", "suggest"):
             pricing_engine.refresh_listing_prices(listing, commit=False)
+        promos = promo_service.list_owner_promos(current_user.id, listing.id) if listing else []
         owned.append({
             "device": device,
             "listing": listing,
             "pending": pending,
+            "promos": promos,
             "instant_display": spot_prices.format_tenths(
                 spot_prices.effective_instant_tenths(listing) if listing else None
             ),
@@ -3386,6 +3557,136 @@ def api_geocode():
     q = request.args.get("q", "")
     limit = min(10, max(1, request.args.get("limit", type=int) or 8))
     return jsonify({"results": geocode_search(q, limit=limit)})
+
+
+@app.route("/portal/api/concierge", methods=["POST"])
+@login_required
+def api_concierge():
+    denied = _require_driver_portal()
+    if denied:
+        return denied
+    if not config.CONCIERGE_ENABLED:
+        return jsonify({"error": "Quick search is not available right now."}), 503
+
+    data = request.get_json(silent=True) or {}
+    message = (data.get("message") or request.form.get("message") or "").strip()
+    if not message:
+        return jsonify({"error": "Message is required."}), 400
+
+    user_plates = user_plate_values(current_user)
+    balance = _demo_wallet_balance() if _is_demo() else spots_service.user_balance(current_user)
+
+    intent = (
+        concierge_service.parse_intent_demo(message)
+        if _is_demo()
+        else concierge_service.parse_intent(message, user_plates=user_plates, balance=balance)
+    )
+
+    if _is_demo():
+        listings = _demo_rental_listings()
+    else:
+        active_listings = SpotListing.query.filter_by(is_active=True).join(Device).all()
+        listings = []
+        for lst in active_listings:
+            if lst.owner_id == current_user.id:
+                continue
+            inst = spot_prices.effective_instant_hundredths(lst)
+            sched = spot_prices.effective_schedule_hundredths(lst)
+            dep = spot_prices.effective_deposit_hundredths(lst)
+            listings.append({
+                "listing": lst,
+                "device": lst.device,
+                "instant_display": spot_prices.format_hundredths(inst),
+                "schedule_display": spot_prices.format_hundredths(sched),
+                "deposit_display": spot_prices.format_hundredths(dep),
+                "instant_hundredths": inst,
+                "schedule_hundredths": sched,
+                "deposit_hundredths": dep,
+                "approval_mode": lst.approval_mode,
+                "pricing_mode": lst.pricing_mode,
+            })
+
+    result = concierge_service.search_for_intent(intent, listings, is_demo=_is_demo())
+    activity_log.log_activity(
+        "concierge.query",
+        user_id=current_user.id if current_user.is_authenticated else None,
+        metadata={"summary": intent.user_summary, "results": len(result.results)},
+        commit=True,
+    )
+    return jsonify(result.to_dict())
+
+
+@app.route("/portal/api/concierge/book", methods=["POST"])
+@login_required
+def api_concierge_book():
+    denied = _require_driver_portal()
+    if denied:
+        return denied
+    if _is_demo():
+        return jsonify({"error": "Sign in with a real account to complete this booking."}), 400
+
+    data = request.get_json(silent=True) or {}
+    listing_id = data.get("listing_id", type=int)
+    intent_data = data.get("intent") or {}
+    renter_plate = normalize_plate(data.get("renter_plate", ""))
+    promo_code = (data.get("promo_code") or "").strip() or None
+
+    user_plates = user_plate_values(current_user)
+    if not user_plates:
+        return jsonify({"error": "Add a verified plate first."}), 400
+    if renter_plate not in user_plates:
+        renter_plate = user_plates[0]
+
+    try:
+        intent = concierge_service.ConciergeIntent.from_dict(intent_data)
+        booking = concierge_service.execute_booking(
+            listing_id, intent, current_user, renter_plate, promo_code=promo_code
+        )
+        activity_log.log_activity(
+            "concierge.book",
+            user_id=current_user.id,
+            listing_id=listing_id,
+            booking_id=booking.id,
+            metadata={"status": booking.status},
+            commit=True,
+        )
+        n8n_events.emit(
+            "concierge.booked",
+            {
+                "booking_id": booking.id,
+                "listing_id": listing_id,
+                "user_id": current_user.id,
+                "status": booking.status,
+            },
+        )
+        n8n_events.on_booking_event(booking, "requested")
+        listing = SpotListing.query.get(listing_id)
+        confirm = {
+            "spot": listing.device.spot_label if listing and listing.device else "",
+            "plate": renter_plate,
+            "total": booking.total_spots,
+            "hours": intent.duration_hours,
+            "status": booking.status,
+            "type": booking.booking_type,
+        }
+        redirect_url = url_for(
+            "find_parking",
+            **_find_parking_search_redirect_args(
+                {"device": listing.device if listing else None},
+                booking_confirmation=confirm,
+            ),
+        )
+        return jsonify({
+            "ok": True,
+            "booking": {
+                "id": booking.id,
+                "status": booking.status,
+                "total_spots": booking.total_spots,
+            },
+            "redirect_url": redirect_url,
+        })
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
 
 
 @app.route("/portal/receipt/<token>")
@@ -3446,6 +3747,14 @@ def find_parking():
     spots_service.ensure_user_wallet(current_user)
 
     if request.method == "POST":
+        if request.form.get("action") == "cancel_waitlist":
+            wl_id = request.form.get("waitlist_id", type=int)
+            if wl_id and waitlist_service.cancel_waitlist(current_user, wl_id):
+                flash("Watch removed.", "success")
+            else:
+                flash("Watch not found.", "warning")
+            return redirect(url_for("find_parking", **request.args.to_dict()))
+
         if not user_plates:
             flash("Add a verified plate in account settings before booking.", "warning")
             return redirect(url_for("find_parking"))
@@ -3456,14 +3765,54 @@ def find_parking():
             flash("Listing not found or inactive.", "danger")
             return redirect(url_for("find_parking"))
 
-        renter_plate = normalize_plate(request.form.get("renter_plate", ""))
+        renter_plate = normalize_plate(request.form.get("renter_plate", "") or (user_plates[0] if user_plates else ""))
         if renter_plate not in user_plates:
-            flash("Select one of your verified plates.", "danger")
+            flash("Add a verified plate in account settings before booking.", "danger")
             return redirect(url_for("find_parking"))
 
+        promo_code = request.form.get("promo_code", "").strip() or None
         action = request.form.get("action")
         try:
-            if action == "instant_book":
+            if action == "waitlist":
+                starts_raw = request.form.get("starts_at", "")
+                ends_raw = request.form.get("ends_at", "")
+                try:
+                    starts_at = datetime.fromisoformat(starts_raw)
+                    ends_at = datetime.fromisoformat(ends_raw)
+                except ValueError:
+                    flash("Invalid date/time for watch.", "danger")
+                    return redirect(url_for("find_parking"))
+                if starts_at.tzinfo is None:
+                    starts_at = starts_at.replace(tzinfo=timezone.utc)
+                if ends_at.tzinfo is None:
+                    ends_at = ends_at.replace(tzinfo=timezone.utc)
+                auto_book = request.form.get("auto_book", "1") in ("1", "true", "on")
+                max_price = request.form.get("max_price", type=float)
+                max_h = int(max_price * 100) if max_price is not None else None
+                wl = waitlist_service.create_waitlist(
+                    current_user,
+                    listing,
+                    renter_plate,
+                    starts_at,
+                    ends_at,
+                    max_price_hundredths=max_h,
+                    auto_book=auto_book,
+                )
+                activity_log.log_activity(
+                    "waitlist.created",
+                    user_id=current_user.id,
+                    listing_id=listing.id,
+                    metadata={"waitlist_id": wl.id, "auto_book": auto_book},
+                    commit=True,
+                )
+                msg = (
+                    "Watching spot — we'll auto-book when it frees and you have enough Credits."
+                    if auto_book
+                    else "Watching spot — we'll notify you when it frees."
+                )
+                flash(msg, "success")
+                return redirect(url_for("find_parking", **request.args.to_dict()))
+            elif action == "instant_book":
                 hours = request.form.get("hours", type=int) or config.MIN_INSTANT_HOURS
                 activity_log.log_activity(
                     "booking.instant_attempt",
@@ -3474,7 +3823,7 @@ def find_parking():
                     commit=True,
                 )
                 booking = spots_service.create_instant_booking(
-                    listing, current_user, renter_plate, hours
+                    listing, current_user, renter_plate, hours, promo_code=promo_code
                 )
                 activity_log.log_activity(
                     "booking.instant_created",
@@ -3526,7 +3875,7 @@ def find_parking():
                     commit=True,
                 )
                 booking = spots_service.create_scheduled_booking(
-                    listing, current_user, renter_plate, starts_at, ends_at
+                    listing, current_user, renter_plate, starts_at, ends_at, promo_code=promo_code
                 )
                 activity_log.log_activity(
                     "booking.schedule_created",

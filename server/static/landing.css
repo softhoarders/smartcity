@@ -412,19 +412,13 @@ body.landing-page::after {
     height: 12px;
     border-radius: 50%;
     border: 2px solid #fff;
-    box-shadow: 0 0 16px currentColor;
-    animation: landing-pin-pulse 2.5s ease-in-out infinite;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
 }
 
 .landing-map-pin--danger { top: 28%; left: 22%; background: #ff453a; color: #ff453a; }
-.landing-map-pin--ok { top: 55%; left: 68%; background: #30d158; color: #30d158; animation-delay: 0.4s; }
-.landing-map-pin--warn { top: 38%; left: 52%; background: #ff9f0a; color: #ff9f0a; animation-delay: 0.8s; }
-.landing-map-pin--open { top: 72%; left: 35%; background: #ffcc00; color: #ffcc00; animation-delay: 1.2s; }
-
-@keyframes landing-pin-pulse {
-    0%, 100% { transform: scale(1); opacity: 1; }
-    50% { transform: scale(1.15); opacity: 0.85; }
-}
+.landing-map-pin--ok { top: 55%; left: 68%; background: #30d158; color: #30d158; }
+.landing-map-pin--warn { top: 38%; left: 52%; background: #ff9f0a; color: #ff9f0a; }
+.landing-map-pin--open { top: 72%; left: 35%; background: #ffcc00; color: #ffcc00; }
 
 .landing-phone-list {
     margin: 0;

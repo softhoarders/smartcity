@@ -1,0 +1,12 @@
+client/
+docs/
+.git/
+.claude/
+*.md
+server/parkwatch.db
+server/uploads/
+server/mail_queue/
+server/receipts/
+server/venv/
+venv/
+.venv/

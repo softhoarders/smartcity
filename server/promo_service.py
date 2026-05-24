@@ -90,6 +90,69 @@ def get_or_create_referral_code(user: User) -> str:
     return code
 
 
+def list_owner_promos(user_id: int, listing_id: int) -> list[PromoCode]:
+    return (
+        PromoCode.query.filter_by(owner_user_id=user_id, listing_id=listing_id, active=True)
+        .order_by(PromoCode.created_at.desc())
+        .all()
+    )
+
+
+def create_owner_promo(
+    user: User,
+    listing_id: int,
+    *,
+    code: str,
+    kind: str,
+    bonus_percent: int = 0,
+    bonus_spots: int = 0,
+    max_uses: int | None = 100,
+    label: str | None = None,
+) -> PromoCode:
+    norm = normalize_code(code)
+    if len(norm) < 4:
+        raise ValueError("Code must be at least 4 characters.")
+    if PromoCode.query.filter_by(code=norm).first():
+        raise ValueError("That code is already taken.")
+    if kind not in ("booking_discount", "topup_bonus"):
+        raise ValueError("Invalid promo type.")
+    if kind == "booking_discount" and bonus_percent <= 0 and bonus_spots <= 0:
+        raise ValueError("Set a percent or credit discount for bookings.")
+    row = PromoCode(
+        code=norm,
+        kind=kind,
+        bonus_percent=max(0, int(bonus_percent)),
+        bonus_spots=max(0, int(bonus_spots)),
+        max_uses=max_uses,
+        owner_user_id=user.id,
+        listing_id=listing_id,
+        label=(label or "").strip() or None,
+        active=True,
+    )
+    db.session.add(row)
+    db.session.commit()
+    return row
+
+
+def apply_booking_promo(listing_id: int, base_credits: int, code: str) -> tuple[int, PromoCode | None]:
+    """Return (final_credits, promo) after optional listing-scoped booking discount."""
+    promo, err = validate_promo(code)
+    if err:
+        raise ValueError(err)
+    if promo.kind != "booking_discount":
+        raise ValueError("This code is for bookings only.")
+    if promo.listing_id and promo.listing_id != listing_id:
+        raise ValueError("This code is not valid for this spot.")
+    total = int(base_credits)
+    if promo.bonus_percent:
+        total = max(1, total - (total * int(promo.bonus_percent)) // 100)
+    if promo.bonus_spots:
+        total = max(1, total - int(promo.bonus_spots))
+    promo.uses_count = int(promo.uses_count or 0) + 1
+    db.session.commit()
+    return total, promo
+
+
 def redeem_referral_on_signup(new_user: User, code: str) -> bool:
     norm = normalize_code(code)
     if not norm:

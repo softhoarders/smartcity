@@ -1,0 +1,25 @@
+[project]
+name = "spotflow"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "flask==3.1.1",
+    "flask-sqlalchemy==3.1.1",
+    "flask-cors==5.0.1",
+    "flask-login==0.6.3",
+    "flask-bcrypt==1.0.1",
+    "flask-mail==0.10.0",
+    "python-dotenv==1.2.2",
+    "pywebpush==2.3.0",
+    "requests==2.34.2",
+    "pypdf==5.4.0",
+    "python-docx==1.1.2",
+    "opencv-python-headless==4.13.0.92",
+    "numpy==2.2.6",
+    "ecdsa==0.19.2",
+    "holidays>=0.60",
+    "fpdf2>=2.8.0",
+]
+
+[tool.vercel]
+entrypoint = "wsgi:app"

@@ -144,7 +144,7 @@
             <div>
                 <span class="admin-eyebrow">Plate verification</span>
                 <h2>Documents awaiting review</h2>
-                <p>Automatic Gemini verification was unavailable for these uploads.</p>
+                <p>Automatic document check was unavailable for these uploads.</p>
             </div>
             <span class="admin-soft-pill warning">{{ pending_plates|length }} pending</span>
         </div>
@@ -329,7 +329,7 @@
                                     {% if fine.appeal_status == 'pending_human' %}
                                     <span class="badge bg-danger bg-opacity-10 text-danger mt-1 d-block w-fit">Human review</span>
                                     {% elif fine.appeal_status == 'pending_ai' %}
-                                    <span class="badge bg-info bg-opacity-10 text-info mt-1 d-block w-fit">AI review</span>
+                                    <span class="badge bg-info bg-opacity-10 text-info mt-1 d-block w-fit">In review</span>
                                     {% elif fine.appeal_status == 'approved' %}
                                     <span class="badge bg-success bg-opacity-10 text-success mt-1 d-block w-fit">Appeal OK</span>
                                     {% endif %}

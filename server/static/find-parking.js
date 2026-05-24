@@ -15,19 +15,88 @@
         return url.pathname + url.search;
     }
 
+    function pad2(n) {
+        return String(n).padStart(2, "0");
+    }
+
+    function toDatetimeLocalValue(date) {
+        return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}T${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+    }
+
+    function parseDatetimeLocal(value) {
+        if (!value) return null;
+        const d = new Date(value);
+        return Number.isNaN(d.getTime()) ? null : d;
+    }
+
+    function formatWhen(date) {
+        return date.toLocaleString(undefined, {
+            weekday: "short",
+            day: "numeric",
+            month: "short",
+            hour: "2-digit",
+            minute: "2-digit",
+        });
+    }
+
+    function bookingHours(starts, ends) {
+        if (!starts || !ends || ends <= starts) return 0;
+        return Math.max(1, Math.floor((ends - starts) / 3600000) || 1);
+    }
+
+    function billableCredits(hundredths) {
+        return Math.ceil(Math.max(0, hundredths) / 100);
+    }
+
+    function calcBookingQuote(listing, starts, ends) {
+        const hours = bookingHours(starts, ends);
+        if (!hours) {
+            return { hours: 0, total: 0, valid: false };
+        }
+        const totalHundredths = (listing.rateHundredths || 0) * hours;
+        return {
+            hours,
+            total: billableCredits(totalHundredths),
+            valid: true,
+        };
+    }
+
+    function defaultBookingRange() {
+        const start = new Date();
+        start.setMinutes(Math.ceil(start.getMinutes() / 15) * 15, 0, 0);
+        start.setMinutes(start.getMinutes() + 30);
+        const end = new Date(start);
+        end.setHours(end.getHours() + 2);
+        return { start, end };
+    }
+
     function initMap(cfg) {
         const container = document.getElementById("rental-map");
         const loading = document.getElementById("rental-map-loading");
         const center = cfg.searchCenter;
-        const markers = (cfg.listings || []).map((m) => ({
-            lat: m.lat,
-            lng: m.lng,
-            title: m.title,
-            subtitle: `${m.instantDisplay} ${cfg.currencyName}/h · ${m.distanceKm} km`,
-            status: m.status || "empty",
-            listingId: m.listingId,
-            actionHtml: `<button type="button" class="btn btn-sm btn-primary fp-map-book-btn" data-listing-id="${m.listingId}">Book &amp; pay</button>`,
-        }));
+        const STATUS_LABELS = {
+            empty: "Empty",
+            occupied: "Occupied",
+            correct: "Registered",
+            violation: "Violation",
+            illegal: "Violation",
+        };
+
+        const markers = (cfg.listings || [])
+            .filter((m) => m.lat != null && m.lng != null)
+            .map((m) => {
+                const statusGroup = m.statusGroup || (m.status === "illegal" ? "violation" : m.status);
+                return {
+                lat: m.lat,
+                lng: m.lng,
+                title: m.title,
+                subtitle: `${m.rateDisplay} ${cfg.currencyName}/h · ${m.distanceKm} km${m.predictionLabel ? " · " + m.predictionLabel : ""}`,
+                status: statusGroup,
+                statusLabel: m.statusLabel || STATUS_LABELS[m.status] || m.status,
+                listingId: m.listingId,
+                actionHtml: `<button type="button" class="btn btn-sm btn-primary fp-map-book-btn" data-listing-id="${m.listingId}">Pay &amp; park</button>`,
+            };
+            });
 
         if (!center || !window.SpotflowMaps) {
             if (loading) loading.textContent = "Search a place to see parking spots";
@@ -48,7 +117,6 @@
                 label: center.label,
                 color: "#64D2FF",
             },
-            radiusKm: cfg.radiusKm,
             onReady: () => loading?.remove(),
         }).catch(() => {
             if (loading) loading.textContent = "Map unavailable";
@@ -62,38 +130,108 @@
         });
     }
 
-    function openBookModal(cfg, listingId) {
+    function updateBookModalSummary(cfg, listing) {
+        const startsInput = document.getElementById("fp-book-starts");
+        const endsInput = document.getElementById("fp-book-ends");
+        const windowEl = document.getElementById("fp-book-window");
+        const rateEl = document.getElementById("fp-book-rate");
+        const durationEl = document.getElementById("fp-book-duration");
+        const totalLine = document.getElementById("fp-book-total-line");
+        const submitBtn = document.getElementById("fp-book-submit");
+        if (!startsInput || !endsInput || !windowEl || !rateEl || !durationEl || !totalLine) return;
+
+        const starts = parseDatetimeLocal(startsInput.value);
+        const ends = parseDatetimeLocal(endsInput.value);
+        rateEl.textContent = `${listing.rateDisplay} ${cfg.currencyName}/h`;
+
+        if (!starts || !ends) {
+            windowEl.textContent = "Choose when you arrive and leave.";
+            durationEl.textContent = "—";
+            totalLine.textContent = "—";
+            if (submitBtn) submitBtn.disabled = true;
+            return;
+        }
+
+        if (ends <= starts) {
+            windowEl.textContent = "Leave time must be after your arrival.";
+            durationEl.textContent = "—";
+            totalLine.textContent = "—";
+            if (submitBtn) submitBtn.disabled = true;
+            return;
+        }
+
+        const quote = calcBookingQuote(listing, starts, ends);
+        windowEl.textContent = `Parking from ${formatWhen(starts)} to ${formatWhen(ends)}`;
+        durationEl.textContent = `${quote.hours} hour${quote.hours === 1 ? "" : "s"}`;
+        totalLine.textContent = `${quote.total} ${cfg.currencyName}`;
+        if (submitBtn) submitBtn.disabled = !quote.valid;
+    }
+
+    function openBookModal(cfg, listingId, mode) {
+        mode = mode || "book";
         const listing = (cfg.listings || []).find((l) => l.listingId === listingId);
         const modal = document.getElementById("fp-book-modal");
         const title = document.getElementById("fp-book-title");
         const subtitle = document.getElementById("fp-book-subtitle");
+        const meta = document.getElementById("fp-book-meta");
         const listingInput = document.getElementById("fp-book-listing-id");
-        const hoursInput = document.getElementById("fp-book-hours");
-        const totalLine = document.getElementById("fp-book-total-line");
-        if (!modal || !listing) return;
+        const startsInput = document.getElementById("fp-book-starts");
+        const endsInput = document.getElementById("fp-book-ends");
+        const promoInput = document.getElementById("fp-book-promo");
+        const actionInput = document.querySelector("#fp-book-form input[name='action']");
+        const watchOptions = document.getElementById("fp-watch-options");
+        const promoBlock = promoInput?.closest(".mb-3");
+        const summaryBlock = document.querySelector(".fp-book-summary");
+        const submitBtn = document.getElementById("fp-book-submit");
+        if (!modal || !listing || !startsInput || !endsInput) return;
 
         listingInput.value = listingId;
-        title.textContent = listing.title;
-        subtitle.textContent = `${listing.subtitle} · ${listing.distanceKm} km away · ${listing.instantDisplay} ${cfg.currencyName}/h`;
+        title.textContent = mode === "watch" ? "Watch this spot" : listing.title;
+        subtitle.textContent = listing.subtitle;
+        meta.textContent =
+            mode === "watch"
+                ? `${listing.distanceKm} km away · ${listing.predictionLabel || "Not available now"}`
+                : `${listing.distanceKm} km away · ${listing.rateDisplay} ${cfg.currencyName}/h`;
 
-        const updateTotal = () => {
-            const hours = Math.max(1, parseInt(hoursInput.value, 10) || 1);
-            const hundredths = listing.instantHundredths * hours;
-            const spots = Math.ceil(hundredths / 100);
-            totalLine.textContent = `Total: ${spots} ${cfg.currencyName} (${hours}h × ${listing.instantDisplay}/h, rounded up)`;
-        };
-        hoursInput.removeEventListener("input", hoursInput._fpTotalHandler);
-        hoursInput._fpTotalHandler = updateTotal;
-        hoursInput.addEventListener("input", updateTotal);
-        updateTotal();
+        const { start, end } = defaultBookingRange();
+        if (cfg.targetAt) {
+            const t = parseDatetimeLocal(cfg.targetAt);
+            if (t) {
+                start.setTime(t.getTime());
+                end.setTime(t.getTime() + 2 * 3600000);
+            }
+        }
+        startsInput.value = toDatetimeLocalValue(start);
+        endsInput.value = toDatetimeLocalValue(end);
+        if (promoInput) promoInput.value = "";
+
+        if (actionInput) actionInput.value = mode === "watch" ? "waitlist" : "schedule_book";
+        if (watchOptions) watchOptions.hidden = mode !== "watch";
+        if (promoBlock) promoBlock.hidden = mode === "watch";
+        if (summaryBlock) summaryBlock.hidden = mode === "watch";
+        if (submitBtn) submitBtn.textContent = mode === "watch" ? "Add to watchlist" : "Pay & park";
+
+        const refresh = () => updateBookModalSummary(cfg, listing);
+        startsInput.removeEventListener("input", startsInput._fpRefresh);
+        endsInput.removeEventListener("input", endsInput._fpRefresh);
+        startsInput.removeEventListener("change", startsInput._fpRefresh);
+        endsInput.removeEventListener("change", endsInput._fpRefresh);
+        startsInput._fpRefresh = refresh;
+        endsInput._fpRefresh = refresh;
+        startsInput.addEventListener("input", refresh);
+        endsInput.addEventListener("input", refresh);
+        startsInput.addEventListener("change", refresh);
+        endsInput.addEventListener("change", refresh);
+        refresh();
 
         const form = document.getElementById("fp-book-form");
-        if (form && cfg.searchCenter) {
+        if (form) {
             form.action = window.location.pathname + window.location.search;
         }
 
         modal.hidden = false;
         modal.setAttribute("aria-hidden", "false");
+        startsInput.focus();
     }
 
     function closeBookModal() {
@@ -121,12 +259,10 @@
 
         const rows = [
             ["Spot", data.spot],
-            ["Plate", data.plate],
             ["Paid", `${data.total} ${cfg.currencyName}`],
         ];
-        if (data.hours) rows.push(["Duration", `${data.hours} hour(s)`]);
         if (data.starts && data.ends) rows.push(["When", `${data.starts} – ${data.ends}`]);
-        rows.push(["Status", data.status.replace(/_/g, " ")]);
+        else if (data.hours) rows.push(["Duration", `${data.hours} hour(s)`]);
 
         details.innerHTML = rows
             .map(([k, v]) => `<li><span class="text-secondary">${k}</span> <strong>${v}</strong></li>`)
@@ -277,6 +413,20 @@
             }
         });
 
+        document.addEventListener("click", (e) => {
+            const bookBtn = e.target.closest(".fp-book-open");
+            if (bookBtn) {
+                const id = parseInt(bookBtn.dataset.listingId, 10);
+                if (id) openBookModal(cfg, id, "book");
+                return;
+            }
+            const watchBtn = e.target.closest(".fp-watch-open");
+            if (watchBtn) {
+                const id = parseInt(watchBtn.dataset.listingId, 10);
+                if (id) openBookModal(cfg, id, "watch");
+            }
+        });
+
         document.querySelectorAll("[data-fp-scroll]").forEach((btn) => {
             btn.addEventListener("click", () => {
                 const id = btn.getAttribute("data-fp-scroll");
@@ -285,10 +435,28 @@
         });
     }
 
+    function wireFilterToggle() {
+        const toggle = document.getElementById("fp-filter-toggle");
+        const panel = document.getElementById("fp-filters-panel");
+        if (!toggle || !panel) return;
+
+        toggle.addEventListener("click", () => {
+            const open = panel.hidden;
+            panel.hidden = !open;
+            toggle.setAttribute("aria-expanded", open ? "true" : "false");
+            toggle.classList.toggle("is-active", open);
+        });
+    }
+
     function init(cfg) {
         cfg = cfg || {};
         wireSearch(cfg);
         wireModals(cfg);
+        wireFilterToggle();
+        if (cfg.searchCenter) {
+            const ft = document.getElementById("fp-filter-toggle");
+            if (ft) ft.disabled = false;
+        }
         initMap(cfg);
         showConfirmation(cfg);
     }

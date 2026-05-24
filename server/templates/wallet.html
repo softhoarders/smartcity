@@ -38,8 +38,8 @@
                 <div class="card pw-card border-0 h-100">
                     <div class="card-body p-4">
                         <p class="text-secondary small mb-1">Your balance</p>
-                        <p class="display-6 fw-bold mb-0 text-primary">{{ balance }} <span class="fs-5 fw-semibold">{{ currency_name }}</span></p>
-                        <p class="text-secondary small mb-0 mt-2">≈ {{ balance }} lei</p>
+                        <p class="display-6 fw-bold mb-0 text-primary">{{ format_credits(balance) }} <span class="fs-5 fw-semibold">{{ currency_name }}</span></p>
+                        <p class="text-secondary small mb-0 mt-2">≈ {{ format_credits(balance) }} lei</p>
                     </div>
                 </div>
             </div>
@@ -140,7 +140,7 @@
                                     {% endif %}
                                 </td>
                                 <td class="text-end fw-medium {% if tx.amount > 0 %}text-success{% else %}text-danger{% endif %}" data-label="Amount">
-                                    {% if tx.amount > 0 %}+{% endif %}{{ tx.amount }}
+                                    {{ format_credits_delta(tx.amount) }}
                                 </td>
                             </tr>
                             {% endfor %}

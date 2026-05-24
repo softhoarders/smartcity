@@ -73,6 +73,9 @@ In n8n, verify in a **Code** node if you need authenticity.
 | `booking.approved` / `active` / `completed` / `rejected` | Status changes |
 | `plate.verification` | Plate document approved or pending |
 | `wallet.topup` / `wallet.subscription_*` | Wallet events |
+| `waitlist.fulfilled` | Watchlist entry fulfilled (auto-book or notify-only complete) |
+| `waitlist.failed` | Watchlist could not auto-book (e.g. insufficient balance) |
+| `concierge.booked` | Driver confirmed a booking via AI concierge |
 
 In n8n, add a **Switch** node on `{{ $json.event_type }}` to branch workflows.
 

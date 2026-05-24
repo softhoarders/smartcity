@@ -56,7 +56,7 @@
                     <a href="{{ url_for('portal') }}" class="nav-link d-none d-lg-inline {% if request.endpoint == 'portal' %}active text-primary{% endif %}">Home</a>
                     <a href="{{ url_for('find_parking') }}" class="nav-link d-none d-lg-inline {% if request.endpoint == 'find_parking' %}active text-primary{% endif %}">Find parking</a>
                     <a href="{{ url_for('account_settings') }}" class="nav-link d-none d-lg-inline {% if request.endpoint in ('account_settings', 'wallet', 'wallet_topup', 'my_spots') %}active text-primary{% endif %}">
-                        Account{% if nav_spots_balance is defined %} <span class="badge bg-primary bg-opacity-10 text-primary ms-1" style="font-size:0.65rem;">{{ nav_spots_balance }} {{ currency_name }}</span>{% endif %}
+                        Account{% if nav_spots_balance is defined %} <span class="badge bg-primary bg-opacity-10 text-primary ms-1" style="font-size:0.65rem;">{{ format_credits(nav_spots_balance) }} {{ currency_name }}</span>{% endif %}
                     </a>
                     {% endif %}
                     {% if is_demo is defined and is_demo %}
@@ -100,7 +100,7 @@
         <a href="{{ url_for('account_settings') }}" class="pw-bottom-nav-item {% if request.endpoint in ('account_settings', 'wallet', 'wallet_topup', 'my_spots') %}active{% endif %}">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
             <span>Account</span>
-            {% if nav_spots_balance is defined %}<span class="pw-bottom-nav-badge">{{ nav_spots_balance }}</span>{% endif %}
+            {% if nav_spots_balance is defined %}<span class="pw-bottom-nav-badge">{{ format_credits(nav_spots_balance) }}</span>{% endif %}
         </a>
     </nav>
     {% endif %}

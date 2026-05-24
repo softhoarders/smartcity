@@ -16,9 +16,29 @@ STATUS_SCORE = {
     "empty": 1.0,
     "correct": 0.85,
     "occupied": 0.55,
-    "violation": 0.35,
-    "illegal": 0.2,
+    "violation": 0.3,
+    "illegal": 0.3,
 }
+
+STATUS_DISPLAY_LABELS = {
+    "empty": "Empty",
+    "occupied": "Occupied",
+    "correct": "Registered",
+    "violation": "Violation",
+    "illegal": "Violation",
+}
+
+
+def status_display_group(status: str | None) -> str:
+    if status in ("violation", "illegal"):
+        return "violation"
+    return status or "unknown"
+
+
+def status_display_label(status: str | None) -> str:
+    if status in ("violation", "illegal"):
+        return "Violation"
+    return STATUS_DISPLAY_LABELS.get(status or "", (status or "unknown").replace("_", " ").title())
 
 
 def listing_item_dict(listing, device) -> dict[str, Any]:
@@ -92,18 +112,23 @@ def score_listing(
 
     dist_score = max(0.0, 1.0 - distance_km / 15.0)
     price_score = max(0.0, 1.0 - price / 3000.0)
+    avail_score = float(item.get("availability_score") or status_s)
+
     relevance = (
-        dist_score * 0.38
-        + price_score * 0.22
-        + status_s * 0.22
-        + demand * 0.1
-        + (rating / 5.0) * 0.08
+        dist_score * 0.32
+        + price_score * 0.2
+        + status_s * 0.18
+        + avail_score * 0.15
+        + demand * 0.08
+        + (rating / 5.0) * 0.07
     )
 
     item["distance_km"] = round(distance_km, 2)
     item["score"] = round(relevance, 4)
     item["rating"] = round(rating, 1)
     item["status"] = status
+    item["status_group"] = status_display_group(status)
+    item["status_label"] = status_display_label(status)
     return item
 
 
@@ -131,8 +156,10 @@ def filter_and_sort_listings(
             continue
         if max_distance_km is not None and item["distance_km"] > max_distance_km:
             continue
-        if status_filter and item["status"] != status_filter:
-            continue
+        if status_filter:
+            group = status_display_group(item["status"])
+            if status_filter not in (item["status"], group):
+                continue
         if booking_mode == "instant" and item.get("approval_mode") == "manual":
             pass
         if booking_mode == "schedule" and not item.get("schedule_hundredths"):
@@ -145,6 +172,8 @@ def filter_and_sort_listings(
         scored.sort(key=lambda x: -x["instant_hundredths"])
     elif sort == "distance":
         scored.sort(key=lambda x: x["distance_km"])
+    elif sort == "availability":
+        scored.sort(key=lambda x: (-(x.get("availability_score") or 0), -x["score"]))
     else:
         scored.sort(key=lambda x: -x["score"])
 

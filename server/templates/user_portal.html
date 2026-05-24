@@ -18,12 +18,16 @@
     </div>
     <div class="portal-header-actions">
         <a href="{{ url_for('wallet') }}" class="portal-wallet-pill" title="Open wallet">
-            <span class="portal-wallet-value">{% if nav_spots_balance is defined %}{{ nav_spots_balance }}{% else %}0{% endif %}</span>
+            <span class="portal-wallet-value">{% if nav_spots_balance is defined %}{{ format_credits(nav_spots_balance) }}{% else %}0.00{% endif %}</span>
             <span class="portal-wallet-label">{{ currency_name }}</span>
         </a>
         <a href="{{ url_for('find_parking') }}" class="btn btn-sm btn-outline-primary portal-quick-btn">Find parking</a>
     </div>
 </header>
+
+<p class="portal-subline small text-secondary mb-3">
+    Need parking fast? Use <a href="{{ url_for('find_parking') }}#concierge">quick parking search</a> on Find parking — describe where and when you need a spot.
+</p>
 
 <div id="push-consent" class="pw-push-consent portal-push" hidden>
     <p class="mb-0 small"><strong>Browser alerts</strong> — notify me when a violation is detected.</p>
@@ -127,7 +131,7 @@
                             {% elif fine.appeal_status == 'pending_human' %}
                             <span class="portal-badge portal-badge--pending">Admin review</span>
                             {% elif fine.appeal_status == 'pending_ai' %}
-                            <span class="portal-badge portal-badge--pending">AI review</span>
+                            <span class="portal-badge portal-badge--pending">In review</span>
                             {% elif fine.appeal_status == 'approved' %}
                             <span class="portal-badge portal-badge--ok">Appeal approved</span>
                             {% elif fine.appeal_status == 'rejected_human' %}

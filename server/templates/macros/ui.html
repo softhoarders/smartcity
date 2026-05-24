@@ -33,3 +33,16 @@
     {% endif %}
 </div>
 {% endmacro %}
+
+{% macro booking_status_badge(status) %}
+{% set status_styles = {
+    'pending_approval': ('warning', 'Pending approval'),
+    'approved': ('info', 'Approved'),
+    'active': ('success', 'Active'),
+    'completed': ('secondary', 'Completed'),
+    'rejected': ('danger', 'Rejected'),
+    'cancelled': ('secondary', 'Cancelled'),
+} %}
+{% set tone, label = status_styles.get(status, ('secondary', status|replace('_', ' ')|title)) %}
+<span class="badge pw-booking-status pw-booking-status--{{ status }} bg-{{ tone }} bg-opacity-10 text-{{ tone }} border border-{{ tone }}-subtle">{{ label }}</span>
+{% endmacro %}

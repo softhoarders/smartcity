@@ -8,11 +8,11 @@
         unknown: "#8E8E93",
     };
 
-    const TILE_URL =
+    // OSM data via CARTO — dark, modern basemap (default)
+    const DARK_TILE_URL =
         "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
-    const TILE_ATTR =
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> ' +
-        '&copy; <a href="https://carto.com/attributions">CARTO</a>';
+    const SATELLITE_TILE_URL =
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
 
     function ensureLeaflet() {
         if (window.L) {
@@ -60,40 +60,42 @@
 
         try {
             const L = await ensureLeaflet();
-            container.classList.add("pw-map-host", "pw-map-surface", "pw-map-glass");
+            container.classList.add("pw-map-host", "pw-map-surface");
             container.innerHTML = "";
 
             if (container._spotflowMap) {
                 container._spotflowMap.remove();
                 container._spotflowMap = null;
             }
-            if (container._spotflowMapOverlay) {
-                container._spotflowMapOverlay.remove();
-                container._spotflowMapOverlay = null;
-            }
-
             const map = L.map(container, {
                 zoomControl: false,
-                attributionControl: true,
+                attributionControl: false,
                 fadeAnimation: true,
                 zoomAnimation: true,
             });
 
-            L.tileLayer(TILE_URL, {
-                attribution: TILE_ATTR,
+            const darkLayer = L.tileLayer(DARK_TILE_URL, {
+                attribution: "",
                 subdomains: "abcd",
                 maxZoom: 20,
-            }).addTo(map);
+            });
+            const satelliteLayer = L.tileLayer(SATELLITE_TILE_URL, {
+                attribution: "",
+                maxZoom: 19,
+            });
+            darkLayer.addTo(map);
+
+            L.control
+                .layers(
+                    { Map: darkLayer, Satellite: satelliteLayer },
+                    null,
+                    { position: "topright" }
+                )
+                .addTo(map);
 
             L.control
                 .zoom({ position: "bottomright" })
                 .addTo(map);
-
-            const overlay = document.createElement("div");
-            overlay.className = "pw-map-glass-overlay";
-            overlay.setAttribute("aria-hidden", "true");
-            container.appendChild(overlay);
-            container._spotflowMapOverlay = overlay;
 
             container._spotflowMap = map;
 
