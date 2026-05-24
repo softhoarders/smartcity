@@ -105,46 +105,45 @@
         reveals.forEach((el) => el.classList.add("is-visible"));
     }
 
-    /* Hero app mockup scene tabs */
-    const mockupScenes = document.querySelectorAll("[data-mockup-scene]");
-    const mockupTabs = document.querySelectorAll("[data-mockup-tab]");
-    if (mockupScenes.length && mockupTabs.length) {
-        let mockupTimer = null;
-        const sceneOrder = ["find", "home"];
-        let sceneIndex = 0;
+    /* Hero app screenshots */
+    const screenshotTabs = document.querySelectorAll("[data-screenshot-tab]");
+    const screenshots = document.querySelectorAll("[data-screenshot]");
+    if (screenshotTabs.length && screenshots.length) {
+        let screenshotTimer = null;
+        const shotOrder = ["find", "home"];
+        let shotIndex = 0;
 
-        const setMockupScene = (name) => {
-            mockupScenes.forEach((scene) => {
-                const active = scene.getAttribute("data-mockup-scene") === name;
-                scene.classList.toggle("is-active", active);
-                scene.hidden = !active;
+        const setScreenshot = (name) => {
+            screenshots.forEach((img) => {
+                const active = img.getAttribute("data-screenshot") === name;
+                img.classList.toggle("is-active", active);
             });
-            mockupTabs.forEach((tab) => {
-                const active = tab.getAttribute("data-mockup-tab") === name;
+            screenshotTabs.forEach((tab) => {
+                const active = tab.getAttribute("data-screenshot-tab") === name;
                 tab.classList.toggle("is-active", active);
-                tab.setAttribute("aria-pressed", active ? "true" : "false");
+                tab.setAttribute("aria-selected", active ? "true" : "false");
             });
-            sceneIndex = sceneOrder.indexOf(name);
+            shotIndex = shotOrder.indexOf(name);
         };
 
-        const scheduleMockupRotation = () => {
-            if (mockupTimer) window.clearInterval(mockupTimer);
+        const scheduleScreenshotRotation = () => {
+            if (screenshotTimer) window.clearInterval(screenshotTimer);
             if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-            mockupTimer = window.setInterval(() => {
-                sceneIndex = (sceneIndex + 1) % sceneOrder.length;
-                setMockupScene(sceneOrder[sceneIndex]);
-            }, 6000);
+            screenshotTimer = window.setInterval(() => {
+                shotIndex = (shotIndex + 1) % shotOrder.length;
+                setScreenshot(shotOrder[shotIndex]);
+            }, 7000);
         };
 
-        mockupTabs.forEach((tab) => {
+        screenshotTabs.forEach((tab) => {
             tab.addEventListener("click", () => {
-                const name = tab.getAttribute("data-mockup-tab");
+                const name = tab.getAttribute("data-screenshot-tab");
                 if (!name) return;
-                setMockupScene(name);
-                scheduleMockupRotation();
+                setScreenshot(name);
+                scheduleScreenshotRotation();
             });
         });
 
-        scheduleMockupRotation();
+        scheduleScreenshotRotation();
     }
 })();

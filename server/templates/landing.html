@@ -78,175 +78,36 @@
             </p>
         </div>
 
-        <div class="landing-hero-panel landing-reveal landing-reveal--delay" aria-hidden="true">
-            <div class="landing-mockup-glow" aria-hidden="true"></div>
-            <div class="landing-mockup-shell">
-                <div class="landing-mockup-device">
-                    <header class="landing-mockup-topbar">
-                        <div class="landing-mockup-brand">
-                            {{ logo_mark(22, class='landing-mockup-logo') }}
-                            <span>Spotflow</span>
-                            <span class="landing-mockup-demo">Demo</span>
-                        </div>
-                        <a class="landing-mockup-wallet" href="#" tabindex="-1">
-                            <span class="landing-mockup-wallet-value">1,000.00</span>
-                            <span class="landing-mockup-wallet-label">Credits</span>
-                        </a>
-                    </header>
-
-                    <div class="landing-mockup-scenes" id="landing-mockup-scenes">
-                        <section class="landing-mockup-scene is-active" data-mockup-scene="find">
-                            <div class="landing-mockup-head">
-                                <h2 class="landing-mockup-title">Find parking</h2>
-                                <span class="landing-mockup-trust">Trust 82 · Good</span>
-                            </div>
-
-                            <div class="landing-mockup-search">
-                                <svg class="landing-mockup-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/></svg>
-                                <span>Piata Universitatii, Bucharest</span>
-                                <span class="landing-mockup-search-filter" aria-hidden="true"></span>
-                            </div>
-
-                            <div class="landing-mockup-map" role="img" aria-label="Map preview with parking spots">
-                                <svg class="landing-mockup-map-svg" viewBox="0 0 400 220" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-                                    <defs>
-                                        <linearGradient id="lp-map-sky" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="0%" stop-color="#1a2332"/>
-                                            <stop offset="100%" stop-color="#0f141c"/>
-                                        </linearGradient>
-                                        <filter id="lp-map-glow">
-                                            <feGaussianBlur stdDeviation="2" result="blur"/>
-                                            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-                                        </filter>
-                                    </defs>
-                                    <rect width="400" height="220" fill="url(#lp-map-sky)"/>
-                                    <g fill="#1c2430" stroke="#2a3444" stroke-width="1">
-                                        <rect x="24" y="28" width="88" height="56" rx="4"/>
-                                        <rect x="124" y="22" width="72" height="64" rx="4"/>
-                                        <rect x="210" y="34" width="96" height="48" rx="4"/>
-                                        <rect x="318" y="26" width="58" height="60" rx="4"/>
-                                        <rect x="38" y="100" width="110" height="44" rx="4"/>
-                                        <rect x="162" y="96" width="84" height="52" rx="4"/>
-                                        <rect x="262" y="92" width="104" height="56" rx="4"/>
-                                        <rect x="52" y="156" width="92" height="48" rx="4"/>
-                                        <rect x="156" y="160" width="118" height="44" rx="4"/>
-                                        <rect x="288" y="158" width="72" height="46" rx="4"/>
-                                    </g>
-                                    <path d="M72 180 C120 150, 180 130, 248 118 C290 110, 320 98, 348 86" fill="none" stroke="rgba(10,132,255,0.55)" stroke-width="3" stroke-dasharray="6 8" stroke-linecap="round"/>
-                                    <circle cx="72" cy="180" r="7" fill="#0a84ff" filter="url(#lp-map-glow)"/>
-                                    <circle cx="72" cy="180" r="14" fill="none" stroke="rgba(10,132,255,0.35)" stroke-width="2"/>
-                                </svg>
-                                <span class="landing-mockup-marker landing-mockup-marker--empty" style="--mx:28%;--my:38%"></span>
-                                <span class="landing-mockup-marker landing-mockup-marker--occupied" style="--mx:52%;--my:32%"></span>
-                                <span class="landing-mockup-marker landing-mockup-marker--registered" style="--mx:68%;--my:48%"></span>
-                                <span class="landing-mockup-marker landing-mockup-marker--violation" style="--mx:42%;--my:58%"></span>
-                                <span class="landing-mockup-marker landing-mockup-marker--selected" style="--mx:61%;--my:62%"></span>
-                                <div class="landing-mockup-map-chip">6 spots · 0.8 km</div>
-                            </div>
-
-                            <ul class="landing-mockup-legend">
-                                <li><i style="--c:#30d158"></i> Empty</li>
-                                <li><i style="--c:#ff9f0a"></i> Occupied</li>
-                                <li><i style="--c:#0a84ff"></i> Registered</li>
-                                <li><i style="--c:#ff453a"></i> Violation</li>
-                            </ul>
-
-                            <article class="landing-mockup-spot">
-                                <div class="landing-mockup-spot-main">
-                                    <div class="landing-mockup-spot-head">
-                                        <strong>P1-12</strong>
-                                        <span class="landing-mockup-badge landing-mockup-badge--flow">Walk 4 min</span>
-                                        <span class="landing-mockup-badge landing-mockup-badge--ok">Empty now</span>
-                                    </div>
-                                    <p>Calea Victoriei · Garage B · 0.4 km</p>
-                                    <span class="landing-mockup-avail">Available now · 94% confidence</span>
-                                </div>
-                                <div class="landing-mockup-spot-action">
-                                    <strong>10.50 <small>Credits/h</small></strong>
-                                    <span class="landing-mockup-btn">Pay &amp; park</span>
-                                </div>
-                            </article>
-                        </section>
-
-                        <section class="landing-mockup-scene" data-mockup-scene="home" hidden>
-                            <div class="landing-mockup-head landing-mockup-head--home">
-                                <div>
-                                    <h2 class="landing-mockup-title">Hi, Alex</h2>
-                                    <span class="landing-mockup-plate">B 123 MAB</span>
-                                </div>
-                                <a class="landing-mockup-link" href="#" tabindex="-1">Find parking</a>
-                            </div>
-
-                            <div class="landing-mockup-stats">
-                                <div class="landing-mockup-stat landing-mockup-stat--warn"><strong>2</strong><span>Need action</span></div>
-                                <div class="landing-mockup-stat landing-mockup-stat--pending"><strong>1</strong><span>In review</span></div>
-                                <div class="landing-mockup-stat"><strong>4</strong><span>Open</span></div>
-                                <div class="landing-mockup-stat landing-mockup-stat--muted"><strong>12</strong><span>Resolved</span></div>
-                            </div>
-
-                            <div class="landing-mockup-map landing-mockup-map--compact" role="img" aria-label="Alert map preview">
-                                <svg class="landing-mockup-map-svg" viewBox="0 0 400 160" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-                                    <rect width="400" height="160" fill="#121820"/>
-                                    <g fill="#1a222c" stroke="#283040" stroke-width="1">
-                                        <rect x="20" y="24" width="100" height="48" rx="3"/>
-                                        <rect x="140" y="20" width="80" height="52" rx="3"/>
-                                        <rect x="240" y="28" width="130" height="44" rx="3"/>
-                                        <rect x="36" y="88" width="120" height="52" rx="3"/>
-                                        <rect x="176" y="84" width="96" height="56" rx="3"/>
-                                        <rect x="290" y="90" width="84" height="48" rx="3"/>
-                                    </g>
-                                </svg>
-                                <span class="landing-mockup-marker landing-mockup-marker--alert" style="--mx:34%;--my:42%"></span>
-                                <span class="landing-mockup-marker landing-mockup-marker--pending" style="--mx:58%;--my:36%"></span>
-                                <span class="landing-mockup-marker landing-mockup-marker--resolved" style="--mx:72%;--my:58%"></span>
-                            </div>
-
-                            <article class="landing-mockup-alert">
-                                <div class="landing-mockup-alert-accent"></div>
-                                <div class="landing-mockup-alert-body">
-                                    <div class="landing-mockup-alert-top">
-                                        <time>May 24 · 08:05</time>
-                                        <span class="landing-mockup-badge landing-mockup-badge--danger">Mismatch</span>
-                                    </div>
-                                    <p><strong>P1-12</strong> Calea Victoriei · 14 min</p>
-                                    <div class="landing-mockup-plates">
-                                        <span><em>Detected</em> B 642 FST</span>
-                                        <span><em>Expected</em> B 123 MAB</span>
-                                    </div>
-                                    <span class="landing-mockup-alert-cta">Photo evidence ready</span>
-                                </div>
-                            </article>
-                        </section>
+        <div class="landing-hero-panel landing-reveal landing-reveal--delay">
+            <div class="landing-screenshot-shell">
+                <div class="landing-screenshot-glow" aria-hidden="true"></div>
+                <figure class="landing-screenshot-frame" id="landing-screenshot-frame">
+                    <img
+                        class="landing-screenshot is-active"
+                        data-screenshot="find"
+                        src="{{ url_for('static', filename='landing/app-find-parking.png') }}"
+                        alt="Spotflow Find parking — map search near Piata Universitatii with live spot markers"
+                        width="900"
+                        height="820"
+                        loading="eager"
+                        decoding="async">
+                    <img
+                        class="landing-screenshot"
+                        data-screenshot="home"
+                        src="{{ url_for('static', filename='landing/app-portal.png') }}"
+                        alt="Spotflow Home — alert stats and live map of parking incidents"
+                        width="900"
+                        height="820"
+                        loading="lazy"
+                        decoding="async">
+                </figure>
+                <div class="landing-screenshot-caption">
+                    <span class="landing-screenshot-demo">Live demo · Bucharest sample data</span>
+                    <div class="landing-screenshot-tabs" role="tablist" aria-label="App screenshots">
+                        <button type="button" class="landing-screenshot-tab is-active" role="tab" data-screenshot-tab="find" aria-selected="true">Find parking</button>
+                        <button type="button" class="landing-screenshot-tab" role="tab" data-screenshot-tab="home" aria-selected="false">Home &amp; alerts</button>
                     </div>
-
-                    <nav class="landing-mockup-tabs" aria-label="App preview scenes">
-                        <button type="button" class="landing-mockup-tab is-active" data-mockup-tab="find" aria-pressed="true">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="10" r="3"/><path d="M12 21s7-6.5 7-11a7 7 0 10-14 0c0 4.5 7 11 7 11z"/></svg>
-                            Find parking
-                        </button>
-                        <button type="button" class="landing-mockup-tab" data-mockup-tab="home" aria-pressed="false">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z"/></svg>
-                            Home
-                            <em>3</em>
-                        </button>
-                        <span class="landing-mockup-tab landing-mockup-tab--static">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M6 20v-1a6 6 0 0112 0v1"/></svg>
-                            Account
-                        </span>
-                    </nav>
                 </div>
-
-                <aside class="landing-mockup-float landing-mockup-float--alert">
-                    <span class="landing-mockup-float-kicker">Live alert</span>
-                    <strong>P1-12 unauthorized</strong>
-                    <p>Photo captured · appeal in one tap</p>
-                </aside>
-
-                <aside class="landing-mockup-float landing-mockup-float--book">
-                    <span class="landing-mockup-float-kicker">Booked</span>
-                    <strong>Garage B · 2h</strong>
-                    <p>21.00 Credits · plate synced to camera</p>
-                </aside>
             </div>
         </div>
     </div>

@@ -174,3 +174,9 @@ REPUTATION_TIER_EXCELLENT_MAX = int(os.environ.get("REPUTATION_TIER_EXCELLENT_MA
 SIMULATED_2FA_SHOW_CODE = os.environ.get("SIMULATED_2FA_SHOW_CODE", "true").lower() in ("true", "1", "t")
 # Fixed mock code for login email verification (no real email sent)
 MOCK_LOGIN_2FA_PIN = os.environ.get("MOCK_LOGIN_2FA_PIN", "456789")
+
+# demo2 Pi edge account (real DB user — plate + device wired on startup)
+DEMO2_PLATE = os.environ.get("DEMO2_PLATE", "AG 12 PTV")
+DEMO2_PI_URL = os.environ.get("DEMO2_PI_URL", "http://10.142.182.127:3000")
+DEMO2_PI_MAC = os.environ.get("DEMO2_PI_MAC", "").strip().upper()
+DEMO2_SPOT_LABEL = os.environ.get("DEMO2_SPOT_LABEL", "Bay-A1")
