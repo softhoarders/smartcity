@@ -11,7 +11,7 @@ from fpdf import FPDF
 
 import config
 
-RECEIPT_DIR = os.path.join(os.path.dirname(__file__), "receipts")
+RECEIPT_DIR = os.path.join(config.DATA_DIR, "receipts")
 os.makedirs(RECEIPT_DIR, exist_ok=True)
 
 
