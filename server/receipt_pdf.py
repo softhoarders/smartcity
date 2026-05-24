@@ -12,7 +12,10 @@ from fpdf import FPDF
 import config
 
 RECEIPT_DIR = os.path.join(config.DATA_DIR, "receipts")
-os.makedirs(RECEIPT_DIR, exist_ok=True)
+try:
+    os.makedirs(RECEIPT_DIR, exist_ok=True)
+except OSError:
+    pass
 
 
 def _utcnow() -> datetime:

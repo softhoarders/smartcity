@@ -6,11 +6,14 @@ from dotenv import load_dotenv
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 
-IS_VERCEL = os.environ.get("VERCEL") == "1"
+IS_VERCEL = os.environ.get("VERCEL") == "1" or bool(os.environ.get("VERCEL_ENV"))
 # Serverless filesystem is read-only except /tmp; keep DB and uploads there on Vercel.
 DATA_DIR = os.path.join("/tmp", "spotflow") if IS_VERCEL else BASE_DIR
 if IS_VERCEL:
-    os.makedirs(DATA_DIR, exist_ok=True)
+    try:
+        os.makedirs(DATA_DIR, exist_ok=True)
+    except OSError:
+        pass
 
 PORT = 2026
 SECRET_KEY = os.environ.get("PARKWATCH_SECRET", "parkwatch-dev-key-change-in-production")
@@ -21,7 +24,10 @@ OFFLINE_THRESHOLD_SECONDS = 120
 
 # Upload folder for fine evidence images
 UPLOAD_FOLDER = os.path.join(DATA_DIR, "uploads")
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+try:
+    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+except OSError:
+    pass
 
 # Admin credentials
 ADMIN_USERNAME = os.environ.get("PARKWATCH_ADMIN_USER", "admin")
@@ -54,7 +60,10 @@ MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD")
 MAIL_DEFAULT_SENDER = os.environ.get("MAIL_DEFAULT_SENDER", "noreply@spotflow.com")
 
 MOCK_MAIL_DIR = os.path.join(DATA_DIR, "mail_queue")
-os.makedirs(MOCK_MAIL_DIR, exist_ok=True)
+try:
+    os.makedirs(MOCK_MAIL_DIR, exist_ok=True)
+except OSError:
+    pass
 
 # ---------------------------------------------------------------------------
 # Wallet credits (1 Credit = 1 RON lei). DB columns remain spots_* for compatibility.
@@ -72,8 +81,8 @@ MIN_INSTANT_HOURS = 1
 MAX_BOOKING_HOURS = 72
 NEW_USER_WELCOME_SPOTS = int(os.environ.get("SPOTS_WELCOME_BONUS", "0"))
 
-# Low balance warning (Credits)
-LOW_BALANCE_THRESHOLD = int(os.environ.get("LOW_BALANCE_THRESHOLD", "10"))
+# Low balance warning (wallet hundredths; 1000 = 10.00 Credits)
+LOW_BALANCE_THRESHOLD = int(os.environ.get("LOW_BALANCE_THRESHOLD", "1000"))
 
 # Find parking: default search radius (~2 miles)
 FIND_PARKING_RADIUS_KM = float(os.environ.get("FIND_PARKING_RADIUS_KM", "12"))
